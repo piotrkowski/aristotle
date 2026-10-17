@@ -252,16 +252,43 @@ impl App {
                 .collect()
         };
         let h = self.ui.bounds().h;
-        // Popup text the UI font can draw (see `overlay::printable`).
-        let body = match self.reading().map(|r| &r.overlay) {
-            Some(Overlay::Dict { lookup, full, .. }) => {
-                Some(dict_body(lookup, dicts.is_empty(), *full))
+        // Popup text the UI font can draw (see `overlay::printable`), and
+        // Greek in dictionaries without length marks.
+        let body =
+            match self.reading().map(|r| &r.overlay) {
+                Some(Overlay::Dict { lookup, full, .. }) => Some(overlay::dictionary_text(
+                    &dict_body(lookup, dicts.is_empty(), *full),
+                )),
+                Some(Overlay::Gloss { text, .. }) => Some(overlay::dictionary_text(text)),
+                Some(Overlay::Note { text, .. }) => Some(text.clone()),
+                _ => None,
             }
-            Some(Overlay::Gloss { text, .. } | Overlay::Note { text, .. }) => Some(text.clone()),
+            .map(|b| overlay::printable(&self.ui.text, &styles, &b))
+            .unwrap_or_default();
+        // The dictionary popup's words the same way: the headword (the
+        // title), the tapped word and the suggestions.
+        let shown_lookup = match self.reading().map(|r| &r.overlay) {
+            Some(Overlay::Dict { lookup, .. }) => Some(lookup.clone()),
             _ => None,
         }
-        .map(|b| overlay::printable(&self.ui.text, &styles, &b))
-        .unwrap_or_default();
+        .map(|mut l| {
+            let text = &self.ui.text;
+            let clean = |s: &str, style: &aristotle_ui::text::TextStyle| {
+                overlay::printable_text(&overlay::without_greek_length(s), |x| {
+                    text.covers(x, style)
+                })
+            };
+            {
+                l.word = clean(&l.word, &styles.small());
+                for e in l.found.iter_mut().flat_map(|f| f.entries.iter_mut()) {
+                    e.headword = clean(&e.headword, &styles.title());
+                }
+                for s in &mut l.suggestions {
+                    *s = clean(s, &styles.ui());
+                }
+            }
+            l
+        });
         let Some(r) = self.reading() else {
             return Ok(());
         };
@@ -304,7 +331,7 @@ impl App {
                 } => Some(dict_popup(
                     t,
                     &styles,
-                    lookup,
+                    shown_lookup.as_ref().unwrap_or(lookup),
                     &dicts,
                     &body,
                     highlight.is_some(),

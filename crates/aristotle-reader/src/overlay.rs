@@ -19,6 +19,8 @@ use aristotle_ui::tree::{
     pages, ActionId, Constraints, Cross, Kind, Node, NodeId, PaintCx, Tree, Widget,
 };
 use aristotle_ui::widgets::Slider;
+use unicode_normalization::char::is_combining_mark;
+use unicode_normalization::UnicodeNormalization;
 
 /// Action ids, clear of the reader menu's (below 100).
 pub mod act {
@@ -210,9 +212,8 @@ fn paragraph(st: &Styles, b: &Block) -> Paragraph {
     )
 }
 
-/// `text` with what the UI font cannot draw left out: a run of such
-/// characters (Coptic in an etymology, a rare symbol) becomes one "…"
-/// instead of tofu boxes.
+/// `text` with what the UI font cannot draw left out, run by run (see
+/// [`printable_text`]).
 pub fn printable(engine: &TextEngine, st: &Styles, text: &RichText) -> RichText {
     let base = body_style(st);
     let mut out = text.clone();
@@ -225,19 +226,97 @@ pub fn printable(engine: &TextEngine, st: &Styles, text: &RichText) -> RichText 
             if r.bold || b.heading {
                 style = style.bold();
             }
-            let mut buf = [0u8; 4];
-            if engine.covers(&r.text, &style) {
-                continue;
+            r.text = printable_text(&r.text, |s| engine.covers(s, &style));
+        }
+    }
+    out
+}
+
+/// `text` as a font that `covers` can draw it: NFC-composed, and every
+/// character with combining marks that has no glyph loses marks, one at a
+/// time, until it has one (ă̓ becomes ἀ when ἀ is in the font but the
+/// breve and the breathing do not stack). What still has no glyph (Coptic
+/// in an etymology, a rare symbol) becomes one "…" per run, never a tofu
+/// box.
+pub fn printable_text(text: &str, covers: impl Fn(&str) -> bool) -> String {
+    let text: String = text.nfc().collect();
+    if covers(&text) {
+        return text;
+    }
+    let mut out = String::with_capacity(text.len());
+    let push = |cluster: &str, out: &mut String| {
+        if cluster.is_empty() {
+            return;
+        }
+        match drawable(cluster, &covers) {
+            Some(s) => out.push_str(&s),
+            None if out.trim_end().ends_with('…') => {}
+            None => out.push('…'),
+        }
+    };
+    let mut cluster = String::new();
+    for c in text.chars() {
+        if is_combining_mark(c) && !cluster.is_empty() {
+            cluster.push(c);
+        } else {
+            push(&cluster, &mut out);
+            cluster.clear();
+            cluster.push(c);
+        }
+    }
+    push(&cluster, &mut out);
+    out
+}
+
+/// One base character and its combining marks as `covers` can draw them,
+/// dropping marks one at a time; `None` if not even the base can be.
+fn drawable(cluster: &str, covers: &impl Fn(&str) -> bool) -> Option<String> {
+    if cluster.chars().all(char::is_whitespace) || covers(cluster) {
+        return Some(cluster.to_string());
+    }
+    let mut chars: Vec<char> = cluster.nfd().collect();
+    loop {
+        let marks: Vec<usize> = (0..chars.len())
+            .filter(|&i| is_combining_mark(chars[i]))
+            .collect();
+        let first = *marks.first()?;
+        for &i in &marks {
+            let mut c = chars.clone();
+            c.remove(i);
+            let s: String = c.into_iter().nfc().collect();
+            if covers(&s) {
+                return Some(s);
             }
-            let mut s = String::with_capacity(r.text.len());
-            for c in r.text.chars() {
-                if c.is_whitespace() || engine.covers(c.encode_utf8(&mut buf), &style) {
-                    s.push(c);
-                } else if !s.trim_end().ends_with('…') {
-                    s.push('…');
-                }
-            }
-            r.text = s;
+        }
+        chars.remove(first);
+    }
+}
+
+/// Greek as a dictionary popup shows it: without the vowel-length marks
+/// (breve U+0306, macron U+0304) that Wiktionary's Greek headwords carry
+/// (ă̓γăθός) and reading fonts do not compose, then NFC (ἀγαθός). Marks
+/// on other scripts stay (Latin ā).
+pub fn without_greek_length(text: &str) -> String {
+    let is_greek = |c: char| matches!(c, '\u{0370}'..='\u{03FF}' | '\u{1F00}'..='\u{1FFF}');
+    let mut out = String::with_capacity(text.len());
+    let mut greek = false;
+    for c in text.nfd() {
+        if !is_combining_mark(c) {
+            greek = is_greek(c);
+        } else if greek && matches!(c, '\u{0306}' | '\u{0304}') {
+            continue;
+        }
+        out.push(c);
+    }
+    out.nfc().collect()
+}
+
+/// [`without_greek_length`] on every run of a dictionary text.
+pub fn dictionary_text(text: &RichText) -> RichText {
+    let mut out = text.clone();
+    for b in &mut out.blocks {
+        for r in &mut b.runs {
+            r.text = without_greek_length(&r.text);
         }
     }
     out
@@ -608,7 +687,53 @@ pub fn nav_row(t: &Tree, nav: NodeId) -> NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::fit_label;
+    use super::{fit_label, printable_text, without_greek_length};
+
+    /// Wiktionary's grc-en headword for "good": alpha, combining breve,
+    /// combining smooth breathing, gamma, alpha with breve, theta,
+    /// omicron with tonos, final sigma.
+    const AGATHOS: &str = "\u{3b1}\u{306}\u{313}\u{3b3}\u{3b1}\u{306}\u{3b8}\u{3cc}\u{3c2}";
+
+    #[test]
+    fn greek_length_marks_go_in_dictionary_popups() {
+        assert_eq!(without_greek_length(AGATHOS), "ἀγαθός");
+        assert_eq!(without_greek_length("ψῡχή"), "ψυχή");
+        // Precomposed alpha with macron decomposes too.
+        assert_eq!(without_greek_length("\u{1fb1}"), "α");
+        // Latin keeps its macrons.
+        assert_eq!(without_greek_length("ā"), "ā");
+    }
+
+    #[test]
+    fn unrenderable_clusters_lose_marks_before_the_ellipsis() {
+        // A font with precomposed Greek, but neither combining marks nor
+        // the alphas with breve or macron (U+1FB0, U+1FB1).
+        let covers = |s: &str| {
+            s.chars().all(|c| {
+                !super::is_combining_mark(c) && !matches!(c, 'Ⲁ' | '\u{1fb0}' | '\u{1fb1}')
+            })
+        };
+        assert_eq!(printable_text(AGATHOS, covers), "ἀγαθός");
+        assert_eq!(printable_text("ἀγαθός", covers), "ἀγαθός");
+        // Nothing to drop: one ellipsis per run of missing characters.
+        assert_eq!(printable_text("a ⲀⲀ b", covers), "a … b");
+        assert_eq!(printable_text("aⲀⲀb", covers), "a…b");
+    }
+
+    #[test]
+    fn literata_draws_the_greek_headword() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../aristotle-render/assets/fonts");
+        let engine = aristotle_ui::text::TextEngine::new(crate::ui_fonts(&dir).unwrap());
+        let st = aristotle_ui::theme::Styles::new(aristotle_ui::text::FamilyId(0));
+        for style in [st.title(), st.ui(), st.ui_bold(), super::body_style(&st)] {
+            let raw = printable_text(AGATHOS, |s| engine.covers(s, &style));
+            assert!(!raw.contains('…'), "{raw}");
+            let shown =
+                printable_text(&without_greek_length(AGATHOS), |s| engine.covers(s, &style));
+            assert_eq!(shown, "ἀγαθός");
+        }
+    }
 
     /// One unit per character.
     fn chars(s: &str) -> f32 {
