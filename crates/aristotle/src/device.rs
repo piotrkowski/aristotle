@@ -41,6 +41,15 @@ pub fn clock_and_date() -> (String, String) {
     }
 }
 
+/// "Aristotle 0.1.0 (e4c64c4)": the workspace version and the commit the
+/// build came from (build.rs), or just the version when that is unknown.
+pub fn software_version() -> String {
+    match env!("ARISTOTLE_COMMIT") {
+        "" => format!("Aristotle {}", env!("CARGO_PKG_VERSION")),
+        c => format!("Aristotle {} ({c})", env!("CARGO_PKG_VERSION")),
+    }
+}
+
 impl Facts {
     /// The cheap facts, for the status line.
     pub fn status(battery: &Option<Battery>) -> Facts {
@@ -66,10 +75,8 @@ impl Facts {
                 minutes_left: ((until - now).max(0) as u32).div_ceil(60),
             },
         });
-        f.about.push((
-            tr(Msg::SettingsAboutSoftware),
-            format!("Aristotle {}", env!("CARGO_PKG_VERSION")),
-        ));
+        f.about
+            .push((tr(Msg::SettingsAboutSoftware), software_version()));
         f.about
             .push((tr(Msg::SettingsAboutReader), "Kindle Paperwhite 4".into()));
         if let Some(v) = system::firmware_version() {
