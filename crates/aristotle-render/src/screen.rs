@@ -1,7 +1,11 @@
-//! Putting rendered pages on the PW4 panel with the page-turn strategy
-//! measured in `docs/native-vs-aristotle.md` ("Page-turn strategy
-//! experiment"): a thresholded black and white page with A2 first, which is
-//! legible after about 150 ms, then the anti-aliased page with GL16.
+//! Putting rendered pages on the PW4 panel.
+//!
+//! The page turn copies the stock reader exactly: one full-mode update of the
+//! whole screen with waveform mode 9 (seen in the driver log for every stock
+//! page turn). The faster A2-then-GL16 turn measured in
+//! `docs/native-vs-aristotle.md` looked fine in a quick demo, but on real
+//! reading the owner saw heavy ghosting: A2 leaves residue that GL16 does not
+//! clear. It stays available as [`TurnStrategy::A2Preview`] for experiments.
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -10,13 +14,23 @@ use aristotle_hal::framebuffer::{Framebuffer, Rect, Waveform};
 
 use crate::page::Page;
 
+/// How a page turn reaches the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TurnStrategy {
+    /// One full mode-9 update of the whole screen, like the stock reader.
+    Stock,
+    /// A thresholded A2 preview first (legible after about 150 ms), then the
+    /// full mode-9 update. Only for experiments: may ghost.
+    A2Preview,
+}
+
 /// When a page turn became visible and when the panel settled, measured
 /// from the moment [`Screen::turn`] was called.
 #[derive(Clone, Copy, Debug)]
 pub struct TurnTimes {
-    /// The A2 (black and white) update has finished: the page is legible.
+    /// The first update showing the new page has finished: it is legible.
     pub visible: Duration,
-    /// The GL16 (anti-aliased) update has finished: the panel is calm.
+    /// The last update has finished: the panel is calm.
     pub settled: Duration,
 }
 
@@ -44,31 +58,37 @@ impl Screen {
         rect
     }
 
-    /// Show `page` with a full GC16 refresh (with the flash), to start from
-    /// a clean panel without ghosts of whatever was there before.
+    /// Show `page` with the stock UI's flashing full refresh (mode 8), to
+    /// start from a clean panel without ghosts of whatever was there before.
     pub fn show_clean(&mut self, page: &Page) -> io::Result<Duration> {
         let start = Instant::now();
         let rect = self.blit(page);
-        let marker = self.fb.update(rect, Waveform::GC16, true)?;
+        let marker = self.fb.update(rect, Waveform::GCK16, true)?;
         self.fb.wait(marker)?;
         Ok(start.elapsed())
     }
 
-    /// Turn to `page`, whose black and white version is `bw`: blit `bw`,
-    /// A2, wait; blit `page`, GL16, wait. Both updates are partial, so only
-    /// pixels that change are driven.
-    pub fn turn(&mut self, page: &Page, bw: &Page) -> io::Result<TurnTimes> {
+    /// Turn to `page`, whose black and white version `bw` is only used by
+    /// [`TurnStrategy::A2Preview`].
+    pub fn turn(&mut self, page: &Page, bw: &Page, strategy: TurnStrategy) -> io::Result<TurnTimes> {
         let start = Instant::now();
-        let rect = self.blit(bw);
-        let marker = self.fb.update(rect, Waveform::A2, false)?;
+        let mut visible = None;
+        if strategy == TurnStrategy::A2Preview {
+            let rect = self.blit(bw);
+            let marker = self.fb.update(rect, Waveform::A2, false)?;
+            self.fb.wait(marker)?;
+            visible = Some(start.elapsed());
+        }
+        self.blit(page);
+        // Always the whole screen in full mode: a smaller or partial update
+        // leaves the previous page's ghost in pixels that did not change.
+        let all = self.fb.full_screen();
+        let marker = self.fb.update(all, Waveform::GLKW16, true)?;
         self.fb.wait(marker)?;
-        let visible = start.elapsed();
-        let rect = self.blit(page);
-        let marker = self.fb.update(rect, Waveform::GL16, false)?;
-        self.fb.wait(marker)?;
+        let settled = start.elapsed();
         Ok(TurnTimes {
-            visible,
-            settled: start.elapsed(),
+            visible: visible.unwrap_or(settled),
+            settled,
         })
     }
 }

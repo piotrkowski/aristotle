@@ -70,9 +70,13 @@ impl Waveform {
     pub const GLD16: Self = Self(0x5);
     /// Fastest black/white, for animation and pen strokes.
     pub const A2: Self = Self(0x6);
-    /// Night-mode (inverted) full refresh.
+    /// The stock UI's flashing full refresh on the PW4. FBInk labels it a
+    /// night-mode waveform, but the driver log shows stock using it in day
+    /// mode for every full clean refresh.
     pub const GCK16: Self = Self(0x8);
-    /// Night-mode (inverted) partial.
+    /// The stock reader's page-turn waveform on the PW4, always sent as a
+    /// full update of the whole screen. FBInk labels it night mode too.
+    /// Clean pages without a flash; about 544 ms.
     pub const GLKW16: Self = Self(0x9);
     /// Let the driver pick from the content.
     pub const AUTO: Self = Self(257);
@@ -289,7 +293,12 @@ impl Updater {
     /// `full` drives every pixel in `rect`, not only the changed ones. That is
     /// what clears ghosting: a partial update leaves pixels whose value did
     /// not change alone, including the faint remains of earlier content.
-    pub fn update(&mut self, rect: Rect, waveform: Waveform, full: bool) -> io::Result<Option<u32>> {
+    pub fn update(
+        &mut self,
+        rect: Rect,
+        waveform: Waveform,
+        full: bool,
+    ) -> io::Result<Option<u32>> {
         let right = rect.left.saturating_add(rect.width).min(self.width);
         let bottom = rect.top.saturating_add(rect.height).min(self.height);
         if rect.left >= right || rect.top >= bottom {
@@ -307,7 +316,11 @@ impl Updater {
         let mut data = UpdateDataRex {
             update_region: rect,
             waveform_mode: waveform.0,
-            update_mode: if full { UPDATE_MODE_FULL } else { UPDATE_MODE_PARTIAL },
+            update_mode: if full {
+                UPDATE_MODE_FULL
+            } else {
+                UPDATE_MODE_PARTIAL
+            },
             update_marker: marker,
             temp: TEMP_USE_AMBIENT,
             ..Default::default()

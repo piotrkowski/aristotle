@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 
 use aristotle_render::book::Book;
 use aristotle_render::page::Chrome;
-use aristotle_render::screen::{stock_gui_running, Screen};
+use aristotle_render::screen::{stock_gui_running, Screen, TurnStrategy};
 use aristotle_render::style::Style;
 use plato_core::anyhow::{bail, format_err, Context, Error};
 
@@ -48,6 +48,8 @@ struct Args {
     percent: bool,
     bw: bool,
     force: bool,
+    /// Page turns show an A2 preview first (experimental, may ghost).
+    a2_preview: bool,
     style: Style,
 }
 
@@ -55,6 +57,7 @@ fn parse_args() -> Result<Args, Error> {
     let mut style = Style::pw4();
     let mut positional = Vec::new();
     let (mut data, mut percent, mut bw, mut force) = (None, false, false, false);
+    let mut a2_preview = false;
     let (mut cache, mut no_convert) = (None, false);
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -70,6 +73,7 @@ fn parse_args() -> Result<Args, Error> {
             "--percent" => percent = true,
             "--bw" => bw = true,
             "--force" => force = true,
+            "--a2-preview" => a2_preview = true,
             "-h" | "--help" => bail!("{}", usage()),
             s if s.starts_with("--") => bail!("unknown option {s}\n{}", usage()),
             _ => positional.push(arg),
@@ -88,13 +92,22 @@ fn parse_args() -> Result<Args, Error> {
         percent,
         bw,
         force,
+        a2_preview,
         style,
     })
 }
 
+fn turn_strategy(args: &Args) -> TurnStrategy {
+    if args.a2_preview {
+        TurnStrategy::A2Preview
+    } else {
+        TurnStrategy::Stock
+    }
+}
+
 fn usage() -> &'static str {
     "usage: aristotle-render [--data DIR] [--font-size PT] [--line-height EM] [--margin MM] [--lang TAG]\n\
-     \x20                       [--cache DIR] [--no-convert] [--percent] [--bw] [--force] COMMAND\n\
+     \x20                       [--cache DIR] [--no-convert] [--percent] [--bw] [--force] [--a2-preview] COMMAND\n\
      commands:\n\
      \x20 info   BOOK\n\
      \x20 render BOOK PAGE OUT.raw\n\
@@ -288,7 +301,7 @@ fn show(args: &Args, path: &Path) -> Result<(), Error> {
     let page = page?;
     let bw = page.threshold();
     let mut screen = Screen::open().context("can't open /dev/fb0")?;
-    let t = screen.turn(&page, &bw)?;
+    let t = screen.turn(&page, &bw, turn_strategy(args))?;
     println!(
         "page {}: render {:.1} ms, visible {:.1} ms, settled {:.1} ms (panel times from blit)",
         index + 1,
@@ -437,7 +450,7 @@ fn turn(args: &Args, path: &Path) -> Result<(), Error> {
         };
         let bw = page.threshold();
         let t_render = t0.elapsed();
-        let t = screen.turn(&page, &bw)?;
+        let t = screen.turn(&page, &bw, turn_strategy(args))?;
         println!(
             "{:>6} {:>9.1} {:>9.1} {:>9.1} {:>11.1} {:>11.1}",
             index + 1,
