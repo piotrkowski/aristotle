@@ -47,7 +47,7 @@ use aristotle_ui::tree::{NodeId, Refresh};
 use aristotle_ui::ui::Ui;
 
 use crate::prefs::Prefs;
-use crate::session::{Prepared, Session, Source};
+use crate::session::{Prepared, Session, Source, OPEN_GATE};
 use crate::shelf::{Covers, ShelfModel};
 use crate::snapshot::PageInfo;
 use crate::turns::TurnGestures;
@@ -78,31 +78,34 @@ pub fn spawn(src: Source, style: Style) -> Worker {
 }
 
 /// [`spawn`], rendering the pages on either side only with `neighbours`.
-pub fn spawn_with(src: Source, style: Style, neighbours: bool) -> Worker {
+pub fn spawn_with(mut src: Source, style: Style, neighbours: bool) -> Worker {
     let (tx, rx) = mpsc::channel();
     let tid = Arc::new(AtomicI32::new(0));
     let abandoned = Arc::new(AtomicBool::new(false));
     let done = Arc::new(AtomicBool::new(false));
-    let spawned = thread::Builder::new().name("open".into()).spawn({
-        let (src, style, tx) = (src.clone(), style.clone(), tx.clone());
-        let (tid, abandoned, done) = (tid.clone(), abandoned.clone(), done.clone());
+    // Dropping the worker cancels the open between its steps.
+    src.cancel = Some(abandoned.clone());
+    let work = {
+        let (tid, done) = (tid.clone(), done.clone());
         move || {
             // SAFETY: a plain system call.
             tid.store(
                 unsafe { libc::syscall(libc::SYS_gettid) } as i32,
                 Ordering::SeqCst,
             );
-            if abandoned.load(Ordering::SeqCst) {
-                return;
-            }
+            // One background open at a time: an abandoned one finishes its
+            // current step and drops its book first.
+            let _gate = OPEN_GATE.lock().unwrap_or_else(|e| e.into_inner());
             let result = Session::prepare(src, style, neighbours);
             done.store(true, Ordering::SeqCst);
+            // Nobody waiting any more: the book is dropped here, in the gate.
             let _ = tx.send(result);
         }
-    });
-    if spawned.is_err() {
-        let _ = tx.send(Session::prepare(src, style, neighbours));
-        done.store(true, Ordering::SeqCst);
+    };
+    // If the thread can't start, the work (and its sender) is dropped and
+    // the worker reports an error.
+    if let Err(e) = thread::Builder::new().name("open".into()).spawn(work) {
+        eprintln!("aristotle: can't start the open thread: {e}");
     }
     Worker {
         rx,
@@ -114,12 +117,16 @@ pub fn spawn_with(src: Source, style: Style, neighbours: bool) -> Worker {
 }
 
 impl Worker {
-    /// The result, if the worker is done.
+    /// The result, if the worker is done. The channel only closes without
+    /// a result when the thread could not be started (a panic aborts the
+    /// whole app: release builds use panic=abort).
     pub fn poll(&self) -> Option<Result<Prepared, Error>> {
         match self.rx.try_recv() {
             Ok(r) => Some(r),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(format_err!("the open thread died"))),
+            Err(TryRecvError::Disconnected) => {
+                Some(Err(format_err!("the open thread did not run")))
+            }
         }
     }
 
@@ -127,7 +134,7 @@ impl Worker {
     pub fn wait(&self) -> Result<Prepared, Error> {
         self.rx
             .recv()
-            .unwrap_or_else(|_| Err(format_err!("the open thread died")))
+            .unwrap_or_else(|_| Err(format_err!("the open thread did not run")))
     }
 }
 
@@ -286,6 +293,7 @@ pub fn page_info(session: &mut Session, location: usize) -> PageInfo {
         fraction,
         chapter,
         label,
+        last: session.known_last(location),
     }
 }
 

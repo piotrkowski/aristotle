@@ -114,6 +114,8 @@ pub struct Panel {
     page: Option<InFlight>,
     /// Waveform for page turns.
     pub turn: FbWaveform,
+    /// Full-screen full-mode updates submitted so far (pages and flashes).
+    full_updates: u64,
 }
 
 fn fb_rect(r: Rect) -> FbRect {
@@ -136,6 +138,7 @@ impl Panel {
             completions,
             page: None,
             turn: FbWaveform(turn_mode),
+            full_updates: 0,
         })
     }
 
@@ -154,6 +157,7 @@ impl Panel {
                 self.blit_ui_wait(ui, Rect::screen())?;
                 let all = self.fb.full_screen();
                 let m = self.fb.update(all, wf, true)?;
+                self.full_updates += 1;
                 self.track(m, if page { "page (menu open)" } else { "flash" });
             } else {
                 // No wait: the driver latched the last page when it started
@@ -175,8 +179,15 @@ impl Panel {
         self.fb.blit(&page.data, page.stride, rect);
         let wf = if flash { FLASH } else { self.turn };
         let m = self.fb.update(rect, wf, true)?;
+        self.full_updates += 1;
         self.track(m, label);
         Ok(waited)
+    }
+
+    /// How many full-screen full-mode updates went out so far, so a caller
+    /// can tell whether an action redrew the whole screen.
+    pub fn full_updates(&self) -> u64 {
+        self.full_updates
     }
 
     fn track(&mut self, marker: Option<u32>, label: &str) {

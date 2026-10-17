@@ -35,7 +35,7 @@ use aristotle_library::{BookRecord, Library};
 use aristotle_render::plato_core::anyhow::{format_err, Error};
 use aristotle_render::style::Style;
 
-use crate::session::{Session, Source};
+use crate::session::{Session, Source, OPEN_GATE};
 use crate::snapshot::{self, Key, Snapshot};
 
 /// How many books, by recency, get a snapshot ahead of time.
@@ -133,13 +133,8 @@ pub fn job_for(
     mobi_cache: &Path,
 ) -> Option<(Source, Key)> {
     let progress = rec.progress.as_ref()?;
-    let key = Key::new(
-        &rec.id,
-        (rec.file.size, rec.file.mtime),
-        style,
-        progress.locator.clone(),
-    );
     let mut src = Source::new(lib, rec, mobi_cache).ok()?;
+    let key = Key::new(&rec.id, src.stamp, style, progress.locator.clone());
     src.paginate = false;
     Some((src, key))
 }
@@ -159,13 +154,15 @@ pub fn candidates(lib: &Library) -> Vec<&BookRecord> {
     books
 }
 
-fn start(src: Source, style: Style, key: Key) -> Option<Job> {
+fn start(mut src: Source, style: Style, key: Key) -> Option<Job> {
     let cancel = Arc::new(AtomicBool::new(false));
     let stop = cancel.clone();
+    src.cancel = Some(cancel.clone());
     let spawned = thread::Builder::new()
         .name("prewarm".into())
         .spawn(move || {
             crate::pagecache::lower_priority();
+            let _gate = OPEN_GATE.lock().unwrap_or_else(|e| e.into_inner());
             let title = src.title.clone();
             let t = Instant::now();
             match make(src, style, key, &stop) {
@@ -202,7 +199,10 @@ pub fn make(
     if stop.load(Ordering::Relaxed) {
         return Ok(None);
     }
-    let prepared = Session::prepare(src, style, true)?;
+    let prepared = match Session::prepare(src, style, true) {
+        Err(_) if stop.load(Ordering::Relaxed) => return Ok(None),
+        other => other?,
+    };
     if stop.load(Ordering::Relaxed) {
         return Ok(None);
     }

@@ -13,16 +13,23 @@
 //! - **Pixels:** the page buffer itself, 8-bit gray with the framebuffer's
 //!   stride, each page compressed with zstd at level [`LEVEL`] (text pages
 //!   shrink about tenfold; see docs/reader.md for sizes and decode times).
-//! - **Key:** book id, the file's size and mtime, a hash of the look (every
-//!   [`Style`] field, the layout version, the app build) and the progress
-//!   locator saved with the page. A snapshot is shown only if all of these
-//!   equal what the index and the preferences say now; a style change, a
-//!   new build, a replaced file or a position imported from the stock
-//!   reader all make it stale, and it is simply overwritten at the next save.
+//! - **Key:** book id, the book file's size and mtime (from the file
+//!   itself, not the index), a hash of the look (every [`Style`] field, the
+//!   layout version, the app build and the runtime data: fonts, stylesheets,
+//!   hyphenation patterns) and the progress locator saved with the page. A
+//!   snapshot is shown only if all of these equal what the file, the index
+//!   and the preferences say now; a style change, a new build or data, a
+//!   replaced file or a position imported from the stock reader all make it
+//!   stale, and it is simply overwritten at the next save. Snapshots of
+//!   books that left the library are deleted at the next scan.
+//! - **Integrity:** each page carries zstd's content checksum, and the file
+//!   is written to a temporary name and renamed. The directory is not
+//!   fsynced: like the index, a snapshot lost to a power cut only costs one
+//!   slow open, and a damaged one fails its checks and is ignored.
 //!
 //! What the snapshot shows is checked once the real page exists (see
-//! `open.rs`): another location means a redraw, a different header or
-//! footer means a partial update of just those pixels.
+//! `open.rs`): anything but the same pixels at the same location is
+//! replaced with one full mode-9 update of the whole screen.
 //!
 //! The page chrome shows the chapter title, the page number and the
 //! percentage, all functions of the location; it has no live fields (no
@@ -92,7 +99,56 @@ pub fn look(style: &Style) -> u64 {
     LAYOUT_VERSION.hash(&mut h);
     format!("{style:?}").hash(&mut h);
     build_stamp().hash(&mut h);
+    data_stamp().hash(&mut h);
     h.finish()
+}
+
+/// Names, sizes and mtimes of the runtime data Plato draws pages with
+/// (relative to the data directory, the current directory): a new font or
+/// stylesheet changes pages without a new build.
+fn data_stamp() -> u64 {
+    static STAMP: OnceLock<u64> = OnceLock::new();
+    *STAMP.get_or_init(|| {
+        use std::os::unix::fs::MetadataExt;
+        let mut files = Vec::new();
+        for dir in ["fonts", "serif", "css", "hyphenation-patterns"] {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for e in entries.flatten() {
+                    if let Ok(m) = e.metadata() {
+                        files.push((e.path(), m.len(), m.mtime()));
+                    }
+                }
+            }
+        }
+        files.sort();
+        let mut h = DefaultHasher::new();
+        files.hash(&mut h);
+        h.finish()
+    })
+}
+
+/// Size and mtime of the book file now, for [`Key::new`].
+pub fn file_stamp(path: &Path) -> Option<(u64, i64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.len(), m.mtime()))
+}
+
+/// Delete the snapshots of books for which `keep` says no.
+pub fn prune(data_dir: &Path, keep: impl Fn(&str) -> bool) -> usize {
+    let Ok(entries) = std::fs::read_dir(data_dir.join(DIR)) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let Some(id) = name.strip_suffix(".snap") else {
+            continue;
+        };
+        if !keep(id) && std::fs::remove_file(e.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
 }
 
 /// Size and mtime of the running binary: a new build may draw pages
@@ -137,6 +193,9 @@ pub struct PageInfo {
     /// percentage).
     pub chapter: String,
     pub label: String,
+    /// Whether this is known to be the book's last page.
+    #[serde(default)]
+    pub last: bool,
 }
 
 /// A snapshot to store: the current page and, if known, the next one.
@@ -153,8 +212,10 @@ pub fn encode(s: &Snapshot) -> io::Result<Vec<u8>> {
         .ok_or_else(|| io::Error::other("no page"))?
         .1;
     let mut blobs = Vec::with_capacity(s.pages.len());
+    let mut z = zstd::bulk::Compressor::new(LEVEL)?;
+    z.set_parameter(zstd::stream::raw::CParameter::ChecksumFlag(true))?;
     for (_, p) in &s.pages {
-        blobs.push(zstd::bulk::compress(&p.data, LEVEL)?);
+        blobs.push(z.compress(&p.data)?);
     }
     let header = Header {
         key: s.key.clone(),
@@ -285,8 +346,11 @@ fn parse(data: &[u8], key: &Key, style: &Style) -> Option<Loaded> {
 pub struct Writer {
     tx: Option<Sender<Snapshot>>,
     thread: Option<thread::JoinHandle<()>>,
-    /// What was last queued, to skip saving the same pages again.
+    /// What was last queued (or found on disk), to skip saving the same
+    /// pages again.
     last: Option<(Key, Rc<Page>, Option<usize>)>,
+    /// Snapshots handed to the thread, for the log and the tests.
+    pub queued: usize,
 }
 
 impl Writer {
@@ -322,6 +386,7 @@ impl Writer {
             tx: Some(tx),
             thread,
             last: None,
+            queued: 0,
         }
     }
 
@@ -345,8 +410,22 @@ impl Writer {
             pages.push((i, (*p).clone()));
         }
         if let Some(tx) = &self.tx {
+            self.queued += 1;
             let _ = tx.send(Snapshot { key, pages });
         }
+    }
+
+    /// The snapshot on disk already holds `page` (and a next page at
+    /// `next`) under `key`: an open that showed it unchanged. Saving the
+    /// same again is skipped until the page is rendered anew (for example
+    /// with page numbers).
+    pub fn already_saved(&mut self, key: Key, page: Rc<Page>, next: Option<usize>) {
+        self.last = Some((key, page, next));
+    }
+
+    /// Drop the reference to the last saved page (back in the library).
+    pub fn forget(&mut self) {
+        self.last = None;
     }
 
     /// Wait for queued snapshots, e.g. before quitting.
@@ -386,6 +465,7 @@ mod tests {
             fraction: 0.25,
             chapter: "Rozdział".into(),
             label: "25%".into(),
+            last: false,
         }
     }
 
@@ -491,6 +571,12 @@ mod tests {
         assert!(is_valid(&dir, &k, &s));
         std::fs::write(&file, &good[..good.len() - 1]).unwrap();
         assert!(!is_valid(&dir, &k, &s));
+        // A flipped bit in the pixels fails zstd's checksum.
+        let mut flipped = good.clone();
+        let at = flipped.len() - 6;
+        flipped[at] ^= 0x10;
+        std::fs::write(&file, &flipped).unwrap();
+        assert!(load(&dir, &k, &s).is_none());
         std::fs::write(&file, &good).unwrap();
         // A first page saved for another locator than its key is not ours.
         let odd = Snapshot {
@@ -502,6 +588,24 @@ mod tests {
     }
 
     #[test]
+    fn prune_keeps_only_books_in_the_library() {
+        let dir = crate::testdir("snapshot");
+        let s = Style::pw4();
+        for book in ["aaaa", "bbbb"] {
+            let snap = Snapshot {
+                key: Key::new(book, (1, 1), &s, AT),
+                pages: vec![(info(1, AT), page(&s, 5))],
+            };
+            store(&dir, &snap).unwrap();
+        }
+        std::fs::write(dir.join(DIR).join("notes.txt"), "x").unwrap();
+        assert_eq!(prune(&dir, |id| id == "aaaa"), 1);
+        assert!(path(&dir, "aaaa").exists());
+        assert!(!path(&dir, "bbbb").exists());
+        assert!(dir.join(DIR).join("notes.txt").exists());
+    }
+
+    #[test]
     fn writer_skips_unchanged_pages_and_flushes() {
         let dir = crate::testdir("snapshot");
         let s = Style::pw4();
@@ -509,10 +613,24 @@ mod tests {
         let p = Rc::new(page(&s, 4));
         let mut w = Writer::new(&dir);
         w.save(k.clone(), (info(10, AT), p.clone()), None);
-        let first = w.last.clone().unwrap();
-        // The same pages again are not queued twice.
+        assert_eq!(w.queued, 1);
+        // The same pages again are not queued twice...
         w.save(k.clone(), (info(10, AT), p.clone()), None);
-        assert!(Rc::ptr_eq(&w.last.as_ref().unwrap().1, &first.1));
+        assert_eq!(w.queued, 1);
+        // ...but the same location rendered anew is, and so is a next page.
+        let again = Rc::new((*p).clone());
+        w.save(k.clone(), (info(10, AT), again.clone()), None);
+        assert_eq!(w.queued, 2);
+        w.save(
+            k.clone(),
+            (info(10, AT), again.clone()),
+            Some((info(20, AT), p.clone())),
+        );
+        assert_eq!(w.queued, 3);
+        // What an open found on disk unchanged is not written back.
+        w.already_saved(k.clone(), p.clone(), None);
+        w.save(k.clone(), (info(10, AT), p.clone()), None);
+        assert_eq!(w.queued, 3);
         w.flush();
         let l = load(&dir, &k, &s).unwrap();
         assert_eq!(l.info.location, 10);

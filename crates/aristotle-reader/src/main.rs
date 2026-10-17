@@ -45,7 +45,7 @@ use std::time::{Duration, Instant};
 
 use aristotle_hal::input::{monotonic_us, Phase as HalPhase, TouchScreen, Transform};
 use aristotle_hal::power::{Battery, Frontlight};
-use aristotle_library::{Library, Progress, ScanOptions, Status};
+use aristotle_library::{Library, ScanOptions, Status};
 use aristotle_render::page::Page;
 use aristotle_render::plato_core::anyhow::{bail, format_err, Context, Error};
 use aristotle_render::style::Style;
@@ -194,12 +194,15 @@ fn run() -> Result<(), Error> {
     let styles = Styles::new(FamilyId(0));
     let mut covers = Covers::default();
     let battery = Battery::open().ok();
+    perf!("startup: UI fonts and battery ready");
     let model = ShelfModel::build(&lib, Filter::All, 0, &mut covers);
+    perf!("startup: shelf and covers ready");
     let clock = clock();
     let level = battery_level(&battery);
     let (tree, view) =
         ui_lib::Library::build_shelf(&mut text, &styles, &model.shelf(&clock, level));
     let ui = Ui::new(tree, text, w, h);
+    perf!("startup: library screen built");
     let mut app = App {
         panel,
         light: Frontlight::open().ok(),
@@ -408,6 +411,11 @@ impl App {
         for (path, err) in &r.errors {
             eprintln!("aristotle: scan: {path}: {err}");
         }
+        let lib = &self.lib;
+        let pruned = snapshot::prune(lib.data_dir(), |id| lib.book(id).is_some());
+        if pruned > 0 {
+            perf!("scan: {pruned} snapshots of books no longer in the library deleted");
+        }
         if r.added + r.updated + r.moved + r.removed + r.restored + r.sidecars_imported > 0 {
             self.saver.save(&self.lib);
             if matches!(self.screen, Screen::Library { .. }) {
@@ -477,7 +485,7 @@ impl App {
     /// Work done between events: adopting page numbers, saving progress.
     fn background(&mut self) -> Result<(), Error> {
         if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
-            self.adopt(result)?;
+            self.adopt(result, false)?;
         }
         if let Some(result) = self.pending.as_ref().and_then(|p| p.worker.poll()) {
             self.finish_pending(result)?;
@@ -775,8 +783,10 @@ impl App {
             if self.opening_intent(intent)? {
                 continue;
             }
-            self.finish_opening()?;
+            let before = self.panel.full_updates();
+            let stale = self.finish_opening(true)?;
             self.on_intent(intent)?;
+            self.redraw_if_stale(stale, before)?;
         }
         Ok(Flow::Continue)
     }
@@ -859,12 +869,53 @@ impl App {
                 ..
             } => self.abandon_opening()?,
             UiEvent::Action { .. } => {
-                self.finish_opening()?;
+                let before = self.panel.full_updates();
+                let stale = self.finish_opening(true)?;
                 self.on_menu_event(ev)?;
+                self.redraw_if_stale(stale, before)?;
             }
             _ => {}
         }
         Ok(Flow::Continue)
+    }
+
+    /// After an action that needed the book: if the adopted page differs
+    /// from what the panel shows and the action did not redraw the whole
+    /// screen itself (a turn at the first or last page, a light change),
+    /// one full mode-9 update now.
+    fn redraw_if_stale(&mut self, stale: bool, full_updates_before: u64) -> Result<(), Error> {
+        if !stale || self.panel.full_updates() != full_updates_before {
+            return Ok(());
+        }
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
+        self.ui.tree.invalidate(r.page_node, Refresh::Auto);
+        if r.menu_open {
+            self.render_ui_with(Content::Page)
+        } else {
+            let page = r.session.page(r.session.current)?;
+            self.panel.show_page(&page, false, "corrected page")?;
+            self.ui.render();
+            Ok(())
+        }
+    }
+
+    /// Keep the page shown from the snapshot as the progress when the book
+    /// will not be adopted (back to the library, or the open failed).
+    fn keep_shown_progress(&mut self, o: &Opening) {
+        if !o.turned {
+            return;
+        }
+        let (info, page) = o.shown().clone();
+        let now = aristotle_library::library::now();
+        let progress = progress::progress_for(info.locator.clone(), info.fraction, now);
+        self.lib.set_progress(&o.id, progress);
+        if info.last {
+            self.lib.set_status(&o.id, Status::Finished);
+        }
+        let key = snapshot::Key::new(&o.id, o.stamp, &o.style, info.locator.clone());
+        self.snapshots.save(key, (info, page), None);
     }
 
     /// Back to the library before the book finished opening: drop the
@@ -873,54 +924,51 @@ impl App {
         let Some(o) = self.opening.take() else {
             return Ok(());
         };
-        let (info, page) = o.shown().clone();
-        if o.turned {
-            let progress = Progress {
-                fraction: info.fraction,
-                locator: info.locator.clone(),
-                updated: aristotle_library::library::now(),
-                source: Some("aristotle".into()),
-                page: None,
-            };
-            self.lib.set_progress(&o.id, progress);
-            let key = snapshot::Key::new(&o.id, o.stamp, &o.style, info.locator.clone());
-            self.snapshots.save(key, (info, page), None);
-        }
+        self.keep_shown_progress(&o);
         perf!(
             "open: \"{}\": back to the library {:.0} ms after the tap, before the book was ready",
             o.title,
             ms(o.tapped.elapsed())
         );
-        // Dropping the worker lowers its thread to idle priority.
+        // Dropping the worker cancels it between its steps, at idle priority.
         drop(o);
+        self.show_library(Refresh::Full)?;
+        self.snapshots.forget();
         self.saver.save(&self.lib);
         self.debounce.saved();
-        self.show_library(Refresh::Full)
+        Ok(())
     }
 
-    /// Wait for the book being opened and adopt it.
-    fn finish_opening(&mut self) -> Result<(), Error> {
+    /// Wait for the book being opened and adopt it. With `deferred`, a
+    /// page that differs from the snapshot is not sent: the caller redraws
+    /// next. Returns whether the panel then still shows the snapshot's page
+    /// where the book's differs.
+    fn finish_opening(&mut self, deferred: bool) -> Result<bool, Error> {
         let Some(o) = self.opening.as_ref() else {
-            return Ok(());
+            return Ok(false);
         };
         let t = Instant::now();
         let result = o.worker.wait();
         perf!("open: waited {:.0} ms for the book", ms(t.elapsed()));
-        self.adopt(result)
+        self.adopt(result, deferred)
     }
 
     /// Take over the session the worker made, and make sure the panel shows
     /// its page: no update if the snapshot showed exactly that page, else
-    /// one full mode-9 update.
-    fn adopt(&mut self, result: Result<Prepared, Error>) -> Result<(), Error> {
+    /// one full mode-9 update (none with `deferred`; see
+    /// [`App::finish_opening`]).
+    fn adopt(&mut self, result: Result<Prepared, Error>, deferred: bool) -> Result<bool, Error> {
         let Some(o) = self.opening.take() else {
-            return Ok(());
+            return Ok(false);
         };
         let prepared = match result {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("aristotle: {}: {e:#}", o.title);
-                return self.show_library(Refresh::Full);
+                self.keep_shown_progress(&o);
+                self.show_library(Refresh::Full)?;
+                self.saver.save(&self.lib);
+                return Ok(false);
             }
         };
         let t = Instant::now();
@@ -940,26 +988,6 @@ impl App {
         } else {
             open::Verdict::Page
         };
-        if let Some(w) = self.ui.tree.widget_mut::<PageView>(o.page_node) {
-            w.page = page.clone();
-        }
-        match verdict {
-            // The UI's copy of the screen already has these pixels: no
-            // update at all.
-            open::Verdict::Same => {}
-            // Never a partial fix-up: one full mode-9 update, like a page
-            // turn (behind an open menu, like a chapter jump).
-            _ if o.menu_open => {
-                self.ui.tree.invalidate(o.page_node, Refresh::Auto);
-                self.render_ui_with(Content::Page)?;
-            }
-            _ => {
-                self.panel.show_page(&page, false, "corrected page")?;
-                self.ui.tree.invalidate(o.page_node, Refresh::Auto);
-                // The panel already shows the page; this only updates the UI's copy.
-                self.ui.render();
-            }
-        }
         perf!(
             "open: \"{}\": book ready {:.0} ms after the tap (worker: book {:.0} ms, position {:.0} ms, first page {:.0} ms, neighbours {:.0} ms; adopted in {:.0} ms); snapshot {:?}; page numbers {}",
             o.title,
@@ -972,6 +1000,12 @@ impl App {
             verdict,
             if times.pages_cached { "from cache" } else { "being computed in the background" }
         );
+        if verdict == open::Verdict::Same && !o.turned {
+            // The snapshot on disk is exactly this page: don't write it back.
+            let key = snapshot::Key::new(&o.id, o.stamp, &o.style, o.current.0.locator.clone());
+            let next = o.next.as_ref().map(|(i, _)| i.location);
+            self.snapshots.already_saved(key, page.clone(), next);
+        }
         if o.turned || !right {
             let now = aristotle_library::library::now();
             self.lib.set_progress(&session.id, session.progress(now));
@@ -979,18 +1013,43 @@ impl App {
         }
         let o = *o;
         let menu_open = o.menu_open;
-        self.enter_reader(session, o.menu, o.page_node, o.settings, o.gestures);
+        let page_node = o.page_node;
+        if let Some(w) = self.ui.tree.widget_mut::<PageView>(page_node) {
+            w.page = page.clone();
+        }
+        self.enter_reader(session, o.menu, page_node, o.settings, o.gestures);
         if let Screen::Reader(r) = &mut self.screen {
             if menu_open {
+                // The labels go out in the same frame as the page, if any.
                 r.menu_open = true;
                 update_menu_labels(&mut self.ui, r);
-                self.render_ui()?;
+            }
+        }
+        let same = verdict == open::Verdict::Same;
+        match (same, deferred, menu_open) {
+            (true, _, true) => self.render_ui()?,
+            // The UI's copy of the screen already has these pixels: no
+            // update at all.
+            (true, _, false) => {}
+            // The caller redraws the whole screen next, or asks us to.
+            (false, true, _) => {}
+            // Never a partial fix-up: one full mode-9 update, like a page
+            // turn (behind an open menu, like a chapter jump).
+            (false, false, true) => {
+                self.ui.tree.invalidate(page_node, Refresh::Auto);
+                self.render_ui_with(Content::Page)?;
+            }
+            (false, false, false) => {
+                self.panel.show_page(&page, false, "corrected page")?;
+                self.ui.tree.invalidate(page_node, Refresh::Auto);
+                // The panel already shows the page; this only updates the UI's copy.
+                self.ui.render();
             }
         }
         if let Screen::Reader(r) = &mut self.screen {
             r.session.prerender();
         }
-        Ok(())
+        Ok(!same && deferred)
     }
 
     fn enter_reader(
@@ -1282,6 +1341,8 @@ impl App {
         if let Some((key, current, next)) = snapshot {
             self.snapshots.save(key, current, next);
         }
+        // The closed book's page needn't stay in memory for the skip test.
+        self.snapshots.forget();
         self.saver.save(&self.lib);
         self.debounce.saved();
         Ok(())
@@ -1291,7 +1352,7 @@ impl App {
     fn leave(self) -> Result<(), Error> {
         let mut app = self;
         // A forward turn made while the book was opening counts.
-        app.finish_opening()?;
+        app.finish_opening(true)?;
         if let Screen::Reader(r) = &app.screen {
             let now = aristotle_library::library::now();
             app.lib.set_progress(&r.session.id, r.session.progress(now));
