@@ -8,6 +8,7 @@ EMU=${ARISTOTLE_EMU:-$HOME/.cache/aristotle/emulator}
 FW=${ARISTOTLE_PW4_FW:-$HOME/.cache/aristotle/firmware/pw4-5.13.6}
 KINDLETOOL=${KINDLETOOL_DIR:-$HOME/.cache/aristotle/KindleTool/KindleTool/Release}
 INSTANCE=${1:-pw4}
+PATCH=$(cd "$(dirname "$0")" && pwd)/eink-emulator-pw4.patch
 export TMPDIR="$HOME/.cache/aristotle/tmp"
 export PATH="$KINDLETOOL:$PATH"
 mkdir -p "$EMU" "$TMPDIR"
@@ -29,15 +30,16 @@ for f in imx6sll_rex/u-boot.bin imx6sll_rex/boot.img imx6sll_rex/s-bios.bin imx6
     [ -f "$dest/$(basename "$f")" ] || cp "$FW/$f" "$dest/"
 done
 
+# Without these fixes PW4 never reaches Home: the default board ID boots it as
+# platform=yoshi, and kb crash loops reboot the guest. See the patch header.
+git apply --reverse --check "$PATCH" 2> /dev/null || git apply "$PATCH"
+
 # Builds QEMU on first use, then prepares a disk with KUAL, MRPI and the jailbreak.
+# Instances created before the patch keep their old disk; recreate them with
+# ./eink delete NAME, which needs lsof.
 ./eink list | grep -q "^$INSTANCE " ||
     ./eink create "$INSTANCE" --model kindle-paperwhite-4 --profile production --mrpi
 
-# The Rex machine's default IDME board_id, 00015R..., is a legacy tattoo ID that
-# /etc/upstart/functions decodes as platform=yoshi. The guest then takes yoshi
-# code paths, stays on the boot splash and never starts USB SSH. PW4 IDs are PSN v2:
-# "P", two characters, then the moonshine code 15R. The override is not saved
-# in the disk, so pass it on every run. Keep a launcher flag between the name
-# and "--", or the launcher rejects the QEMU flag.
-# If an instance has already booted as yoshi, stop it and run ./eink reset (needs lsof).
-echo "Run with: cd $EMU/eink-emulator && ./eink run $INSTANCE --headless --qmp-socket --serial-socket -- -idme-pcbsn P0015R0000000000"
+# Home appears about 2.5 minutes after start; SSH is up after about 30 s.
+# run.sh needs --qmp-socket for its screenshots; drop --headless to see the screen.
+echo "Run with: cd $EMU/eink-emulator && ./eink run $INSTANCE --headless --qmp-socket --serial-socket"

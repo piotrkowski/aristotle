@@ -2,8 +2,8 @@
 # Build a crate for the Kindle, copy it into the running PW4 emulator, run it
 # over SSH and save a screenshot of the e-ink scanout.
 #   devloop/emulator/run.sh [PACKAGE] [ARGS...]     (default: aristotle-hello)
-# Start the emulator first with the run command that setup.sh prints; a plain
-# `./eink run pw4` boots with the wrong board identity and never reaches SSH.
+# Start the emulator first with the run command that setup.sh prints; the
+# screenshot needs its --qmp-socket.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
