@@ -479,7 +479,7 @@ mod tests {
     use super::*;
 
     const EN_GB: &str = "\u{FEFF}Pan Tadeusz. Historia szlachecka z roku 1811 i 1812 (Adam Mickiewicz)\r\n\
-- Your Highlight at location 60-63 | Added on Thursday, 14 December 2023 20:27:45\r\n\r\n\
+- Your Highlight at location 12-14 | Added on Thursday, 14 December 2023 20:27:45\r\n\r\n\
 Litwo! Ojczyzno moja! ty jesteś jak zdrowie.\r\n==========\r\n\
 \u{FEFF}Lalka (Prus, Bolesław)\r\n\
 - Your Highlight on page 12 | location 180-181 | Added on Saturday, 16 December 2023 09:12:40\r\n\r\n\
@@ -493,16 +493,16 @@ Lalka (Prus, Bolesław)\r\n\
         assert_eq!(r.skipped, 0);
         assert_eq!(r.clippings.len(), 3);
         let c = &r.clippings[0];
-        assert_eq!(c.title, "Pan Tadeusz. Historia szlachecka z roku 1811 i 1812");
+        assert_eq!(
+            c.title,
+            "Pan Tadeusz. Historia szlachecka z roku 1811 i 1812"
+        );
         assert_eq!(c.author.as_deref(), Some("Adam Mickiewicz"));
         assert_eq!(c.kind, AnnotationKind::Highlight);
-        assert_eq!(c.location, Some((60, 63)));
+        assert_eq!(c.location, Some((12, 14)));
         assert_eq!(c.page, None);
         assert_eq!(c.added.as_deref(), Some("2023-12-14 20:27:45"));
-        assert_eq!(
-            c.text,
-            "Litwo! Ojczyzno moja! ty jesteś jak zdrowie."
-        );
+        assert_eq!(c.text, "Litwo! Ojczyzno moja! ty jesteś jak zdrowie.");
         let c = &r.clippings[1];
         assert_eq!(c.author.as_deref(), Some("Prus, Bolesław"));
         assert_eq!(

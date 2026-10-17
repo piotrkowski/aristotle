@@ -309,8 +309,8 @@ fn is_given(word: &str) -> bool {
 /// than the embedded field, else `None`.
 ///
 /// Device folders such as "Lecki Tomasz, Zolkiewska Jadwiga" are sort
-/// names, ASCII-folded, comma-separated, while a MOBI may say "Żółkiewska Jadwiga
-/// Łęcki Tomasz" in one author field. The folder is used only if:
+/// names, ASCII-folded, comma-separated, while a MOBI may say "Żółkiewska
+/// Jadwiga Łęcki Tomasz" in one author field. The folder is used only if:
 ///
 /// - its words are exactly the embedded words (ignoring case, diacritics and
 ///   punctuation), so it describes the same people, and
@@ -550,9 +550,15 @@ mod tests {
 
     #[test]
     fn last_first_folder_fixes_inverted_and_multiword_surnames() {
-        let fixed =
-            authors_from_folder(&[Author::new("Conan Doyle Arthur", None)], "Conan Doyle, Arthur").unwrap();
-        assert_eq!(names(&fixed), [("Arthur Conan Doyle", "Conan Doyle, Arthur")]);
+        let fixed = authors_from_folder(
+            &[Author::new("Conan Doyle Arthur", None)],
+            "Conan Doyle, Arthur",
+        )
+        .unwrap();
+        assert_eq!(
+            names(&fixed),
+            [("Arthur Conan Doyle", "Conan Doyle, Arthur")]
+        );
     }
 
     /// The two device cases end to end, through `extract` and the real
