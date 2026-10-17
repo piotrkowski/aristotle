@@ -30,7 +30,8 @@ mod session;
 mod shelf;
 mod turns;
 
-use std::path::PathBuf;
+use std::os::fd::AsRawFd;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,7 +47,7 @@ use aristotle_ui::geom::{Rect, Size, MIN_TARGET};
 use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{self as ui_lib, Filter};
 use aristotle_ui::screens::reader::{action as menu_action, build_menu, Menu, MenuSpec, Settings};
-use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
+use aristotle_ui::text::{FamilyId, FontData, Fonts, TextEngine};
 use aristotle_ui::theme::Styles;
 use aristotle_ui::tree::{Constraints, Kind, Node, NodeId, PaintCx, Refresh, Tree, Widget};
 use aristotle_ui::ui::{Ui, UiEvent};
@@ -173,7 +174,8 @@ fn run() -> Result<(), Error> {
         prefs.turn_mode
     );
 
-    let mut text = TextEngine::new(Fonts::embedded());
+    // The data directory is the current directory by now.
+    let mut text = TextEngine::new(ui_fonts(Path::new("serif"))?);
     let styles = Styles::new(FamilyId(0));
     let mut covers = Covers::default();
     let battery = Battery::open().ok();
@@ -300,6 +302,60 @@ fn clock() -> String {
             return String::new();
         }
         format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
+    }
+}
+
+/// The UI font: the renderer's Literata in `dir` (`serif/` of the data
+/// directory). Compiling it in would ship the same megabyte twice. The
+/// files are mapped rather than read, so their pages stay file-backed like
+/// the binary's own.
+fn ui_fonts(dir: &Path) -> Result<Fonts, Error> {
+    let mut fonts = Fonts::new();
+    let mut faces = [None; 4];
+    for (face, style) in faces
+        .iter_mut()
+        .zip(["Regular", "Italic", "Bold", "BoldItalic"])
+    {
+        let path = dir.join(format!("Literata-{style}.ttf"));
+        let bytes = map_file(&path).with_context(|| format!("can't map {}", path.display()))?;
+        *face = Some(
+            fonts
+                .add_face(FontData::Static(bytes))
+                .with_context(|| path.display().to_string())?,
+        );
+    }
+    fonts
+        .add_family("Literata", faces)
+        .ok_or_else(|| format_err!("no regular Literata"))?;
+    Ok(fonts)
+}
+
+/// Maps a whole file read-only for the rest of the process.
+fn map_file(path: &Path) -> std::io::Result<&'static [u8]> {
+    let file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len() as usize;
+    if len == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "empty file",
+        ));
+    }
+    // SAFETY: a private read-only mapping of the whole file, never unmapped,
+    // so the slice is valid for 'static. The data directory is not changed
+    // while the app runs (bundles are unpacked with the app stopped).
+    unsafe {
+        let ptr = libc::mmap(
+            std::ptr::null_mut(),
+            len,
+            libc::PROT_READ,
+            libc::MAP_PRIVATE,
+            file.as_raw_fd(),
+            0,
+        );
+        if ptr == libc::MAP_FAILED {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(std::slice::from_raw_parts(ptr as *const u8, len))
     }
 }
 
@@ -846,6 +902,19 @@ fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {
     ui.tree.set_progress(r.menu.progress, fraction);
     if let Some(w) = ui.tree.widget_mut::<Steps>(r.menu.size_steps) {
         w.value = r.settings.size;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ui_fonts_map_literata() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aristotle-render/assets/fonts");
+        let fonts = ui_fonts(&dir).unwrap();
+        assert_eq!(fonts.family_by_name("Literata"), Some(FamilyId(0)));
+        assert!(ui_fonts(&dir.join("missing")).is_err());
     }
 }
 
