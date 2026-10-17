@@ -1,0 +1,29 @@
+[package]
+name = "aristotle-render"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "E-book page renderer for Aristotle on the PW4, built on Plato's document engine"
+
+# A workspace of its own, excluded from the root one: plato-core needs the
+# patched Plato source (tools/prepare-plato-src.sh) and static C libraries
+# (tools/build-plato.sh), which a fresh checkout does not have. Keeping this
+# crate out of the root workspace lets `cargo build` there work everywhere.
+# Build with tools/build-render.sh; see README.md and docs/reader.md.
+[workspace]
+
+[dependencies]
+aristotle-hal = { path = "../aristotle-hal" }
+libc = "0.2"
+plato-core = { path = "../../third_party/plato-patched/crates/core" }
+# Same version as plato-core uses, to read EPUB metadata it does not expose.
+zip = "7.0.0"
+
+[profile.release]
+# Page layout and glyph rasterisation are CPU-bound on a single Cortex-A9
+# core and sit inside the page-turn budget, so optimise for speed, not size.
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

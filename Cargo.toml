@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/aristotle-hal", "crates/aristotle-hello", "crates/aristotle-touch", "crates/aristotle-bench", "crates/aristotle-pen", "crates/aristotle-observe"]
+# Separate workspace: needs the patched Plato source and static C libraries.
+exclude = ["crates/aristotle-render"]
 
 [workspace.package]
 edition = "2021"
