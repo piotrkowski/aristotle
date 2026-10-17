@@ -21,8 +21,28 @@
 # (FreeType's build runs a small host tool), cargo and the rustup target
 # armv7-unknown-linux-musleabihf. Nothing is installed system-wide.
 #
+# What goes in (sizes and reasons: docs/reader.md, "Size budget"):
+#
+#   MUPDF_FONTS=base14   (default) MuPDF embeds only the 14 standard PDF fonts
+#                        (URW Nimbus, cut to Latin, Greek and Cyrillic), the
+#                        substitutes for PDFs that do not embed theirs. No
+#                        Noto fonts, no CJK font or CMaps, no Charis SIL;
+#                        Plato's engine gets no fallback fonts (patch 0005).
+#   MUPDF_FONTS=full     Plato's set: Noto for every script, Droid Sans
+#                        Fallback for CJK, Charis SIL, the CJK CMaps (+17 MB).
+#   MUPDF_FORMATS=minimal (default) MuPDF opens PDF, images (EPUB pictures),
+#                        MOBI (fallback for books mobi.rs can't convert) and
+#                        TXT; Plato's own engine reads EPUB and HTML. No XPS,
+#                        SVG, CBZ, FB2, Office, HTML or EPUB in MuPDF, and no
+#                        MuPDF hyphenation (used only with CSS hyphens: auto).
+#   MUPDF_FORMATS=full   everything MuPDF reads.
+#   PLATO_DJVU=0         (default) no DjVuLibre: DjVu files are not opened
+#                        (patch 0006). PLATO_DJVU=1 builds and links it.
+#
 # The script is restartable: finished steps leave a stamp in $PLATO_BUILD/stamps.
-# For a clean rebuild point PLATO_BUILD at a new directory.
+# MuPDF is built once per MUPDF_FONTS/MUPDF_FORMATS pair, so switching back
+# and forth reuses earlier builds. For a clean rebuild point PLATO_BUILD at a
+# new directory.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -47,6 +67,27 @@ B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
 TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
 JOBS=${JOBS:-2}
 PLATO_REV=7da89f296e58c7426692abb6fda16431b9631e60
+
+MUPDF_FONTS=${MUPDF_FONTS:-base14}
+MUPDF_FORMATS=${MUPDF_FORMATS:-minimal}
+PLATO_DJVU=${PLATO_DJVU:-0}
+case $MUPDF_FONTS in
+    base14) MUPDF_XCFLAGS="-DTOFU -DTOFU_CJK -DNO_CJK" ;;
+    full) MUPDF_XCFLAGS= ;;
+    *) echo "MUPDF_FONTS must be base14 or full" >&2; exit 1 ;;
+esac
+case $MUPDF_FORMATS in
+    minimal) MUPDF_XCFLAGS="$MUPDF_XCFLAGS -DFZ_ENABLE_XPS=0 -DFZ_ENABLE_SVG=0 -DFZ_ENABLE_CBZ=0
+        -DFZ_ENABLE_HTML=0 -DFZ_ENABLE_FB2=0 -DFZ_ENABLE_EPUB=0 -DFZ_ENABLE_OFFICE=0
+        -DFZ_ENABLE_HYPHEN=0 -DFZ_ENABLE_DOCX_OUTPUT=0" ;;
+    full) ;;
+    *) echo "MUPDF_FORMATS must be minimal or full" >&2; exit 1 ;;
+esac
+case $PLATO_DJVU in
+    0|1) ;;
+    *) echo "PLATO_DJVU must be 0 or 1" >&2; exit 1 ;;
+esac
+MUPDF_CONF=$MUPDF_FONTS-$MUPDF_FORMATS
 
 export TMPDIR="$HOME/.cache/aristotle/tmp"
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/aristotle/target-plato}
@@ -168,6 +209,7 @@ T="$P/thirdparty"
 # name file url sha256 (versions as pinned by Plato's thirdparty/download.sh)
 # The zlib URL moved to GitHub because zlib.net only keeps the latest release.
 while read -r name file url sha; do
+    [ "$name" != djvulibre ] || [ "$PLATO_DJVU" = 1 ] || continue
     fetch "$DL" "$file" "$url" "$sha"
     if ! done_ "src-$name"; then
         mkdir -p "$T/$name"
@@ -294,7 +336,7 @@ fi
 
 # DjVuLibre: only libdjvu is built (what Plato's kobo.patch achieves by
 # editing Makefile.am, without needing autoreconf).
-if ! done_ djvulibre; then
+if [ "$PLATO_DJVU" = 1 ] && ! done_ djvulibre; then
     log djvulibre
     (cd "$T/djvulibre" && ./configure --host=$HOST CC=$XCC CXX=$XCXX AR=$XAR RANLIB=$XRANLIB \
             CFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" --disable-xmltools --disable-desktopfiles \
@@ -304,14 +346,18 @@ if ! done_ djvulibre; then
 fi
 
 # MuPDF: Plato's kobo.patch adds OS=kobo with system-library paths; the
-# toolchain variables are overridden on the command line.
-if ! done_ mupdf; then
-    log mupdf
-    (cd "$T/mupdf" && make generate \
+# toolchain variables are overridden on the command line. Each font and
+# format choice gets its own output directory.
+MUPDF_OUT=build/aristotle-$MUPDF_CONF
+if ! done_ "mupdf-$MUPDF_CONF"; then
+    log "mupdf ($MUPDF_CONF)"
+    # shellcheck disable=SC2086 # MUPDF_XCFLAGS is a list of flags
+    (cd "$T/mupdf" && make generate XCFLAGS="$(echo $MUPDF_XCFLAGS)" \
         && make -j"$JOBS" verbose=yes mujs=no tesseract=no extract=no archive=no brotli=no \
             barcode=no commercial=no USE_SYSTEM_LIBS=yes OS=kobo build=release \
+            OUT="$MUPDF_OUT" XCFLAGS="$(echo $MUPDF_XCFLAGS)" \
             CC="$XCC" CXX="$XCXX" AR="$XAR" LD=false libs)
-    stamp mupdf
+    stamp "mupdf-$MUPDF_CONF"
 fi
 
 if ! done_ mupdf_wrapper; then
@@ -342,12 +388,18 @@ for a in "$T/zlib/libz.a" "$T/bzip2/libbz2.a" "$T/libpng/.libs/libpng16.a" \
          "$T/libjpeg/.libs/libjpeg.a" "$T/openjpeg/build/bin/libopenjp2.a" \
          "$T/jbig2dec/.libs/libjbig2dec.a" "$T/freetype2/objs/.libs/libfreetype.a" \
          "$T/harfbuzz/build/src/libharfbuzz.a" "$T/gumbo/.libs/libgumbo.a" \
-         "$T/djvulibre/libdjvu/.libs/libdjvulibre.a" \
-         "$T/mupdf/build/release/libmupdf.a" "$T/mupdf/build/release/libmupdf-third.a" \
+         "$T/mupdf/$MUPDF_OUT/libmupdf.a" "$T/mupdf/$MUPDF_OUT/libmupdf-third.a" \
          "$B/cxxrt/libc++.a" "$B/cxxrt/libc++abi.a" \
          "$P/target/mupdf_wrapper/Kindle/libmupdf_wrapper.a"; do
     cp "$a" "$P/libs/"
 done
+# plato-core's build.rs (patches 0005 and 0006) reads the choices from here.
+if [ "$PLATO_DJVU" = 1 ]; then
+    cp "$T/djvulibre/libdjvu/.libs/libdjvulibre.a" "$P/libs/"
+else
+    rm -f "$P/libs/libdjvulibre.a"
+fi
+printf '%s\n' "$MUPDF_FONTS" > "$P/libs/mupdf-fonts"
 
 if [ "${PLATO_LIBS_ONLY:-0}" = 1 ]; then
     ls -l "$P/libs"
