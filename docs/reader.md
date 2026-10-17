@@ -121,7 +121,7 @@ Saved positions (`position.rs`) outlive a layout:
 | `main.rs` | Arguments, startup, the event loop, library, settings, screensaver and reader screens, menu actions |
 | `panel.rs` | Pages and UI damage onto the panel (`plan`: the transition policy), night mode, the menu overlay sequence, completion tracking (host-tested) |
 | `session.rs` | One open book: current page start, rendered pages around it, restyle, labels |
-| `turns.rs` | Touch-down turns, swipes, menu gesture (host-tested) |
+| `turns.rs` | Turns on release, swipes, the menu gesture, holds and drags, quiet zones (host-tested) |
 | `shelf.rs` | Library index to the library screens: views, folders mirroring `documents/`, series, book to continue, sort, covers (host-tested) |
 | `device.rs` | Clock, battery, storage, USB mode and versions for the status line and settings |
 | `progress.rs` | Locator mapping, write debouncing, the index writer thread (host-tested) |
@@ -144,7 +144,7 @@ Saved positions (`position.rs`) outlive a layout:
 - **Settings.** Frontlight in 24 steps equal in CIE L* over the LM3695's 0–2047 range (`aristotle_hal::power::light_raw`), presets, night mode, covers, screensaver delay, battery, free space, date and time, the USB mode (through `/var/local/aristotle/aristotlectl mode net` or `mode storage 10`), versions. Each change is saved and shown at once.
 - **Night mode.** From the menu's "Noc" row or the settings; white on black everywhere, one mode-8 flash to switch. Software inversion by default (UI canvas and page copy inverted), hardware inversion with `--night-method hardware`; see `docs/ui-framework.md`, "Night mode".
 - **Screensaver.** After the chosen time without a touch (15 min by default) the app saves, turns the light off and shows the screensaver (the book being read as a card and its progress); a touch brings back the light and the screen, and does nothing else. The app holds `powerd`'s `preventScreenSaver` while it runs and restores it on exit; it does not suspend the CPU.
-- **Reader.** A book opens at its saved position with one mode-8 flash (a screen switch), after the tapped card inverts on touch-down; see [Opening a book](#opening-a-book). A touch-down in the left 30 % turns back, anywhere else below the top 12 % forward, without waiting for the release. A horizontal swipe ends one page from where it started in its direction (a swipe right that started in the forward zone goes two back, undoing the touch-down turn). A tap or a swipe down in the top strip opens the menu.
+- **Reader.** A book opens at its saved position with one mode-8 flash (a screen switch), after the tapped card inverts on touch-down; see [Opening a book](#opening-a-book). A tap in the left 30 % turns back, anywhere else below the top 12 % forward, when the finger lifts; the next page is prerendered, so the submit follows the release at once. Turns used to fire on touch-down, which saved the tap's 80 to 150 ms but made every long press on a word turn the page first; a hold now never turns. A horizontal swipe turns one page in its direction. A tap or a swipe down in the top strip opens the menu.
 - **Page turns.** Exactly the stock reader's: one full-mode update of the whole screen with mode 9 (`--turn-mode 7` for DU4, kept in `reader.json`). The previous page update must have finished before the next page is written to the framebuffer; that is the only place the input loop waits for the panel. After the submit, the pages on both sides are rendered, so the next turn costs a memcpy and a submit.
 - **Menu.** It appears as one A2 update over its top bar and bottom sheet, then a full-mode gray update of each part (`Panel::present_overlay`); its edges sit in the white between two lines of the page. Size (8 to 15 pt), spacing (1.2, 1.3, 1.5 em) and margins (3, 5, 8 mm) lay the book out again at the same place; the new page goes out as a full mode-9 update. Chapter arrows jump through the table of contents. The light slider and its − and + move the frontlight in the settings' 24 steps. "Noc" switches night mode. "Biblioteka" goes back. Closing the menu (a tap on the page) redraws the page with a full mode-9 update, which also clears what the menu left. The font row of the prototype is left out: the renderer ships Literata only.
 - **Progress.** Every turn updates the record in memory (a spine or Kindle locator plus the fraction; the last page marks the book finished). The index goes to disk 3 s after the last turn, or at the latest 20 s after the first unsaved one, on a writer thread; also when going back to the library and on exit (SIGTERM and SIGINT included).
@@ -205,7 +205,7 @@ Every step that matters for speed writes a `[perf <ms since start>]` line to std
 | `open: "<title>": no snapshot, opening in the background`, `... given up` | An open without a snapshot, and one given up for another tap |
 | `startup: UI fonts and battery ready`, `shelf and covers ready`, `library screen built` | Steps before the first frame |
 | `warm-up: ...` | Hyphenation patterns loaded at startup |
-| `turn <dir>: tap->submit` | Kernel timestamp of the touch-down to the update submitted, whether the page was prerendered, the wait for the previous update, then the prerender times |
+| `turn <dir>: tap->submit` | Kernel timestamp of the release (or swipe end) to the update submitted, whether the page was prerendered, the wait for the previous update, then the prerender times |
 | `panel: <what> on the panel N ms after submit` | When the driver reported the update complete |
 | `paginate: N pages in T ms` | The background pagination |
 | `index: saved` | Index writes (on the writer thread) |
@@ -237,9 +237,9 @@ Selecting words, the dictionary, footnotes, highlights and bookmarks, the progre
 | Swipe left or right on a popup or list | Its next or previous page |
 | Menu → Spis treści, Zakreślenia, Przejdź do… | A row under the menu's top bar |
 
-Turns stay on touch-down. A hold therefore starts with the page already turned; when it fires, the turn is undone and the original page comes back together with the selection and the popup, in one full mode-9 update. Footnote markers and other links (enlarged to 6 mm) and the bookmark corner are "quiet": a touch there does not turn, and the tap is resolved on release. While a book opens from its snapshot ([Opening a book](#opening-a-book)), holds and link taps wait for the book; turns between the snapshot's pages, the menu and "Biblioteka" do not.
+Pages turn on release, so a hold finds the page it started on, and the selection and the popup come in one update. Footnote markers and other links (enlarged to 6 mm) and the bookmark corner are "quiet": a tap there is resolved instead of turning. While a book opens from its snapshot ([Opening a book](#opening-a-book)), holds, drags, link and corner taps do nothing (no wait, nothing on the panel); turns between the snapshot's pages, the menu and "Biblioteka" work, and the menu's reading row waits for the book like the menu's settings. In night mode everything here follows the night palette: the UI inverts its pixels (or the EPDC does, `--night-method hardware`), selections included.
 
-Words come from Plato's display list (`Book::words`: one box per word or hyphenated piece, in screen pixels). The finger picks the nearest word within 3 mm (`selection::hit`); a piece ending in a soft hyphen is joined with the next one, so "nieśmier-telna" is one word. Selection boxes are drawn per line (`selection::line_boxes`), inset vertically because Plato's boxes span the font's whole ascender and descender, which reach into the neighbouring lines at 1.3 em.
+Words come from Plato's display list (`Book::words`: one box per word or hyphenated piece, in screen pixels). The finger picks the nearest word within 3 mm (`selection::hit`); a piece ending in a soft hyphen is joined with the next one, so "nieśmier-telna" is one word. A selection leaves out punctuation and quotes at its ends, in its text (the lookup, the highlight) and in its box: "dusza," selects "dusza", its box cut to the letters by an estimate from the characters (Plato reports one box per word). Selection boxes are drawn per line (`selection::line_boxes`), inset vertically because Plato's boxes span the font's whole ascender and descender, which reach into the neighbouring lines at 1.3 em.
 
 ### Updates on the panel
 
@@ -251,7 +251,7 @@ Per the AGENTS.md rule that anything leaving content behind is cleaned with a fu
 - **Inside a popup:** switching dictionaries, turning the popup's pages and the "go to" steps are partial GL16 updates of the popup; the full update when it closes cleans what they leave.
 - **Bookmark ribbon:** black on white, DU.
 
-Popups sit at the bottom, or at the top when the word is in the lower half, at most 700 px high, and their edge is moved to fall between two lines of the page rather than through one. The host preview's update log (`updates.txt`) lists every update with its mode and rectangle.
+Popups sit at the bottom, or at the top when the word is in the lower half. They are first built as tall as the room away from the word allows (up to three quarters of the screen), so a common word's senses fit on one popup page, then built again at the height their content needs (a quarter of the screen at least), with the buttons right under the text; their edge is moved to fall between two lines of the page rather than through one. Text the UI font cannot draw (Coptic in an etymology, rare symbols) becomes one "…", never tofu boxes (`overlay::printable`). The host preview's update log (`updates.txt`) lists every update with its mode and rectangle.
 
 ### Dictionary
 
@@ -273,7 +273,7 @@ Building grc-en peaks at about 30 MB (12 bytes per record plus the keys); on the
 
 **Lookup** (`Dictionaries::lookup`): (1) the word and its listed forms, in order; (2) if a later dictionary of the same language knows the form, its headword is looked up in the earlier ones, so "λόγου", which grc-pl does not list, shows grc-pl's λόγος (the Greek-English tables act as a lemmatiser for the Greek-Polish dictionary); (3) suffix rules (`dict/lemma.rs`) for Polish, Greek (nominative, first person, -ομαι) and Latin, every guess checked against the dictionary and marked "≈ forma podstawowa (zgadnięta)"; (4) otherwise the closest headwords as tappable suggestions. Measured on the owner's dictionaries on the host, warm: 0.03 to 1.3 ms per lookup (`real_dictionaries` test, ignored by default); the first lookup after start 9 to 13 ms.
 
-**Popup.** The dictionary form as the title (the tapped form under it when different), the switcher (one tap per dictionary), the definition paged by height, "Zakreśl" (or "Usuń zakreślenie") and "Zamknij". Pronunciation (IPA) lines are dropped: Literata has no IPA glyphs, and they are noise while reading.
+**Popup.** The dictionary form as the title (the tapped form under it when different), the switcher (one tap per dictionary), the senses, "Zakreśl" (or "Usuń zakreślenie"), "Więcej" and "Zamknij". By default only the senses show: the part of speech and the definitions, without the sections that are not senses (examples, syntax, collocations, related words, phraseology, etymology, translations, inflection, references; Polish and English Wiktionary headings, `dict::senses`), so "dusza" fits one popup page and Greek entries stay short. "Więcej" shows the whole entry, paged. Pronunciation (IPA) lines are dropped either way: Literata has no IPA glyphs, and they are noise while reading.
 
 **Translate a selection** ("Tłumacz"): a word-by-word gloss from the dictionaries, offline: each word's first sense, "headword — sense".
 
@@ -282,7 +282,7 @@ Building grc-en peaks at about 30 MB (12 bytes per record plus the keys); on the
 `Book::footnote` (`aristotle-render/src/notes.rs`) finds a link's target in the book's source with Plato's XML parser and decides whether it is a note:
 
 - EPUB 3 and DPUB-ARIA semantics on the link (`epub:type="noteref"`, `role="doc-noteref"`) or the target and its ancestors (`footnote`, `endnote`, `rearnote`, `doc-footnote`, ...);
-- classes and ids that publishers and converters use: `footnote`, `fn3`, `note-3`, `przypis3`, calibre's `filepos12345`, Wolne Lektury's `annotation-3`;
+- classes and ids that publishers and converters use: `footnote`, `fn3`, `note-3`, `przypis3`, calibre's `filepos12345` (our MOBI converter writes the same: `<a filepos=N>` links become links to an anchor `id="filepos12345"` where the offset falls), Wolne Lektury's `annotation-3`;
 - a marker as link text: `1`, `[12]`, `iv`, `*`, `†`.
 
 The note text is the target block (`<aside>`, `<p id>`, `<li id>`, Wolne Lektury's `<div class="annotation">`), or for an empty anchor (calibre: `<a id="filepos…"/>` at the start of a paragraph) its paragraph, or, when one block holds many notes, the text from the anchor to the next anchor. Back links (↩) are dropped and notes over 2,400 characters are cut. Anything else is a plain link the reader follows.
@@ -291,7 +291,7 @@ The note text is the target block (`<aside>`, `<p id>`, `<li id>`, Wolne Lektury
 
 Highlights and bookmarks are annotations in the library index (`library.json`, source `aristotle`): the text, the chapter, the start and end as renderer positions that survive a new font size (`epub:<spine item>:<offset>`, `kindle:<position>`, `page:<i>`), Kindle locations (150 bytes each) and the local time. Pages draw highlights as a light gray marker behind the words and bookmarks as a ribbon in the corner, also on the first page the open worker renders. The highlights list ("Zakreślenia") shows highlights and bookmarks in reading order with chapter, location and date; a tap jumps there.
 
-Every new highlight is exported at once (`aristotle-library` `export`):
+Every new highlight is exported at once (`aristotle-library` `export`). A highlight, its removal or a bookmark redraws the page and refreshes its snapshot, so the next open shows it too. Test runs start the app with `--test-clippings PATH`: highlights then go to `PATH` and Markdown to `aristotle-notes/` beside it, never to the owner's `My Clippings.txt`, which their notes pipeline imports on every plug-in.
 
 - `/mnt/us/documents/My Clippings.txt`, appended in the stock reader's en_GB template (CRLF, a BOM only on creation), only what the file does not already hold, so the owner's notes pipeline (`clippings-to-notes`, which reads that file over USB) keeps working unchanged. Deleting a highlight does not remove it from the file, as on the stock Kindle;
 - `/mnt/us/aristotle-notes/<Title — Author>.md`, rewritten with the book's highlights in the shape of the owner's Obsidian notes (front matter `tytuł`, `autor`, `źródło`, `tags`; one quote per highlight with chapter, location and date).
@@ -337,11 +337,9 @@ Device numbers: pending the first `bench` and `turn` runs [dev].
 - **Reader app on the device.** Not run on the real panel yet: tap-to-submit, prerender and open times, memory with two copies of a book during background pagination, and ghosting after menu use need the device. The library clock relies on musl reading `/etc/localtime` (a link to `/var/local/system/tz` on the Kindle) when `TZ` is unset [inference].
 - **Memory.** Plato keeps the display lists of every laid-out chapter. Host RSS is 26 to 32 MiB after full pagination; check on the device against the 40 MB target.
 - **Polish typographic rules.** Single-letter words (a, i, o, u, w, z) can end a line; Polish typesetting keeps them with the next word. Needs a non-breaking space pass before layout.
-- **MOBI.** No table of contents yet (NCX index records), so the header shows the book title; `filepos` links are dropped; HUFF/CDIC books are not converted.
+- **MOBI.** No table of contents yet (NCX index records), so the header shows the book title; HUFF/CDIC books are not converted. `filepos` links are kept (footnotes open as popups).
 - **Binary size.** 25 MB for ARM, mostly MuPDF's embedded fonts. MuPDF build flags (`TOFU_*`, no CJK) can cut it.
 - **Images.** Book CSS decides placement; `margin: auto` centring is not honoured by Plato's engine.
-- **Holds and touch-down turns.** A hold costs a turn and its undo (two full updates before the popup). Turning on release instead would avoid it at the price of the touch-down speed the owner chose; not decided.
 - **Reading interactions on the device.** Built and previewed on the host, not yet run on the panel: hold-to-popup time, lookup and index-build times on the Cortex-A9, A2 legibility of inverted selections, and whether the partial GL16 updates inside popups ghost.
-- **Footnotes in MOBI books** read through the converter: `filepos` links are dropped, so they have no footnote links (EPUBs, calibre conversions included, do).
 - **Notes** need an on-screen keyboard; deferred (see [Highlights, bookmarks and export](#highlights-bookmarks-and-export)).
 - **Highlights across a page break** end at the page's last word; the selection does not continue onto the next page.
