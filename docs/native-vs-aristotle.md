@@ -124,3 +124,19 @@ What this shows, to fix next:
 - The menu opens with no acknowledgement: nothing changes for half a second. Its top bar and bottom panel are coalesced into one bounding box of 95 % of the screen, so the unchanged text between them is redrawn too.
 - Opening a book takes 1.3 s to settle (stock: 0.8 s); laying out the chapter dominates.
 - The periodic shelf flash fires on a count, not on content, so it can feel random.
+
+## Device measurements of the app
+
+Measured on the device on 2026-10-17 with the app's own timing log (`[perf]` lines in `/var/tmp/aristotle.log`) and `/proc/<pid>/status`.
+
+| What | Result | Stock |
+| --- | --- | --- |
+| Open a book from its snapshot, tap to settled | 557–570 ms | 0.8 s |
+| Back to the library, settled | 552 ms | not measured |
+| Wake from the screensaver, settled | 441 ms | not measured |
+| Dictionary lookup, Polish (pl-pl, 1.37 million forms) | 89 ms; popup 239 ms after the long press | not measured |
+| Dictionary lookup, Ancient Greek (grc-pl) | 10.5 ms; popup 71 ms after the long press | not measured |
+| Footnote popup | 2 ms to resolve the link | not measured |
+| Memory while reading (`VmRSS`) | 14.5 MB | about 200 MB for the stock GUI stack |
+| Peak memory (`VmHWM`) | 66 MB, during the one-time indexing of five dictionaries | |
+| One-time dictionary indexing | pl-pl 22.9 s, grc-en 37.2 s, the others under 3.1 s each | |
