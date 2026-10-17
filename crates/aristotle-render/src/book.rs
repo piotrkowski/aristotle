@@ -482,6 +482,17 @@ impl Book {
         }
     }
 
+    /// Bytes of its spine item before `location`: what Plato lays out to
+    /// place it in a fresh layout (it lays out from the item's start, and
+    /// only as far as needed). 0 for fixed-layout and MuPDF books.
+    pub fn layout_bytes(&self, location: usize) -> usize {
+        match (self.engine, &self.spine) {
+            (Engine::Plato, Some(spine)) => spine.coordinates(location).1,
+            (Engine::Plato, None) => location,
+            _ => 0,
+        }
+    }
+
     /// The most exact position of `location` this book can name.
     pub fn position_at(&self, location: usize) -> Position {
         match self.engine {

@@ -1720,6 +1720,15 @@ impl App {
         if let Err(e) = self.prefs.save(self.lib.data_dir()) {
             eprintln!("aristotle: can't save preferences: {e}");
         }
+        // A long relayout: the busy mark goes out with the button's release
+        // (one DU update), the new page after it (one full mode-9 update).
+        if r.session.slow_relayout() {
+            self.ui.tree.set_hidden(r.menu.busy, false);
+            self.render_ui()?;
+        }
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
         let t = Instant::now();
         r.session.restyle(self.prefs.style())?;
         let page = r.session.page(r.session.current)?;

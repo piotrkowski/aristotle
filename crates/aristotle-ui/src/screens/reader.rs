@@ -25,7 +25,7 @@ use crate::tree::{
     Widget,
 };
 use crate::ui::{Ui, UiEvent};
-use crate::widgets::{Slider, Steps, Toggle};
+use crate::widgets::{BusyMark, Slider, Steps, Toggle};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -284,6 +284,9 @@ pub struct Menu {
     pub size_steps: NodeId,
     /// The night [`Toggle`], if offered.
     pub night_toggle: Option<NodeId>,
+    /// The busy mark at the right of the top bar, hidden: shown while a
+    /// change takes longer than about 300 ms (laying out a long chapter).
+    pub busy: NodeId,
 }
 
 /// Builds the reader menu: a top bar (back to the library, the title) and a
@@ -300,7 +303,9 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let back = t.pad(Insets::vh(0, 16), back);
     let back = t.button(Node::plain(), back, action::BACK);
     let fill = t.spacer(1);
-    let bar = t.add(Node::row(0), [back, fill]);
+    let busy = t.add(Node::new(Kind::Custom(Box::new(BusyMark))).hidden(true), []);
+    let busy_c = t.align(0.5, 0.5, busy);
+    let bar = t.add(Node::row(0), [back, fill, busy_c]);
     // The title sits in the middle and must clear the back button.
     let mut title = Paragraph::plain(spec.title, st.ui_bold(), Align::Center);
     title.style.max_lines = Some(1);
@@ -435,6 +440,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
         light,
         size_steps,
         night_toggle,
+        busy,
     }
 }
 

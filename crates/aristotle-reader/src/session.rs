@@ -285,6 +285,16 @@ impl Session {
         }
     }
 
+    /// Whether laying the book out again at the current page (a new font
+    /// size, spacing or margins) will take long enough to show the busy
+    /// mark: about 300 ms on the device. Plato lays out the current
+    /// chapter from its start up to the page, at about 6 ms per KB of
+    /// chapter text on the PW4 ("Pan Tadeusz": 420 KB in 2.5 s).
+    pub fn slow_relayout(&self) -> bool {
+        const SLOW_BYTES: usize = 48 * 1024;
+        self.book.layout_bytes(self.current) > SLOW_BYTES
+    }
+
     /// The book file's size and mtime when the library last saw it.
     pub fn stamp(&self) -> (u64, i64) {
         self.stamp
