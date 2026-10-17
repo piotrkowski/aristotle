@@ -16,7 +16,7 @@ TITLE = "Próba czytania"
 
 CH1 = [
     'Sokrates powtarzał, że dusza, po grecku <span lang="grc">ψυχή</span>, '
-    'jest nieśmiertelna<a epub:type="noteref" href="notes.xhtml#fn1">1</a>. '
+    'jest nieśmiertelna<a epub:type="noteref" href="notes.xhtml#fn1"><sup>1</sup></a>. '
     'Kto naprawdę oddaje się filozofii, ten przez całe życie ćwiczy się '
     'w umieraniu i nie lęka się tego, co przyjdzie.',
     'Rzeczywistość, którą widzimy oczami, przemija; trwałe jest tylko to, '

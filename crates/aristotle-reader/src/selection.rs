@@ -41,7 +41,50 @@ pub fn whole_word(words: &[Word], i: usize) -> (usize, usize) {
 
 /// The text of words `start..=end`: pieces of a hyphenated word joined,
 /// other words separated by a space.
+/// Punctuation and quotes a selection leaves out at its ends: "dusza,"
+/// selects and looks up "dusza".
+fn edge_mark(c: char) -> bool {
+    !c.is_alphanumeric()
+}
+
+/// How wide a character is, roughly, in letters: punctuation is narrow,
+/// dashes are wide.
+fn weight(c: char) -> f32 {
+    match c {
+        '—' | '–' | '…' => 1.0,
+        c if edge_mark(c) => 0.45,
+        _ => 1.0,
+    }
+}
+
+/// The horizontal extent of a word's letters without the punctuation at
+/// its ends. Plato reports one box per word; the share of the box is
+/// estimated from the characters.
+pub fn letters_x(w: &Word) -> (i32, i32) {
+    let chars: Vec<char> = w.text.chars().collect();
+    let first = chars.iter().position(|c| !edge_mark(*c));
+    let last = chars.iter().rposition(|c| !edge_mark(*c));
+    let (Some(first), Some(last)) = (first, last) else {
+        return (w.rect.x0, w.rect.x1);
+    };
+    let total: f32 = chars.iter().map(|&c| weight(c)).sum();
+    let lead: f32 = chars[..first].iter().map(|&c| weight(c)).sum();
+    let trail: f32 = chars[last + 1..].iter().map(|&c| weight(c)).sum();
+    let width = (w.rect.x1 - w.rect.x0) as f32;
+    (
+        w.rect.x0 + (width * lead / total).round() as i32,
+        w.rect.x1 - (width * trail / total).round() as i32,
+    )
+}
+
+/// The text of words `start..=end`, without punctuation at its two ends.
 pub fn text(words: &[Word], start: usize, end: usize) -> String {
+    joined(words, start, end)
+        .trim_matches(edge_mark)
+        .to_string()
+}
+
+fn joined(words: &[Word], start: usize, end: usize) -> String {
     let mut s = String::new();
     for w in &words[start..=end.min(words.len().saturating_sub(1))] {
         if !s.is_empty() && !s.ends_with('\u{00AD}') {
@@ -99,8 +142,15 @@ impl Selection {
 /// them. Lines are told apart by vertical overlap.
 pub fn line_boxes(words: &[Word], start: usize, end: usize) -> Vec<Bounds> {
     let mut out: Vec<Bounds> = Vec::new();
-    for w in words.iter().take(end + 1).skip(start) {
-        let r = w.rect;
+    for (i, w) in words.iter().enumerate().take(end + 1).skip(start) {
+        // The ends leave punctuation out, like the text.
+        let mut r = w.rect;
+        if i == start {
+            r.x0 = letters_x(w).0;
+        }
+        if i == end {
+            r.x1 = letters_x(w).1;
+        }
         match out.last_mut() {
             Some(last) if r.y0 < last.y1 && r.y1 > last.y0 && r.x0 >= last.x0 => {
                 *last = last.union(&r);
@@ -199,7 +249,7 @@ pub(crate) mod tests {
         assert_eq!(whole_word(&w, 3), (2, 3));
         assert_eq!(whole_word(&w, 0), (0, 0));
         let s = Selection::word(&w, 3);
-        assert_eq!(s.text(&w), "nieśmiertelna,");
+        assert_eq!(s.text(&w), "nieśmiertelna");
     }
 
     #[test]
@@ -214,7 +264,21 @@ pub(crate) mod tests {
         assert!(!s.extend_to(&w, 0));
         // Into the middle of the hyphenated word: the whole word.
         s.extend_to(&w, 2);
-        assert_eq!(s.text(&w), "jest nieśmiertelna,");
+        assert_eq!(s.text(&w), "jest nieśmiertelna");
+    }
+
+    #[test]
+    fn ends_leave_punctuation_out() {
+        let w = page(&[&["„Dusza,”", "jest"]]);
+        assert_eq!(text(&w, 0, 0), "Dusza");
+        assert_eq!(text(&w, 0, 1), "Dusza,” jest");
+        let (x0, x1) = letters_x(&w[0]);
+        assert!(x0 > w[0].rect.x0 && x1 < w[0].rect.x1);
+        let b = line_boxes(&w, 0, 0);
+        assert_eq!((b[0].x0, b[0].x1), (x0, x1));
+        // Text only of punctuation keeps its box.
+        let dash = page(&[&["—"]]);
+        assert_eq!(letters_x(&dash[0]), (dash[0].rect.x0, dash[0].rect.x1));
     }
 
     #[test]
@@ -227,6 +291,8 @@ pub(crate) mod tests {
         assert_eq!(b[1].x1, w[5].rect.x1);
         let (a, z) = handles(&b).unwrap();
         assert_eq!(a, (w[1].rect.x0, w[1].rect.y0, w[1].rect.y1));
-        assert_eq!(z.0, w[6].rect.x1);
+        // The last word ends in a period, which the box leaves out.
+        assert_eq!(z.0, letters_x(&w[6]).1);
+        assert!(z.0 < w[6].rect.x1);
     }
 }

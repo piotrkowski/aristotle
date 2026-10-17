@@ -555,14 +555,6 @@ impl Panel {
         }
     }
 
-    /// Whether our pixels must be inverted in memory (software night).
-    pub fn inverts_pixels(&self) -> bool {
-        match self {
-            Panel::Device(d) => d.inverts_pixels(),
-            Panel::Memory(m) => m.night == Some(NightMethod::Software),
-        }
-    }
-
     pub fn size(&self) -> (u32, u32) {
         match self {
             Panel::Device(d) => d.size(),

@@ -29,6 +29,7 @@ pub mod act {
     pub const LOOKUP: ActionId = 1005;
     pub const GLOSS: ActionId = 1006;
     pub const GO_NOTE: ActionId = 1007;
+    pub const MORE: ActionId = 1010;
     pub const CANCEL: ActionId = 1008;
     pub const BACK: ActionId = 1009;
     /// + index of the dictionary in the service's list.
@@ -125,6 +126,8 @@ pub struct Popup {
     pub pages: NodeId,
     pub pager: NodeId,
     pub arrows: (NodeId, NodeId),
+    /// The sheet, at its given height.
+    pub sheet: NodeId,
 }
 
 /// Body text size in popups: a little larger than the UI, for reading.
@@ -204,6 +207,39 @@ fn paragraph(st: &Styles, b: &Block) -> Paragraph {
             ..Default::default()
         },
     )
+}
+
+/// `text` with what the UI font cannot draw left out: a run of such
+/// characters (Coptic in an etymology, a rare symbol) becomes one "…"
+/// instead of tofu boxes.
+pub fn printable(engine: &TextEngine, st: &Styles, text: &RichText) -> RichText {
+    let base = body_style(st);
+    let mut out = text.clone();
+    for b in &mut out.blocks {
+        for r in &mut b.runs {
+            let mut style = base.clone();
+            if r.italic {
+                style = style.italic();
+            }
+            if r.bold || b.heading {
+                style = style.bold();
+            }
+            let mut buf = [0u8; 4];
+            if engine.covers(&r.text, &style) {
+                continue;
+            }
+            let mut s = String::with_capacity(r.text.len());
+            for c in r.text.chars() {
+                if c.is_whitespace() || engine.covers(c.encode_utf8(&mut buf), &style) {
+                    s.push(c);
+                } else if !s.trim_end().ends_with('…') {
+                    s.push('…');
+                }
+            }
+            r.text = s;
+        }
+    }
+    out
 }
 
 /// A row of bordered text buttons.
@@ -290,6 +326,8 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
 
     let content = t.add(Node::column(14).cross(Cross::Stretch), rows);
     let content = t.pad(Insets::new(18, m, 18, m), content);
+    // Takes what the rule leaves, whichever side the rule is on.
+    let content = t.add(Node::column(0).flex(1), [content]);
     let rule = t.rule(3, INK);
     let sheet_children = match spec.place {
         Place::Bottom => [rule, content],
@@ -314,6 +352,7 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
         pages: pages_node,
         pager,
         arrows: (prev, next),
+        sheet,
     }
 }
 

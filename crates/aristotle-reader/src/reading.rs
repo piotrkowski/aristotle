@@ -64,6 +64,8 @@ pub enum Overlay {
         /// Annotation index of a highlight the word is in.
         highlight: Option<usize>,
         page: usize,
+        /// The whole entry ("Więcej"), not only the senses.
+        full: bool,
     },
     /// A selection under a dragging finger, with handles.
     Dragging {
@@ -144,6 +146,8 @@ pub struct OverlayNodes {
     pub pager: Option<NodeId>,
     /// The pager's arrows, hidden when there is one page.
     pub arrows: Option<(NodeId, NodeId)>,
+    /// A popup's sheet, to fit its height to the content.
+    pub sheet: Option<NodeId>,
     pub slider: Option<NodeId>,
     pub label: Option<NodeId>,
 }
@@ -172,6 +176,51 @@ impl App {
     /// Build the reader screen for the current state (page, overlay, menu)
     /// and install it. Nothing is sent to the panel.
     pub(crate) fn rebuild_reader(&mut self, refresh: Refresh) -> Result<(), Error> {
+        self.build_reader(refresh, None)?;
+        // A popup whose body fits on one page is built again at the height
+        // its content needs (a quarter of the screen at least), with the
+        // buttons right under it.
+        if let Some(fit) = self.popup_fit() {
+            self.build_reader(refresh, Some(fit))?;
+        }
+        Ok(())
+    }
+
+    /// The height the shown popup needs, if its body fits on one page and
+    /// leaves room unused.
+    fn popup_fit(&mut self) -> Option<i32> {
+        let r = match &self.screen {
+            Screen::Reader(r) => r,
+            _ => return None,
+        };
+        if !matches!(
+            r.overlay,
+            Overlay::Dict { .. } | Overlay::Gloss { .. } | Overlay::Note { .. }
+        ) {
+            return None;
+        }
+        let pages = r.nodes.pages?;
+        let sheet = r.nodes.sheet?;
+        let t = &self.ui.tree;
+        if t.page(pages).1 > 1 {
+            return None;
+        }
+        let body = t.rect(pages);
+        let used = t
+            .node(pages)
+            .children
+            .iter()
+            .map(|&c| t.rect(c).bottom())
+            .max()
+            .unwrap_or(body.y)
+            - body.y;
+        let unused = body.h - used - 8;
+        let height = t.rect(sheet).h;
+        (unused > 24).then(|| (height - unused).max(self.ui.bounds().h / 4))
+    }
+
+    /// [`App::rebuild_reader`]'s one pass; `fit` caps the popup's height.
+    fn build_reader(&mut self, refresh: Refresh, fit: Option<i32>) -> Result<(), Error> {
         let styles = self.styles.clone();
         let dicts: Vec<String> = self
             .dict
@@ -179,6 +228,16 @@ impl App {
             .map(|d| d.dicts.iter().map(|x| x.label.clone()).collect())
             .unwrap_or_default();
         let h = self.ui.bounds().h;
+        // Popup text the UI font can draw (see `overlay::printable`).
+        let body = match self.reading().map(|r| &r.overlay) {
+            Some(Overlay::Dict { lookup, full, .. }) => {
+                Some(dict_body(lookup, dicts.is_empty(), *full))
+            }
+            Some(Overlay::Gloss { text, .. } | Overlay::Note { text, .. }) => Some(text.clone()),
+            _ => None,
+        }
+        .map(|b| overlay::printable(&self.ui.text, &styles, &b))
+        .unwrap_or_default();
         let Some(r) = self.reading() else {
             return Ok(());
         };
@@ -195,20 +254,37 @@ impl App {
                 nodes.selection = Some(n);
                 layers.push(n);
             }
-            let word_y = overlay
-                .selection()
-                .and_then(|(s, w)| w.get(s.start).map(|x| (x.rect.y0 + x.rect.y1) / 2));
-            let place = Place::away_from(word_y, h);
-            let height = popup_height(&page_words, place, h);
+            let word = overlay.selection().and_then(|(s, w)| {
+                let first = w.get(s.start)?.rect;
+                let last = w.get(s.end)?.rect;
+                Some((first.y0, last.y1))
+            });
+            let place = Place::away_from(word.map(|(t, b)| (t + b) / 2), h);
+            // As tall as the room away from the word allows (less a line,
+            // which the edge may grow by to fall between lines), so a
+            // common word's senses fit on one popup page; then fitted to
+            // the content.
+            let room = match (word, place) {
+                (Some((_, bottom)), Place::Bottom) => h - bottom - 70,
+                (Some((top, _)), Place::Top) => top - 70,
+                (None, _) => overlay::POPUP_H,
+            };
+            let max = fit.unwrap_or(room.clamp(h / 4, h * 3 / 4));
+            let height = popup_height(&page_words, place, h, max);
             let built = match overlay {
                 Overlay::Dict {
-                    lookup, highlight, ..
+                    lookup,
+                    highlight,
+                    full,
+                    ..
                 } => Some(dict_popup(
                     t,
                     &styles,
                     lookup,
                     &dicts,
+                    &body,
                     highlight.is_some(),
+                    *full,
                     place,
                     height,
                 )),
@@ -235,35 +311,35 @@ impl App {
                         },
                     ))
                 }
-                Overlay::Gloss { text, .. } => Some(overlay::popup(
+                Overlay::Gloss { .. } => Some(overlay::popup(
                     t,
                     &styles,
                     &PopupSpec {
                         title: "Tłumaczenie słowo po słowie".into(),
                         subtitle: Some("Ze słowników, bez sieci".into()),
                         tabs: Vec::new(),
-                        body: text,
+                        body: &body,
                         suggestions: Vec::new(),
                         actions: vec![("Zakreśl", act::HIGHLIGHT), ("Zamknij", act::CANCEL)],
                         place,
                         height,
                     },
                 )),
-                Overlay::Note { text, .. } => Some(overlay::popup(
+                Overlay::Note { .. } => Some(overlay::popup(
                     t,
                     &styles,
                     &PopupSpec {
                         title: "Przypis".into(),
                         subtitle: None,
                         tabs: Vec::new(),
-                        body: text,
+                        body: &body,
                         suggestions: Vec::new(),
                         actions: vec![
                             ("Przejdź do przypisu", act::GO_NOTE),
                             ("Zamknij", act::CANCEL),
                         ],
                         place: Place::Bottom,
-                        height: popup_height(&page_words, Place::Bottom, h),
+                        height: popup_height(&page_words, Place::Bottom, h, max),
                     },
                 )),
                 Overlay::Toc { items, current, .. } => {
@@ -330,6 +406,7 @@ impl App {
                 nodes.pages = Some(p.pages);
                 nodes.pager = Some(p.pager);
                 nodes.arrows = Some(p.arrows);
+                nodes.sheet = Some(p.sheet);
                 layers.push(p.root);
             }
             layers
@@ -551,6 +628,7 @@ impl App {
             lookup: Box::new(l),
             highlight,
             page: 0,
+            full: false,
         };
         self.rebuild_reader(Refresh::Auto)?;
         self.present_full()
@@ -1079,6 +1157,17 @@ impl App {
                 }
             }
             act::LOOKUP => self.lookup_selection(),
+            act::MORE => {
+                if let Some(Overlay::Dict { full, page, .. }) =
+                    self.reading().map(|r| &mut r.overlay)
+                {
+                    *full = true;
+                    *page = 0;
+                }
+                self.rebuild_reader(Refresh::Auto)?;
+                // The popup grows: the page under it is replaced, cleanly.
+                self.present_full()
+            }
             act::GLOSS => self.gloss_selection(),
             act::GO_NOTE => {
                 let Some(r) = self.reading() else {
@@ -1188,9 +1277,13 @@ impl App {
         });
         if let Some(Reply::Lookup(l)) = reply {
             if let Some(r) = self.reading() {
-                if let Overlay::Dict { lookup, page, .. } = &mut r.overlay {
+                if let Overlay::Dict {
+                    lookup, page, full, ..
+                } = &mut r.overlay
+                {
                     **lookup = l;
                     *page = 0;
+                    *full = false;
                 }
             }
             self.rebuild_reader(Refresh::Auto)?;
@@ -1220,9 +1313,13 @@ impl App {
         });
         if let Some(Reply::Lookup(l)) = reply {
             if let Some(r) = self.reading() {
-                if let Overlay::Dict { lookup, page, .. } = &mut r.overlay {
+                if let Overlay::Dict {
+                    lookup, page, full, ..
+                } = &mut r.overlay
+                {
                     **lookup = l;
                     *page = 0;
+                    *full = false;
                 }
             }
             self.rebuild_reader(Refresh::Auto)?;
@@ -1271,6 +1368,7 @@ impl App {
                 lookup: Box::new(l),
                 highlight,
                 page: 0,
+                full: false,
             };
         }
         self.rebuild_reader(Refresh::Auto)?;
@@ -1342,13 +1440,30 @@ impl App {
     }
 }
 
+/// What the dictionary popup says: the senses (or with `full` the whole
+/// entry), or why there is nothing.
+fn dict_body(l: &Lookup, no_dicts: bool, full: bool) -> RichText {
+    match &l.found {
+        Some(f) => dict::as_rich_text(f, full),
+        None if no_dicts => RichText::plain(
+            "Brak słowników. Skopiuj słowniki StarDict (.ifo, .idx, .dict.dz) do /mnt/us/dictionaries.",
+        ),
+        None if l.indexing => RichText::plain(
+            "Słownik jest indeksowany (tylko za pierwszym razem). Spróbuj za chwilę.",
+        ),
+        None => RichText::plain("Nie znaleziono w tym słowniku."),
+    }
+}
+
 /// The dictionary popup for a lookup.
 fn dict_popup(
     t: &mut Tree,
     st: &aristotle_ui::theme::Styles,
     l: &Lookup,
     dicts: &[String],
+    body: &RichText,
     in_highlight: bool,
+    full: bool,
     place: Place,
     height: i32,
 ) -> overlay::Popup {
@@ -1363,16 +1478,6 @@ fn dict_popup(
             )
         })
         .collect();
-    let body = match &l.found {
-        Some(f) => dict::as_rich_text(f),
-        None if dicts.is_empty() => RichText::plain(
-            "Brak słowników. Skopiuj słowniki StarDict (.ifo, .idx, .dict.dz) do /mnt/us/dictionaries.",
-        ),
-        None if l.indexing => RichText::plain(
-            "Słownik jest indeksowany (tylko za pierwszym razem). Spróbuj za chwilę.",
-        ),
-        None => RichText::plain("Nie znaleziono w tym słowniku."),
-    };
     // The title is the dictionary form; the word as tapped goes under it
     // when it differs.
     let headword = l
@@ -1387,14 +1492,15 @@ fn dict_popup(
         Some(_) if differs => Some(format!("{} → forma podstawowa", l.word)),
         _ => None,
     };
-    let actions = vec![
-        if in_highlight {
-            ("Usuń zakreślenie", act::UNHIGHLIGHT)
-        } else {
-            ("Zakreśl", act::HIGHLIGHT)
-        },
-        ("Zamknij", act::CANCEL),
-    ];
+    let mut actions = vec![if in_highlight {
+        ("Usuń zakreślenie", act::UNHIGHLIGHT)
+    } else {
+        ("Zakreśl", act::HIGHLIGHT)
+    }];
+    if !full && l.found.as_ref().is_some_and(dict::has_more) {
+        actions.push(("Więcej", act::MORE));
+    }
+    actions.push(("Zamknij", act::CANCEL));
     overlay::popup(
         t,
         st,
@@ -1402,7 +1508,7 @@ fn dict_popup(
             title,
             subtitle,
             tabs,
-            body: &body,
+            body,
             suggestions: l.suggestions.clone(),
             actions,
             place,
@@ -1414,8 +1520,7 @@ fn dict_popup(
 /// Height of a popup sheet that ends between two lines of the page
 /// instead of cutting through one: [`overlay::POPUP_H`], or a little less
 /// when its edge would cross a line.
-fn popup_height(words: &[Word], place: Place, screen_h: i32) -> i32 {
-    let max = overlay::POPUP_H;
+fn popup_height(words: &[Word], place: Place, screen_h: i32, max: i32) -> i32 {
     let edge = match place {
         Place::Bottom => screen_h - max,
         Place::Top => max,
@@ -1428,19 +1533,21 @@ fn popup_height(words: &[Word], place: Place, screen_h: i32) -> i32 {
     // Word boxes span the font's whole ascender and descender, a little
     // more than the line pitch, and glyphs keep inside them: a sheet edge
     // at the end of one line's box leaves the next line's glyphs alone.
+    // The sheet grows over the crossed line (never shrinks below what it
+    // was asked, which a fitted popup's content needs).
     match place {
-        // Start the sheet under that line's box.
-        Place::Bottom => screen_h - (w.rect.y1 + 1),
-        // End the sheet under the box of the line before it.
-        Place::Top => {
-            words
+        // Start the sheet under the box of the line above it.
+        Place::Bottom => {
+            let above = words
                 .iter()
                 .filter(|x| x.rect.y0 < w.rect.y0 - 10)
                 .map(|x| x.rect.y1)
                 .max()
-                .unwrap_or(w.rect.y0)
-                + 1
+                .unwrap_or(w.rect.y0);
+            screen_h - (above + 1)
         }
+        // End the sheet under the crossed line's box.
+        Place::Top => w.rect.y1 + 1,
     }
-    .clamp(max * 3 / 4, max)
+    .clamp(max, max + 80)
 }

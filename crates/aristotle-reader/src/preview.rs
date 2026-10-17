@@ -134,6 +134,19 @@ impl Driver {
         self.advance(300)
     }
 
+    /// The book opens on a worker (no snapshot yet): let it finish.
+    fn wait_for_book(&mut self) -> Result<(), Error> {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(10) {
+            if matches!(self.app.screen, Screen::Reader(_)) {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            self.after_events(false)?;
+        }
+        Err(format_err!("the book did not open"))
+    }
+
     /// Let a slow dictionary answer arrive.
     fn settle(&mut self) -> Result<(), Error> {
         let start = Instant::now();
@@ -238,14 +251,19 @@ fn write_png(m: &Memory, path: &Path) -> Result<(), Error> {
     enc.set_depth(png::BitDepth::Eight);
     let mut w = enc.write_header()?;
     let mut data = Vec::with_capacity((m.width * m.height) as usize);
+    // Hardware night: the EPDC inverts what the framebuffer holds.
+    let invert = m.hw_inverted();
     for y in 0..m.height as usize {
         let row = y * m.stride;
         // What the panel can show: 16 levels.
-        data.extend(
-            m.pixels[row..row + m.width as usize]
-                .iter()
-                .map(|&p| p / 17 * 17),
-        );
+        data.extend(m.pixels[row..row + m.width as usize].iter().map(|&p| {
+            let p = p / 17 * 17;
+            if invert {
+                255 - p
+            } else {
+                p
+            }
+        }));
     }
     w.write_image_data(&data)?;
     Ok(())
@@ -287,9 +305,13 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     let panel = Panel::memory(1072, 1448, crate::prefs::STOCK_TURN);
     let service = crate::start_dictionaries(&a);
     let mut app = crate::build_app(&a, panel, Prefs::default(), service, None)?;
-    let export_root = out.join(format!("export-{stamp}/documents"));
+    // Exports as `--test-clippings` sends them: beside the PNGs.
+    let export_root = out.join(format!("export-{stamp}"));
     fs::create_dir_all(&export_root)?;
-    app.exports = ExportPaths::for_root(&export_root);
+    app.exports = ExportPaths {
+        clippings: export_root.join("test-clippings.txt"),
+        notes: export_root.join("aristotle-notes"),
+    };
 
     let mut d = Driver {
         app,
@@ -304,7 +326,8 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
         ],
     };
     d.app.open_by_title(&title)?;
-    d.advance(200)?;
+    d.wait_for_book()?;
+    d.scenario.push("wait 3000".into());
     d.snap("00-open")?;
 
     // Contents: the first chapter, so the page is known.
@@ -332,12 +355,33 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     let ok = d.overlay_is(Overlay::is_none);
     d.check("popup closed", ok);
 
+    // Night mode, through the menu's toggle: the popup follows.
+    d.tap("menu", Point { x: 536, y: 70 })?;
+    let p = d.button(aristotle_ui::screens::reader::action::NIGHT)?;
+    d.tap("night on", p)?;
+    d.tap("close menu", Point { x: 536, y: 640 })?;
+    d.snap("05n-night-page")?;
+    let p = d.word("dusza")?;
+    d.hold("hold dusza at night", p)?;
+    d.snap("05n-night-dict")?;
+    let p = d.outside_popup();
+    d.tap("close", p)?;
+    d.tap("menu", Point { x: 536, y: 70 })?;
+    let p = d.button(aristotle_ui::screens::reader::action::NIGHT)?;
+    d.tap("night off", p)?;
+    d.tap("close menu", Point { x: 536, y: 640 })?;
+
     // Greek: grc-pl first, then switch to grc-en with one tap.
     let p = d.word("ψυχή")?;
     d.hold("hold psyche", p)?;
     d.snap("06-dict-greek")?;
     let ok = d.overlay_is(|o| matches!(o, Overlay::Dict { lookup, .. } if lookup.found.is_some()));
     d.check("Greek definition shown", ok);
+    // The whole entry: its etymology quotes Coptic, which Literata lacks.
+    if let Ok(more) = d.button(act::MORE) {
+        d.tap("more", more)?;
+        d.snap("06m-dict-greek-more")?;
+    }
     if let Ok(tab) = d.button(act::TAB + 1).or_else(|_| d.button(act::TAB)) {
         d.tap("other dictionary", tab)?;
         d.snap("07-dict-greek-switched")?;
