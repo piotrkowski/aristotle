@@ -73,13 +73,13 @@
       </figure>
       <figure>
         <figcaption>Memory used by the interface <span>MB, approximate</span></figcaption>
-        <svg viewBox="0 0 300 62" role="img" aria-label="Memory used by the interface: stock about 200 MB, Aristotle about 20 MB">
+        <svg viewBox="0 0 300 62" role="img" aria-label="Memory used by the interface: stock about 200 MB, Aristotle 14.5 MB">
           <text class="label" x="0" y="20">Stock</text>
           <rect class="stock" x="72" y="6" width="170" height="20"/>
           <text class="value" x="249" y="20">200 MB</text>
           <text class="label" x="0" y="50">Aristotle</text>
-          <rect class="ours" x="72" y="36" width="17" height="20"/>
-          <text class="value" x="96" y="50">20 MB</text>
+          <rect class="ours" x="72" y="36" width="12" height="20"/>
+          <text class="value" x="91" y="50">14.5 MB</text>
           <line class="axis" x1="72" y1="0" x2="72" y2="62"/>
         </svg>
       </figure>
@@ -99,8 +99,8 @@
           <tr><th scope="row">Back to the library</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">52 ms / 765 ms</td><td class="notes" data-label="Notes">Tap mark, then the library in one flash (acknowledged / settled)</td></tr>
           <tr><th scope="row">Reader menu</th><td class="num" data-label="Stock">239–264 ms / 748–780 ms</td><td class="num ours" data-label="Aristotle">513–577 ms</td><td class="notes" data-label="Notes">Stock toolbar: first update / settled. Ours: one update, nothing before it; to be fixed</td></tr>
           <tr><th scope="row">Touch acknowledged</th><td class="num dim" data-label="Stock">none before the result</td><td class="num ours" data-label="Aristotle">51–67 ms</td><td class="notes" data-label="Notes">Library controls invert (A2) on touch-down</td></tr>
-          <tr><th scope="row">Wake from the screensaver</th><td class="num dim" data-label="Stock">not measured</td><td class="num dim" data-label="Aristotle">about 570 ms, expected</td><td class="notes" data-label="Notes">One full mode-8 update; not yet measured</td></tr>
-          <tr><th scope="row">Memory used by the interface</th><td class="num" data-label="Stock">about 200 MB</td><td class="num ours" data-label="Aristotle">about 20 MB</td><td class="notes" data-label="Notes">Stock: the GUI stack, of 490 MB; <code>cvm</code> alone 125 MB</td></tr>
+          <tr><th scope="row">Wake from the screensaver</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">441 ms</td><td class="notes" data-label="Notes">One full update of the page that was on screen</td></tr>
+          <tr><th scope="row">Memory used by the interface</th><td class="num" data-label="Stock">about 200 MB</td><td class="num ours" data-label="Aristotle">14.5 MB</td><td class="notes" data-label="Notes">Stock: the GUI stack, of 490 MB; <code>cvm</code> alone 125 MB. Ours: <code>VmRSS</code> while reading; peak 66 MB during the one-time dictionary indexing</td></tr>
           <tr><th scope="row">Memory available</th><td class="num" data-label="Stock">236 MB</td><td class="num ours" data-label="Aristotle">392 MB</td><td class="notes" data-label="Notes">With the stock interface stopped</td></tr>
         </tbody>
       </table>
