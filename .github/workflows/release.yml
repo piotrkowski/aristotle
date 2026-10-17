@@ -15,8 +15,8 @@ name: Release
 # The notes are the tag's section of CHANGELOG.md. The files get build
 # provenance attestations (gh attestation verify FILE --repo OWNER/aristotle),
 # which GitHub issues for public repositories. Publishing the draft is
-# manual. The C libraries and the release build take about 35 minutes on a
-# 2-core runner.
+# manual. Building the C libraries and the app from scratch should take 10
+# to 20 minutes.
 on:
   push:
     tags: ["v*"]

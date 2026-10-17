@@ -22,10 +22,11 @@ env:
 #
 # native and bundle: the two members that link Plato (crates/aristotle-render
 # and the reader app), with the C libraries from tools/build-plato.sh
-# (.github/actions/plato-libs). Building those takes about 10 minutes per
-# target on a 2-core runner; they are cached per Plato commit and build
-# script, so later runs restore them in under a minute. With the libraries
-# cached, native takes about 10 minutes and bundle about 15.
+# (.github/actions/plato-libs). Building those takes a few minutes per target
+# (1.5 on a fast 2-core PC, about 6 on a slow one); they are cached per Plato
+# commit and build script, so later runs restore them in about a minute.
+# With the libraries cached, native and bundle should take 5 to 10 minutes
+# each, most of it the release-profile Rust build.
 jobs:
   check:
     runs-on: ubuntu-latest
