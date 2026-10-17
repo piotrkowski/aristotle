@@ -317,7 +317,9 @@ fn is_given(word: &str) -> bool {
 /// - it fixes something: it splits one field into several authors, or it
 ///   reveals an inverted "Surname Given" field.
 ///
-/// Which word is the given name is decided by [`GIVEN_NAMES`]. When neither
+/// A "Last, First" folder ("Mickiewicz, Adam") names one person with a known
+/// surname. Otherwise, which word is the given name is decided by
+/// [`GIVEN_NAMES`]. When neither
 /// end is a known given name, a comma-separated folder with several authors
 /// is taken as surname-first (a sort list); a single ambiguous name is left
 /// alone. Spelling with diacritics always comes from the embedded field.
@@ -328,17 +330,38 @@ pub fn authors_from_folder(embedded: &[Author], folder: &str) -> Option<Vec<Auth
             .map(str::to_owned)
             .collect()
     };
-    let emb: Vec<String> = embedded.iter().flat_map(|a| words(&a.name)).collect();
-    let groups: Vec<Vec<String>> = folder
-        .split([',', '&', ';'])
-        .map(words)
-        .filter(|g| !g.is_empty())
+    // Each embedded word with the index of the author it belongs to.
+    let emb: Vec<(String, usize)> = embedded
+        .iter()
+        .enumerate()
+        .flat_map(|(n, a)| words(&a.name).into_iter().map(move |w| (w, n)))
         .collect();
+    // "&" and ";" always separate people. A comma is ambiguous: in
+    // "Lecki Tomasz, Zolkiewska Jadwiga" it separates two people, in
+    // "Mickiewicz, Adam" it separates surname from given name. A side with
+    // a single word means the latter; then the surname length is known.
+    let mut groups: Vec<(Vec<String>, Option<usize>)> = Vec::new();
+    for part in folder.split(['&', ';']) {
+        let pieces: Vec<Vec<String>> = part
+            .split(',')
+            .map(words)
+            .filter(|g| !g.is_empty())
+            .collect();
+        if pieces.len() == 2 && pieces.iter().any(|p| p.len() == 1) {
+            groups.push((pieces.concat(), Some(pieces[0].len())));
+        } else {
+            groups.extend(pieces.into_iter().map(|p| (p, None)));
+        }
+    }
     if emb.is_empty() || groups.is_empty() {
         return None;
     }
-    let mut a: Vec<String> = emb.iter().map(|w| text::fold(w)).collect();
-    let mut b: Vec<String> = groups.iter().flatten().map(|w| text::fold(w)).collect();
+    let mut a: Vec<String> = emb.iter().map(|(w, _)| text::fold(w)).collect();
+    let mut b: Vec<String> = groups
+        .iter()
+        .flat_map(|(g, _)| g)
+        .map(|w| text::fold(w))
+        .collect();
     a.sort();
     b.sort();
     if a != b {
@@ -347,18 +370,30 @@ pub fn authors_from_folder(embedded: &[Author], folder: &str) -> Option<Vec<Auth
     let several = groups.len() > 1;
     let mut used = vec![false; emb.len()];
     let mut out: Vec<(usize, Author)> = Vec::new();
-    for g in &groups {
+    for (g, surname_len) in &groups {
         // Restore the embedded spelling (diacritics) word by word.
         let mut orig = Vec::new();
+        let mut owners = Vec::new();
         let mut first_at = usize::MAX;
         for w in g {
             let f = text::fold(w);
-            let i = (0..emb.len()).find(|&i| !used[i] && text::fold(&emb[i]) == f)?;
+            let i = (0..emb.len()).find(|&i| !used[i] && text::fold(&emb[i].0) == f)?;
             used[i] = true;
             first_at = first_at.min(i);
-            orig.push(emb[i].clone());
+            orig.push(emb[i].0.clone());
+            owners.push(emb[i].1);
         }
-        let author = if orig.len() == 1 {
+        let author = if let Some(n) = *surname_len {
+            // "Last, First" names one person; never merge two embedded authors.
+            if owners.iter().any(|&o| o != owners[0]) {
+                return None;
+            }
+            let (surname, given) = (orig[..n].join(" "), orig[n..].join(" "));
+            Author::new(
+                &format!("{given} {surname}"),
+                Some(&format!("{surname}, {given}")),
+            )
+        } else if orig.len() == 1 {
             Author::new(&orig[0], None)
         } else {
             let (first, last) = (&orig[0], &orig[orig.len() - 1]);
@@ -499,6 +534,63 @@ mod tests {
         // Ambiguous single name: neither word is a known given name.
         assert!(authors_from_folder(&[Author::new("Xyz Qwe", None)], "Qwe Xyz").is_none());
         assert!(authors_from_folder(&[Author::new("Platon", None)], "Platon").is_none());
+        // A "Last, First" folder over an already correct name is a no-op
+        // (regression: it once became "Adam, Mickiewicz").
+        assert!(
+            authors_from_folder(&[Author::new("Adam Mickiewicz", None)], "Mickiewicz, Adam")
+                .is_none()
+        );
+        // Two one-word authors are not one "Last, First" person.
+        let two = [
+            Author::new("Platon", None),
+            Author::new("Arystoteles", None),
+        ];
+        assert!(authors_from_folder(&two, "Platon, Arystoteles").is_none());
+    }
+
+    #[test]
+    fn last_first_folder_fixes_inverted_and_multiword_surnames() {
+        let fixed =
+            authors_from_folder(&[Author::new("Conan Doyle Arthur", None)], "Conan Doyle, Arthur").unwrap();
+        assert_eq!(names(&fixed), [("Arthur Conan Doyle", "Conan Doyle, Arthur")]);
+    }
+
+    /// The two device cases end to end, through `extract` and the real
+    /// folder paths.
+    #[test]
+    fn device_author_folders() {
+        let dir = crate::testdir("authors");
+        let check = |folder: &str, file: &str, embedded: &str| {
+            let p = dir.join(folder).join(file);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(
+                &p,
+                crate::mobi::testutil::build("T", &[(100, embedded.as_bytes())], &[], 6),
+            )
+            .unwrap();
+            extract(&p, Format::Mobi, Some(folder), false)
+                .unwrap()
+                .meta
+                .authors
+        };
+        let a = check(
+            "Mickiewicz, Adam",
+            "Pan Tadeusz - Adam Mickiewicz.mobi",
+            "Adam Mickiewicz",
+        );
+        assert_eq!(names(&a), [("Adam Mickiewicz", "Mickiewicz, Adam")]);
+        let a = check(
+            "Lecki Tomasz, Zolkiewska Jadwiga",
+            "Opowiadania.mobi",
+            "Żółkiewska Jadwiga Łęcki Tomasz",
+        );
+        assert_eq!(
+            names(&a),
+            [
+                ("Jadwiga Żółkiewska", "Żółkiewska, Jadwiga"),
+                ("Tomasz Łęcki", "Łęcki, Tomasz")
+            ]
+        );
     }
 
     #[test]
