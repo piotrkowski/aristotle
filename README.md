@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="#install">Install</a> ·
-  <a href="https://piotrkowski.github.io/aristotle/guides/">Guides</a> ·
-  <a href="https://piotrkowski.github.io/aristotle/benchmarks.html">Benchmarks</a> ·
+  <a href="https://piotrkowski.github.io/aristotle/">Demo</a> ·
+  <a href="docs/benchmarks.md">Benchmarks</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href=".github/CONTRIBUTING.md">Contributing</a>
 </p>
@@ -46,7 +46,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 | Page turn, from release | 0.57 s | 0.44 s |
 | Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
 
-The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method. The [benchmarks page](https://piotrkowski.github.io/aristotle/benchmarks.html) presents the same numbers.
+The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method.
 
 ## Install
 
@@ -62,7 +62,7 @@ Aristotle is alpha software.
 | Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
 | Other devices | | Not supported. The install scripts refuse to run unless `ARISTOTLE_FORCE=1` is set. |
 
-The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). The [install guide](https://piotrkowski.github.io/aristotle/guides/install.html) covers building on Linux, copying over USB and uninstalling.
+The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). See [Building](.github/CONTRIBUTING.md#building) for the Linux build and [Device-side code](device/README.md) for installation and uninstalling.
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
@@ -70,9 +70,9 @@ Uninstalling removes everything Aristotle installed, including its SSH key. To d
 
 ## Documentation
 
-- [Guides](https://piotrkowski.github.io/aristotle/guides/) and [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html)
+- [Project post and interactive demo](https://piotrkowski.github.io/aristotle/)
 - Design notes on the [architecture](docs/architecture.md) (with related projects), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
-- [Benchmarks](docs/benchmarks.md), the source of every number in this README and on the site
+- [Benchmarks](docs/benchmarks.md), the source of every number in this README
 - [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
 - [Paperwhite 4 reference](docs/pw4-reference.md)
 

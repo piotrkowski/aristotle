@@ -80,7 +80,7 @@ Today these are code paths in the workspace. None is a stable API yet.
 | Hyphenation | `aristotle_ui::text::Hyphenator` for the UI. Liang patterns in `data/hyphenation-patterns/` for books, chosen by `HYPH_LANGS` in `tools/build-render.sh` |
 | Book formats | `aristotle_library::format` detects a format by content. EPUB goes through Plato's HTML engine. MOBI 7 is converted to EPUB first (`aristotle-render/src/mobi.rs`). PDF and the rest go through MuPDF |
 | Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle/src/dict/` picks them by script and the book's language |
-| Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source (the site's [ideas](https://piotrkowski.github.io/aristotle/guides/ideas.html)) |
+| Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source |
 | Refresh policy | The waveform hints in `aristotle_ui::ui` and `panel::plan` in the reader ([Transitions](ui-framework.md#transitions)) |
 
 `aristotle-hal` knows only the PW4. There is no device profile yet.
