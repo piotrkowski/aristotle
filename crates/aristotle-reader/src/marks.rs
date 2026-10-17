@@ -398,7 +398,7 @@ mod tests {
                 .join("Fedon (Dialogi) — Platon, Władysław Witwicki.md"),
         )
         .unwrap();
-        assert!(md.contains("> Kto się naprawdę oddaje filozofii, ten się sposobi do śmierci.\n\n— Fedon · lok. 301 · 2026-10-17\n"), "{md}");
+        assert!(md.contains("> Kto się naprawdę oddaje filozofii, ten się sposobi do śmierci.\n\n— Fedon · loc. 301 · 2026-10-17\n"), "{md}");
     }
 
     /// A real pipeline script, when given: run its parser on our export.

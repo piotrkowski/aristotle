@@ -5,8 +5,9 @@ use std::path::Path;
 
 use aristotle_hal::power::{Battery, BatteryStatus, ChargeState};
 use aristotle_hal::system::{self, UsbMode};
+use aristotle_i18n::{fmt_date, fmt_time, tr, Msg};
 use aristotle_ui::screens::library::StatusLine;
-use aristotle_ui::screens::settings::{polish_bytes, polish_date, BatteryInfo, Usb};
+use aristotle_ui::screens::settings::{free_of, BatteryInfo, Usb};
 
 pub struct Facts {
     pub clock: String,
@@ -19,21 +20,21 @@ pub struct Facts {
 }
 
 fn state_label(s: ChargeState) -> &'static str {
-    match s {
-        ChargeState::Charging => "Ładuje się",
-        ChargeState::Full => "Naładowana",
-        ChargeState::Discharging => "Rozładowuje się",
-        ChargeState::NotCharging => "Nie ładuje się",
-        ChargeState::Unknown => "Stan nieznany",
-    }
+    tr(match s {
+        ChargeState::Charging => Msg::SettingsBatteryCharging,
+        ChargeState::Full => Msg::SettingsBatteryFull,
+        ChargeState::Discharging => Msg::SettingsBatteryDischarging,
+        ChargeState::NotCharging => Msg::SettingsBatteryNotCharging,
+        ChargeState::Unknown => Msg::SettingsBatteryUnknown,
+    })
 }
 
-/// "HH:MM" and the Polish date, from the local time.
+/// The time ("21:38") and the date in the UI language, from the local time.
 pub fn clock_and_date() -> (String, String) {
     match system::local_time() {
         Some(t) => (
-            format!("{:02}:{:02}", t.hour, t.minute),
-            polish_date(t.year, t.month, t.day, t.weekday),
+            fmt_time(t.hour, t.minute),
+            fmt_date(t.year, t.month, t.day, t.weekday),
         ),
         None => (String::new(), String::new()),
     }
@@ -65,21 +66,18 @@ impl Facts {
             },
         });
         f.about.push((
-            "Program",
+            tr(Msg::SettingsAboutSoftware),
             format!("Aristotle {}", env!("CARGO_PKG_VERSION")),
         ));
-        f.about.push(("Czytnik", "Kindle Paperwhite 4".into()));
+        f.about
+            .push((tr(Msg::SettingsAboutReader), "Kindle Paperwhite 4".into()));
         if let Some(v) = system::firmware_version() {
-            f.about.push(("System Kindle", v));
+            f.about.push((tr(Msg::SettingsAboutFirmware), v));
         }
         if let Ok(m) = system::memory() {
             f.about.push((
-                "Pamięć RAM",
-                format!(
-                    "{} wolne z {}",
-                    polish_bytes(m.available_kb * 1024),
-                    polish_bytes(m.total_kb * 1024)
-                ),
+                tr(Msg::SettingsAboutMemory),
+                free_of(m.available_kb * 1024, m.total_kb * 1024),
             ));
         }
         f

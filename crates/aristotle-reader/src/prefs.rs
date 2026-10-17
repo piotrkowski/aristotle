@@ -1,6 +1,6 @@
 //! Preferences: the menu's typography steps (mapped onto aristotle-render's
 //! [`Style`]), the page-turn waveform, night mode, library covers and view,
-//! and the screensaver delay.
+//! the screensaver delay and the UI language.
 //!
 //! Stored as `reader.json` in the library data directory. They are global,
 //! not per book: a reader sets a comfortable size once. Unknown or missing
@@ -91,6 +91,8 @@ pub struct Prefs {
     pub library_view: usize,
     /// Index into `shelf::SORTS`.
     pub sort: usize,
+    /// The UI language, a locale code of `aristotle-i18n` ("en", "pl").
+    pub language: String,
 }
 
 impl Default for Prefs {
@@ -106,6 +108,7 @@ impl Default for Prefs {
             sleep_minutes: 15,
             library_view: 0,
             sort: 0,
+            language: "en".into(),
         }
     }
 }
@@ -134,6 +137,12 @@ impl Prefs {
         self.margins = self.margins.min(MARGIN_MM.len() - 1);
         self.library_view = self.library_view.min(View::ALL.len() - 1);
         self.sort = self.sort.min(crate::shelf::SORTS.len() - 1);
+        if !aristotle_i18n::locales()
+            .iter()
+            .any(|l| l.code == self.language)
+        {
+            self.language = Prefs::default().language;
+        }
         self
     }
 
@@ -241,6 +250,7 @@ mod tests {
             sleep_minutes: 30,
             library_view: 1,
             sort: 2,
+            language: "pl".into(),
         };
         p.save(&dir).unwrap();
         assert_eq!(Prefs::load(&dir), p);
@@ -249,6 +259,10 @@ mod tests {
         assert_eq!(q.size, FONT_PT.len() - 1);
         assert_eq!(q.turn_mode, STOCK_TURN);
         assert!(!q.night);
+        // English by default; a language that is not embedded falls back.
+        assert_eq!(q.language, "en");
+        std::fs::write(dir.join(Prefs::FILE), br#"{"language": "xx"}"#).unwrap();
+        assert_eq!(Prefs::load(&dir).language, "en");
     }
 
     #[test]

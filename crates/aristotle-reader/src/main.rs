@@ -145,12 +145,15 @@ struct Args {
     open: Option<String>,
     index_dicts: bool,
     test_clippings: Option<PathBuf>,
+    /// `--lang CODE`: the UI language, stored in the preferences.
+    lang: Option<String>,
 }
 
 fn usage() -> &'static str {
     "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] \
      [--night-method software|hardware] [--no-scan] [--bench-open TITLE] [--open TITLE] \
-     [--dict DIR]... [--index-dicts] [--test-clippings PATH] [--preview OUT BOOK]"
+     [--dict DIR]... [--index-dicts] [--test-clippings PATH] [--lang en|pl] \
+     [--preview OUT BOOK]"
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -173,6 +176,7 @@ fn parse_args() -> Result<Args, Error> {
         open: None,
         index_dicts: false,
         test_clippings: None,
+        lang: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -199,6 +203,13 @@ fn parse_args() -> Result<Args, Error> {
                 let out = cwd.join(value("--preview")?);
                 let book = cwd.join(value("--preview")?);
                 a.preview = Some((out, book));
+            }
+            "--lang" => {
+                let code = value("--lang")?;
+                if !aristotle_i18n::locales().iter().any(|l| l.code == code) {
+                    bail!("unknown language {code}\n{}", usage());
+                }
+                a.lang = Some(code);
             }
             "-h" | "--help" => bail!("{}", usage()),
             other => bail!("unknown argument {other}\n{}", usage()),
@@ -262,6 +273,10 @@ fn run() -> Result<(), Error> {
     }
     if let Some(m) = args.night_method {
         prefs.night_method = m;
+        let _ = prefs.save(&args.library);
+    }
+    if let Some(code) = &args.lang {
+        prefs.language = code.clone();
         let _ = prefs.save(&args.library);
     }
     let panel = Panel::open(prefs.turn_mode).context("can't open the framebuffer")?;
@@ -352,6 +367,7 @@ fn build_app(
     screensaver_was: Option<bool>,
 ) -> Result<App, Error> {
     let (w, h) = panel.size();
+    aristotle_i18n::set_language(&prefs.language);
     let lib = Library::open(&args.library)?;
     let saver = Saver::new(&args.library);
     perf!(
@@ -785,6 +801,20 @@ impl App {
                 self.set_light_step(step);
             }
             a::NIGHT => self.set_night(!self.prefs.night),
+            id if in_range(id, a::LANGUAGE, aristotle_i18n::locales().len()).is_some() => {
+                let i = (id - a::LANGUAGE) as usize;
+                let code = aristotle_i18n::locales()[i].code;
+                if code != self.prefs.language {
+                    self.prefs.language = code.to_string();
+                    self.save_prefs();
+                    aristotle_i18n::set_language(code);
+                    perf!("language: {code}");
+                    // Every word changes: one flash, not a diffed update.
+                    return self
+                        .show_settings(Refresh::Full, page)
+                        .map(|_| Flow::Continue);
+                }
+            }
             id if in_range(id, a::USB, 2).is_some() => {
                 let storage = id == a::USB + 1;
                 let res = system::set_usb_mode(storage.then_some(10));

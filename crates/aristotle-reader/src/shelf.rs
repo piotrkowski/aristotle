@@ -16,6 +16,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use aristotle_i18n::{tf, tr, Msg};
 use aristotle_library::cover::read_pgm;
 use aristotle_library::text::fold;
 use aristotle_library::{BookRecord, Library, Query, SortKey, Status};
@@ -25,10 +26,10 @@ use aristotle_ui::screens::library::{
 use aristotle_ui::widgets::GrayImage;
 
 /// Sort orders offered by the sort button, in the order it cycles.
-pub const SORTS: [(SortKey, &str); 3] = [
-    (SortKey::Recent, "Ostatnie"),
-    (SortKey::Title, "Tytuł"),
-    (SortKey::Author, "Autor"),
+pub const SORTS: [(SortKey, Msg); 3] = [
+    (SortKey::Recent, Msg::LibrarySortRecent),
+    (SortKey::Title, Msg::LibrarySortTitle),
+    (SortKey::Author, Msg::LibrarySortAuthor),
 ];
 
 /// Where the reader is in the library.
@@ -177,7 +178,7 @@ pub fn screen_book(lib: &Library, rec: &BookRecord, covers: &mut Covers, photos:
         Status::Finished => ui_lib::Status::Finished,
     };
     if let Some(page) = rec.progress.as_ref().and_then(|p| p.page.as_ref()) {
-        b.chapter = format!("Strona {page}");
+        b.chapter = tf!(Msg::LibraryPage, page = page);
     }
     let dir = folder_of(&rec.file.path);
     if !dir.is_empty() {
@@ -256,7 +257,7 @@ impl ShelfModel {
         } else {
             for r in &sorted {
                 // The hero is on top already; the narrower shelves still
-                // list it, so "Czytane" holds every book being read.
+                // list it, so "Reading" holds every book being read.
                 if nav.filter == Filter::All && Some(&r.id) == hero_id.as_ref() {
                     continue;
                 }
@@ -297,7 +298,7 @@ impl ShelfModel {
         let sort = if self.nav.series.is_some() {
             ""
         } else {
-            SORTS[self.nav.sort % SORTS.len()].1
+            tr(SORTS[self.nav.sort % SORTS.len()].1)
         };
         Shelf {
             place,

@@ -113,7 +113,7 @@ impl Speed {
     }
 }
 
-/// The progress line in the footer: "Rozdz. 3/12 · 7 min" (minutes left in
+/// The progress line in the footer: "Ch. 3/12 · 7 min" (minutes left in
 /// the chapter).
 pub fn progress_line(
     chapter: usize,
@@ -121,15 +121,25 @@ pub fn progress_line(
     pages_left: f32,
     secs_per_page: f32,
 ) -> String {
+    use aristotle_i18n::{tf, tr, Msg};
     let minutes = (pages_left.max(0.0) * secs_per_page / 60.0).round() as u32;
     let time = if minutes == 0 {
-        "<1 min".to_string()
+        tr(Msg::ReaderProgressUnderAMinute).to_string()
     } else if minutes < 60 {
-        format!("{minutes} min")
+        tf!(Msg::FormatMinutes, m = minutes)
     } else {
-        format!("{} h {} min", minutes / 60, minutes % 60)
+        tf!(
+            Msg::ReaderProgressHoursMinutes,
+            h = minutes / 60,
+            m = minutes % 60
+        )
     };
-    format!("Rozdz. {chapter}/{chapters} · {time}")
+    tf!(
+        Msg::ReaderProgress,
+        chapter = chapter,
+        chapters = chapters,
+        time = time
+    )
 }
 
 #[cfg(test)]
@@ -156,8 +166,13 @@ mod tests {
 
     #[test]
     fn progress_lines() {
-        assert_eq!(progress_line(3, 12, 7.0, 60.0), "Rozdz. 3/12 · 7 min");
-        assert_eq!(progress_line(1, 4, 0.2, 60.0), "Rozdz. 1/4 · <1 min");
-        assert_eq!(progress_line(2, 2, 90.0, 60.0), "Rozdz. 2/2 · 1 h 30 min");
+        aristotle_i18n::with_language("pl", || {
+            assert_eq!(progress_line(3, 12, 7.0, 60.0), "Rozdz. 3/12 · 7 min");
+            assert_eq!(progress_line(1, 4, 0.2, 60.0), "Rozdz. 1/4 · <1 min");
+            assert_eq!(progress_line(2, 2, 90.0, 60.0), "Rozdz. 2/2 · 1 h 30 min");
+        });
+        aristotle_i18n::with_language("en", || {
+            assert_eq!(progress_line(3, 12, 7.0, 60.0), "Ch. 3/12 · 7 min");
+        });
     }
 }

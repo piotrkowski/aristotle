@@ -48,6 +48,7 @@ dependencies = [
 name = "aristotle-library"
 version = "0.1.0"
 dependencies = [
+ "aristotle-i18n",
  "jpeg-decoder",
  "md-5",
  "miniz_oxide 0.8.9",

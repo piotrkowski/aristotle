@@ -1,11 +1,12 @@
 //! What the reading interactions draw over the page: the selection, the
 //! popups (dictionary, footnote, gloss, selection actions), the contents
 //! and highlights lists, "go to", and the row of reading actions shown with
-//! the menu. All labels are Polish.
+//! the menu. Labels are in the UI language (`aristotle-i18n`).
 //!
 //! These only build `aristotle-ui` trees; [`crate::reading`] decides when,
 //! and how the result reaches the panel.
 
+use aristotle_i18n::{tr, Msg};
 use aristotle_render::book::Bounds;
 use aristotle_render::richtext::{Block, RichText};
 use aristotle_ui::geom::{pt, Insets, Point, Rect, Size, MIN_TARGET};
@@ -106,12 +107,12 @@ impl Place {
 /// A popup's parts.
 pub struct PopupSpec<'a> {
     pub title: String,
-    /// A note under the title ("≈ forma podstawowa", "pozycja 120").
+    /// A note under the title ("≈ base form").
     pub subtitle: Option<String>,
     /// Dictionary switcher: (label, active).
     pub tabs: Vec<(String, bool)>,
     pub body: &'a RichText,
-    /// Tappable words under the body ("Może: …").
+    /// Tappable words under the body ("Did you mean: …").
     pub suggestions: Vec<String>,
     /// Buttons: (label, action).
     pub actions: Vec<(&'static str, ActionId)>,
@@ -258,7 +259,7 @@ fn button_row(t: &mut Tree, st: &Styles, actions: &[(&str, ActionId)]) -> NodeId
 /// layer (full screen, transparent around the sheet).
 ///
 /// Layout, top to bottom: the title with the dictionary switcher beside it,
-/// the body (paged; a note such as "≈ forma podstawowa" first, in gray),
+/// the body (paged; a note such as "≈ base form" first, in gray),
 /// and the actions with the pager at the right.
 pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
     let m = margin();
@@ -291,7 +292,7 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
         paras.push(t.text(paragraph(st, &b)));
     }
     if !spec.suggestions.is_empty() {
-        let l = t.label("Może chodziło o:", st.small());
+        let l = t.label(tr(Msg::DictDidYouMean), st.small());
         paras.push(l);
         let mut row = Vec::new();
         for (i, s) in spec.suggestions.iter().enumerate() {
@@ -377,7 +378,7 @@ pub struct List {
 pub fn list(t: &mut Tree, st: &Styles, title: &str, rows: &[ListRow], empty: &str) -> List {
     let m = margin();
     let back_icon = t.icon(Icon::ArrowLeft, 44, INK);
-    let back_label = t.label("Wróć", st.ui());
+    let back_label = t.label(tr(Msg::CommonBack), st.ui());
     let g = t.gap(12, 1);
     let back = t.add(Node::row(0), [back_icon, g, back_label]);
     let back = t.pad(Insets::vh(0, 16), back);
@@ -452,7 +453,7 @@ pub struct GoTo {
 
 pub fn goto_sheet(t: &mut Tree, st: &Styles, value: f32, detail: &str) -> GoTo {
     let m = margin();
-    let title = t.label("Przejdź do miejsca", st.title());
+    let title = t.label(tr(Msg::ReaderGoToTitle), st.title());
     let label = t.label(&percent_label(value, detail), st.ui());
     let slider = t.add(
         Node::new(Kind::Custom(Box::new(Slider { value })))
@@ -472,7 +473,14 @@ pub fn goto_sheet(t: &mut Tree, st: &Styles, value: f32, detail: &str) -> GoTo {
             ("+10%", act::GOTO_PLUS10),
         ],
     );
-    let go = button_row(t, st, &[("Przejdź", act::GOTO_GO), ("Anuluj", act::CANCEL)]);
+    let go = button_row(
+        t,
+        st,
+        &[
+            (tr(Msg::ReaderGo), act::GOTO_GO),
+            (tr(Msg::CommonCancel), act::CANCEL),
+        ],
+    );
     let col = t.add(
         Node::column(22).cross(Cross::Stretch),
         [title, label, slider_c, steps, go],
@@ -513,9 +521,9 @@ pub fn nav_bar(t: &mut Tree, st: &Styles, top_extra: i32) -> NodeId {
     let m = margin();
     let mut cells = Vec::new();
     for (label, id) in [
-        ("Spis treści", act::NAV_TOC),
-        ("Zakreślenia", act::NAV_MARKS),
-        ("Przejdź do…", act::NAV_GOTO),
+        (tr(Msg::MenuContents), act::NAV_TOC),
+        (tr(Msg::MenuHighlights), act::NAV_MARKS),
+        (tr(Msg::MenuGoTo), act::NAV_GOTO),
     ] {
         let l = t.label(label, st.ui());
         let l = t.align(0.5, 0.5, l);

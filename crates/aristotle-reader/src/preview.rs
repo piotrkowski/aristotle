@@ -304,7 +304,14 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     a.dicts = dirs;
     let panel = Panel::memory(1072, 1448, crate::prefs::STOCK_TURN);
     let service = crate::start_dictionaries(&a);
-    let mut app = crate::build_app(&a, panel, Prefs::default(), service, None)?;
+    let prefs = Prefs {
+        language: args
+            .lang
+            .clone()
+            .unwrap_or_else(|| Prefs::default().language),
+        ..Prefs::default()
+    };
+    let mut app = crate::build_app(&a, panel, prefs, service, None)?;
     // Exports as `--test-clippings` sends them: beside the PNGs.
     let export_root = out.join(format!("export-{stamp}"));
     fs::create_dir_all(&export_root)?;

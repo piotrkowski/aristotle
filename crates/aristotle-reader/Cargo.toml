@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
+aristotle-i18n = { path = "../aristotle-i18n" }
 aristotle-library = { path = "../aristotle-library" }
 aristotle-render = { path = "../aristotle-render" }
 # Neither the embedded UI font (the app maps Literata from the renderer's

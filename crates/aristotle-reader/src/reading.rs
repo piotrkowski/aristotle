@@ -24,6 +24,7 @@
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use aristotle_i18n::{tf, tr, Msg};
 use aristotle_library::index::AnnotationKind;
 use aristotle_render::book::{Bounds, Engine, Link, Position, TocItem, Word};
 use aristotle_render::plato_core::anyhow::Error;
@@ -295,16 +296,16 @@ impl App {
                         t,
                         &styles,
                         &PopupSpec {
-                            title: "Zaznaczenie".into(),
+                            title: tr(Msg::ReaderSelection).into(),
                             subtitle: None,
                             tabs: Vec::new(),
                             body: &body,
                             suggestions: Vec::new(),
                             actions: vec![
-                                ("Zakreśl", act::HIGHLIGHT),
-                                ("Słownik", act::LOOKUP),
-                                ("Tłumacz", act::GLOSS),
-                                ("Anuluj", act::CANCEL),
+                                (tr(Msg::ReaderHighlight), act::HIGHLIGHT),
+                                (tr(Msg::ReaderDictionary), act::LOOKUP),
+                                (tr(Msg::ReaderTranslate), act::GLOSS),
+                                (tr(Msg::CommonCancel), act::CANCEL),
                             ],
                             place,
                             height,
@@ -315,12 +316,15 @@ impl App {
                     t,
                     &styles,
                     &PopupSpec {
-                        title: "Tłumaczenie słowo po słowie".into(),
-                        subtitle: Some("Ze słowników, bez sieci".into()),
+                        title: tr(Msg::ReaderGlossTitle).into(),
+                        subtitle: Some(tr(Msg::ReaderGlossSubtitle).into()),
                         tabs: Vec::new(),
                         body: &body,
                         suggestions: Vec::new(),
-                        actions: vec![("Zakreśl", act::HIGHLIGHT), ("Zamknij", act::CANCEL)],
+                        actions: vec![
+                            (tr(Msg::ReaderHighlight), act::HIGHLIGHT),
+                            (tr(Msg::CommonClose), act::CANCEL),
+                        ],
                         place,
                         height,
                     },
@@ -329,14 +333,14 @@ impl App {
                     t,
                     &styles,
                     &PopupSpec {
-                        title: "Przypis".into(),
+                        title: tr(Msg::ReaderFootnote).into(),
                         subtitle: None,
                         tabs: Vec::new(),
                         body: &body,
                         suggestions: Vec::new(),
                         actions: vec![
-                            ("Przejdź do przypisu", act::GO_NOTE),
-                            ("Zamknij", act::CANCEL),
+                            (tr(Msg::ReaderGoToNote), act::GO_NOTE),
+                            (tr(Msg::CommonClose), act::CANCEL),
                         ],
                         place: Place::Bottom,
                         height: popup_height(&page_words, Place::Bottom, h, max),
@@ -360,9 +364,9 @@ impl App {
                     let l = overlay::list(
                         t,
                         &styles,
-                        "Spis treści",
+                        tr(Msg::MenuContents),
                         &rows,
-                        "Ta książka nie ma spisu treści.",
+                        tr(Msg::ReaderNoContents),
                     );
                     nodes.pages = Some(l.pages);
                     nodes.pager = Some(l.pager);
@@ -384,9 +388,9 @@ impl App {
                     let l = overlay::list(
                         t,
                         &styles,
-                        "Zakreślenia",
+                        tr(Msg::MenuHighlights),
                         &rows,
-                        "Nie ma jeszcze zakreśleń ani zakładek. Przytrzymaj słowo, aby je zaznaczyć.",
+                        tr(Msg::ReaderNoHighlights),
                     );
                     nodes.pages = Some(l.pages);
                     nodes.pager = Some(l.pager);
@@ -1026,7 +1030,7 @@ impl App {
                 let date = a.created.as_deref().map(|c| c.get(..10).unwrap_or(c));
                 let meta: Vec<String> = [
                     a.chapter.clone(),
-                    aristotle_library::export::location_pl(a.location),
+                    aristotle_library::export::location_note(a.location),
                     date.map(String::from),
                 ]
                 .into_iter()
@@ -1034,7 +1038,7 @@ impl App {
                 .filter(|s| !s.is_empty())
                 .collect();
                 let text = match a.kind {
-                    AnnotationKind::Bookmark => "Zakładka".to_string(),
+                    AnnotationKind::Bookmark => tr(Msg::ReaderBookmark).to_string(),
                     _ => format!("„{}”", a.text.clone().unwrap_or_default()),
                 };
                 rows.push(MarkRow {
@@ -1072,9 +1076,10 @@ impl App {
         };
         let detail = match r.session.book().known_page_count() {
             Some(n) if r.session.book().engine() == Engine::Plato => {
-                format!(
-                    "strona {} z {n}",
-                    ((value * n as f32).ceil() as usize).clamp(1, n)
+                tf!(
+                    Msg::ReaderPageOf,
+                    page = ((value * n as f32).ceil() as usize).clamp(1, n),
+                    count = n
                 )
             }
             _ => String::new(),
@@ -1445,13 +1450,9 @@ impl App {
 fn dict_body(l: &Lookup, no_dicts: bool, full: bool) -> RichText {
     match &l.found {
         Some(f) => dict::as_rich_text(f, full),
-        None if no_dicts => RichText::plain(
-            "Brak słowników. Skopiuj słowniki StarDict (.ifo, .idx, .dict.dz) do /mnt/us/dictionaries.",
-        ),
-        None if l.indexing => RichText::plain(
-            "Słownik jest indeksowany (tylko za pierwszym razem). Spróbuj za chwilę.",
-        ),
-        None => RichText::plain("Nie znaleziono w tym słowniku."),
+        None if no_dicts => RichText::plain(tr(Msg::DictNone)),
+        None if l.indexing => RichText::plain(tr(Msg::DictIndexing)),
+        None => RichText::plain(tr(Msg::DictNotFound)),
     }
 }
 
@@ -1489,19 +1490,19 @@ fn dict_popup(
     let title = headword.clone().unwrap_or_else(|| l.word.clone());
     let differs = headword.is_some_and(|h| h.to_lowercase() != l.word.to_lowercase());
     let subtitle = match &l.found {
-        Some(f) if f.approximate => Some(format!("{} ≈ forma podstawowa (zgadnięta)", l.word)),
-        Some(_) if differs => Some(format!("{} → forma podstawowa", l.word)),
+        Some(f) if f.approximate => Some(tf!(Msg::DictBaseFormGuessed, word = l.word)),
+        Some(_) if differs => Some(tf!(Msg::DictBaseForm, word = l.word)),
         _ => None,
     };
     let mut actions = vec![if in_highlight {
-        ("Usuń zakreślenie", act::UNHIGHLIGHT)
+        (tr(Msg::ReaderUnhighlight), act::UNHIGHLIGHT)
     } else {
-        ("Zakreśl", act::HIGHLIGHT)
+        (tr(Msg::ReaderHighlight), act::HIGHLIGHT)
     }];
     if !full && l.found.as_ref().is_some_and(dict::has_more) {
-        actions.push(("Więcej", act::MORE));
+        actions.push((tr(Msg::CommonMore), act::MORE));
     }
-    actions.push(("Zamknij", act::CANCEL));
+    actions.push((tr(Msg::CommonClose), act::CANCEL));
     overlay::popup(
         t,
         st,

@@ -16,8 +16,10 @@
 //! ```
 //!
 //! with CRLF line ends and a BOM only when the file is created. The labels
-//! stay English on purpose: the pipeline matches "Highlight", "Your Note",
-//! "location" and English month names.
+//! stay English on purpose, whatever the UI language: the pipeline matches
+//! "Highlight", "Your Note", "location" and English month names, as the
+//! parser in [`crate::clippings`] does. The Markdown notes are for people,
+//! so their labels follow the UI language (`aristotle-i18n`).
 //!
 //! Appending is idempotent: entries whose title and text are already in the
 //! file are not written again, so exporting after every new highlight, or
@@ -27,6 +29,8 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+
+use aristotle_i18n::{tf, tr, Msg};
 
 use crate::clippings::{self, title_key};
 use crate::index::{Annotation, AnnotationKind, BookRecord};
@@ -244,12 +248,14 @@ fn yaml_string(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// "lok. 60-63", the location as the Polish notes write it.
-pub fn location_pl(loc: Option<(u32, u32)>) -> Option<String> {
-    match loc? {
-        (a, b) if b > a => Some(format!("lok. {a}-{b}")),
-        (a, _) => Some(format!("lok. {a}")),
-    }
+/// "loc. 60-63" ("lok. 60-63"), the location as the notes and the
+/// highlights list write it.
+pub fn location_note(loc: Option<(u32, u32)>) -> Option<String> {
+    let location = match loc? {
+        (a, b) if b > a => format!("{a}-{b}"),
+        (a, _) => a.to_string(),
+    };
+    Some(tf!(Msg::ReaderLocation, location = location))
 }
 
 /// A book's highlights as Markdown in the shape of an Obsidian
@@ -264,9 +270,13 @@ pub fn markdown(book: &BookRecord) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     let mut s = format!(
-        "---\ntytuł: {}\nautor: {}\nźródło: Aristotle\ntags: [kindle, zakreślenia]\n---\n\n# {}\n",
+        "---\n{}: {}\n{}: {}\n{}: Aristotle\ntags: [kindle, {}]\n---\n\n# {}\n",
+        tr(Msg::ExportTitle),
         yaml_string(&book.meta.title),
+        tr(Msg::ExportAuthor),
         yaml_string(&author),
+        tr(Msg::ExportSource),
+        tr(Msg::ExportTag),
         book.meta.title
     );
     if !author.is_empty() {
@@ -277,7 +287,7 @@ pub fn markdown(book: &BookRecord) -> String {
             continue;
         };
         let date = a.created.as_deref().map(|c| c.get(..10).unwrap_or(c));
-        let meta: Vec<String> = [a.chapter.clone(), location_pl(a.location)]
+        let meta: Vec<String> = [a.chapter.clone(), location_note(a.location)]
             .into_iter()
             .flatten()
             .chain(date.map(String::from))
@@ -288,7 +298,11 @@ pub fn markdown(book: &BookRecord) -> String {
             s.push_str(&format!("\n— {}\n", meta.join(" · ")));
         }
         if let Some(note) = a.note.as_deref().filter(|n| !n.trim().is_empty()) {
-            s.push_str(&format!("\n**Notatka:** {}\n", one_line(note)));
+            s.push_str(&format!(
+                "\n**{}:** {}\n",
+                tr(Msg::ExportNote),
+                one_line(note)
+            ));
         }
     }
     s
@@ -432,12 +446,19 @@ mod tests {
 
     #[test]
     fn markdown_in_the_obsidian_shape() {
-        let md = markdown(&book());
+        let md = aristotle_i18n::with_language("pl", || markdown(&book()));
         assert!(md.starts_with(
             "---\ntytuł: \"Fedon\"\nautor: \"Platon\"\nźródło: Aristotle\ntags: [kindle, zakreślenia]\n---\n\n# Fedon\n\n*Platon*\n"
         ));
         assert!(md.contains(
             "\n> Filozofowanie to przygotowanie do śmierci.\n\n— Rozmowa w więzieniu · lok. 60-63 · 2026-10-17\n\n**Notatka:** por. Fajdros\n"
+        ));
+        let en = aristotle_i18n::with_language("en", || markdown(&book()));
+        assert!(en.starts_with(
+            "---\ntitle: \"Fedon\"\nauthor: \"Platon\"\nsource: Aristotle\ntags: [kindle, highlights]\n---\n"
+        ));
+        assert!(en.contains(
+            "— Rozmowa w więzieniu · loc. 60-63 · 2026-10-17\n\n**Note:** por. Fajdros\n"
         ));
         let first = md.find("Filozofowanie").unwrap();
         let second = md.find("Dusza").unwrap();
@@ -451,7 +472,9 @@ mod tests {
         b.meta.title = "Obrona: \"Sokratesa\" [wyd. 2]?".into();
         assert_eq!(markdown_name(&b), "Obrona Sokratesa wyd. 2 — Platon.md");
         let dir = crate::testdir("export-md");
-        let p = write_markdown(&dir, &b).unwrap().unwrap();
+        let p = aristotle_i18n::with_language("pl", || write_markdown(&dir, &b))
+            .unwrap()
+            .unwrap();
         assert!(fs::read_to_string(p)
             .unwrap()
             .contains("tytuł: \"Obrona: \\\"Sokratesa\\\""));

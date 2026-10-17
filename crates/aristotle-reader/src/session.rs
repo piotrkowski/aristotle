@@ -468,7 +468,7 @@ impl Session {
         progress::progress_at(&pos, self.book.fraction(self.current), now)
     }
 
-    /// Chapter title, "Strona x z y" (or a percentage before the pages are
+    /// Chapter title, "Page x of y" (or a percentage before the pages are
     /// known) and the fraction, for the menu.
     pub fn labels(&mut self) -> (String, String, f32) {
         let chapter = self.book.chapter_title(self.current).unwrap_or_default();
