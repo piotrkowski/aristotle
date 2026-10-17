@@ -960,7 +960,7 @@ mod tests {
     }
 
     /// A fresh directory under `$TMPDIR` (the build script points it at
-    /// `~/.cache/aristotle/tmp`, not the RAM-backed /tmp).
+    /// `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
     pub(crate) fn testdir(name: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(UNIX_EPOCH)

@@ -91,7 +91,7 @@ You build Aristotle on a Linux computer and copy it over the USB cable.
    ```sh
    git clone --recurse-submodules https://github.com/piotrkowski/aristotle && cd aristotle
    PLATO_LIBS_ONLY=1 tools/build-plato.sh
-   tools/build-render.sh device      # ~/.cache/aristotle/render/aristotle-app-device.tar.gz
+   tools/build-render.sh device      # $ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz
    ```
 
 3. **Copy it over.** Create the key the device will accept, set up the USB
@@ -99,8 +99,9 @@ You build Aristotle on a Linux computer and copy it over the USB cable.
    drive and install:
 
    ```sh
-   mkdir -p ~/.cache/aristotle/ssh
-   ssh-keygen -t ed25519 -f ~/.cache/aristotle/ssh/kindle_ed25519
+   . devloop/env.sh                     # sets ARISTOTLE_CACHE, the cache directory
+   mkdir -p "$ARISTOTLE_CACHE/ssh"
+   ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
    devloop/host/setup-host-net.sh
    devloop/host/install-extensions.sh   # KINDLE_MOUNT if not /run/media/$USER/Kindle
    ```

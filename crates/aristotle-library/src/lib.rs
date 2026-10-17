@@ -43,7 +43,7 @@ pub use metadata::Metadata;
 pub use query::{Query, SortKey, StatusFilter};
 
 /// A fresh, empty directory for one test, under `$TMPDIR` (which the build
-/// instructions point at `~/.cache/aristotle/tmp`, not the RAM-backed /tmp).
+/// instructions point at `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
 #[cfg(test)]
 pub(crate) fn testdir(name: &str) -> std::path::PathBuf {
     use std::sync::atomic::{AtomicUsize, Ordering};

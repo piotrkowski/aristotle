@@ -279,8 +279,9 @@ The stock reader page was not captured in our screenshots, so the reader compari
 ## Running the preview
 
 ```sh
-export CARGO_TARGET_DIR=~/.cache/aristotle/target-ui TMPDIR=~/.cache/aristotle/tmp
-cargo run --release -p aristotle-ui --bin aristotle-ui-preview      # writes ~/.cache/aristotle/ui-preview/v2/*.png
+. devloop/env.sh                                                    # ARISTOTLE_CACHE and TMPDIR
+export CARGO_TARGET_DIR=$ARISTOTLE_CACHE/target-ui
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview      # writes $ARISTOTLE_CACHE/ui-preview/v2/*.png
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- OUT_DIR
 cargo run --release -p aristotle-ui --example render-bench           # timings, also runs on the device
 cargo test -p aristotle-ui                                           # includes tests/transitions.rs

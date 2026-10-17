@@ -1,13 +1,14 @@
 #!/bin/sh
 # Save a PNG of the Kindle's framebuffer over the USB network.
-#   devloop/host/screenshot.sh [NAME]     -> ~/.cache/aristotle/screens/NAME-<stamp>.png
+#   devloop/host/screenshot.sh [NAME]     -> $ARISTOTLE_CACHE/screens/NAME-<stamp>.png
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
+. "$REPO/devloop/env.sh"
 NAME=${1:-screen}
-OUT="$HOME/.cache/aristotle/screens"
+OUT="$ARISTOTLE_CACHE/screens"
 CFG="$REPO/devloop/host/ssh_config"
-PY="$HOME/.cache/aristotle/venv/bin/python"
+PY="$ARISTOTLE_CACHE/venv/bin/python"
 
 mkdir -p "$OUT"
 stamp=$(date -u '+%Y%m%dT%H%M%SZ')

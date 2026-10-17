@@ -1,10 +1,11 @@
 #!/bin/sh
 # Download pinned host-side reverse-engineering tools into $ARISTOTLE_TOOLS
-# (default ~/.cache/aristotle/tools). No root needed; nothing is installed system-wide.
+# (default $ARISTOTLE_CACHE/tools, see devloop/env.sh). No root needed; nothing is installed system-wide.
 # Each archive is checked against the SHA-256 published by its upstream release.
 set -eu
 
-TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
+. "$(cd "$(dirname "$0")/.." && pwd)/devloop/env.sh"
+TOOLS=${ARISTOTLE_TOOLS:-$ARISTOTLE_CACHE/tools}
 DL="$TOOLS/downloads"
 mkdir -p "$DL"
 

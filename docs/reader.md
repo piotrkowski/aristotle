@@ -35,7 +35,7 @@ aristotle-render (CLI: info, render, show, bench, turn)
 - **Source.** `third_party/plato` is a git submodule with our fork of Plato, see [Plato fork](#plato-fork). Cargo builds `plato-core` straight from it (`third_party/plato/crates/core`) and only reads it; nothing is generated or copied for the Rust build.
 - **C libraries.** `tools/build-plato.sh` builds them with Zig as static archives: for the device as before, and with `PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1` for the host (about 6 minutes on 2 cores, once). It exports the submodule's commit with `git archive` into its `PLATO_BUILD` directory and unpacks and builds the C sources there, so it never writes into the submodule. `MUPDF_FONTS`, `MUPDF_FORMATS` and `PLATO_DJVU` choose what goes in; the defaults cover Polish, English, Ancient Greek and Latin books, see [Size budget](#size-budget). One patch applies to MuPDF itself, for the size budget: `tools/mupdf-patches/mupdf-0001-keep-noto-serif.patch` (`KEEP_NOTO_SERIF`).
 - **Workspace.** `crates/aristotle-render` and the reader app, `crates/aristotle-reader`, are members of the root workspace but not of its `default-members`, so a plain `cargo build`, `cargo test` or `cargo clippy` at the root skips them and needs no C libraries. Cargo still reads their manifests and `plato-core`'s, so the submodule must be checked out (`git clone --recursive`, or `git submodule update --init`). There is one `Cargo.lock`; the native crates' versions started from Plato's lock and were unified with the other crates' (patch releases only) when the two former workspaces merged. The release profile is shared: `opt-level = "s"`, with `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` at `opt-level = 3`, see [Size budget](#size-budget).
-- **Build.** `tools/build-render.sh device|host` sets `PLATO_LIB_DIRS` and the Zig C compiler (for crates that build C), runs `cargo build -p aristotle-render -p aristotle-reader`, and assembles the bundle in `~/.cache/aristotle/render/<device|host>/`. `CARGO_CMD=clippy|test` runs those instead, for the same two packages. `PLATO_BUILD` selects a `build-plato.sh` output directory (default `plato-build/main`, or `host-x86_64`).
+- **Build.** `tools/build-render.sh device|host` sets `PLATO_LIB_DIRS` and the Zig C compiler (for crates that build C), runs `cargo build -p aristotle-render -p aristotle-reader`, and assembles the bundle in `$ARISTOTLE_CACHE/render/<device|host>/` (the cache directory, `devloop/env.sh`). `CARGO_CMD=clippy|test` runs those instead, for the same two packages. `PLATO_BUILD` selects a `build-plato.sh` output directory (default `plato-build/main`, or `host-x86_64`).
 
 ### Plato fork
 
@@ -76,8 +76,9 @@ Then commit the submodule bump, update the C library versions pinned in `tools/b
 The host build is the same code linked against the same library versions built for x86_64 musl, so previews match the device apart from floating-point rounding. Render and convert:
 
 ```sh
-~/.cache/aristotle/render/host/aristotle-render render BOOK.epub 10 page.raw
-~/.cache/aristotle/venv/bin/python -I devloop/host/fb2png.py page.raw page.png
+. devloop/env.sh
+"$ARISTOTLE_CACHE/render/host/aristotle-render" render BOOK.epub 10 page.raw
+"$ARISTOTLE_CACHE/venv/bin/python" -I devloop/host/fb2png.py page.raw page.png
 ```
 
 ### Runtime data
@@ -222,9 +223,10 @@ A whole pagination costs the same as before (225 → 234 ms for the stand-in, 13
 ### Running it on the device
 
 ```sh
-PLATO_BUILD=~/.cache/aristotle/plato-build/size PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
-OUT=~/.cache/aristotle/render/device PLATO_BUILD=~/.cache/aristotle/plato-build/size tools/build-render.sh device
-ssh -F devloop/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < ~/.cache/aristotle/render/aristotle-app-device.tar.gz
+. devloop/env.sh
+PLATO_BUILD=$ARISTOTLE_CACHE/plato-build/size PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
+OUT=$ARISTOTLE_CACHE/render/device PLATO_BUILD=$ARISTOTLE_CACHE/plato-build/size tools/build-render.sh device
+ssh -F devloop/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
 ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh            # mode 9
 ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh --turn-mode 7
 ```
@@ -353,9 +355,9 @@ The footer's left side shows the chapter and the minutes left in it: "Rozdz. 3/1
 
 ```sh
 devloop/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
-~/.cache/aristotle/render/host/aristotle --data .../data --library LIB \
+"$ARISTOTLE_CACHE/render/host/aristotle" --data .../data --library LIB \
     --dict DICTIONARIES \
-    --preview ~/.cache/aristotle/ui-preview/reading BOOKS/Aristotle/proba-czytania.epub
+    --preview "$ARISTOTLE_CACHE/ui-preview/reading" BOOKS/Aristotle/proba-czytania.epub
 ```
 
 The preview runs the app on an in-memory panel (`panel::Memory`) with synthetic touches through the same entry points as the touchscreen, and writes a PNG per step (contents, Polish and Greek popups, the switcher, a Greek form, selection while dragging and after, the highlighted page, a Latin gloss, a footnote, the bookmark, the highlights list, "go to"), `updates.txt` (every update with waveform and rectangle), the exported `My Clippings.txt`, and `reading.txt`: the same taps as an `aristotle-observe` scenario. `devloop/kindle/scenarios/reading.txt` is that scenario for the device, where the layout is the same with the default typography; `aristotle-observe` gained a `drag X1 Y1 X2 Y2 HOLD MS` line for holds that extend a selection. The test book is a short Polish text written for it, with Greek and Latin words, an EPUB 3 footnote and a Wolne Lektury style note.
@@ -419,8 +421,9 @@ Host times (best of five, Fedon and the non-fiction book): render median 2.1 and
 How to build the small set (both defaults):
 
 ```sh
-PLATO_BUILD=~/.cache/aristotle/plato-build/size PLATO_LIBS_ONLY=1 tools/build-plato.sh
-PLATO_BUILD=~/.cache/aristotle/plato-build/size tools/build-render.sh device
+. devloop/env.sh
+PLATO_BUILD=$ARISTOTLE_CACHE/plato-build/size PLATO_LIBS_ONLY=1 tools/build-plato.sh
+PLATO_BUILD=$ARISTOTLE_CACHE/plato-build/size tools/build-render.sh device
 ```
 
 `MUPDF_FONTS=full MUPDF_FORMATS=full PLATO_DJVU=1` and `FONT_SUBSET=none HYPH_LANGS="..."` bring the removed parts back. MuPDF gets one output directory per font and format choice and `PLATO_DJVU` only changes what is collected, so those switch in place; a change to the other C libraries (flags, FreeType modules) needs a new `PLATO_BUILD` directory.

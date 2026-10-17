@@ -2,8 +2,10 @@
 //!
 //! Needs the runtime data directory (fonts, stylesheets, hyphenation
 //! patterns) that `tools/build-render.sh host` assembles. The test looks for
-//! it in `$ARISTOTLE_RENDER_DATA`, then in `~/.cache/aristotle/render/host/data`,
-//! and is skipped (with a message) when neither exists.
+//! it in `$ARISTOTLE_RENDER_DATA`, then in `render/host/data` of the cache
+//! directory (`$ARISTOTLE_CACHE`, default `$XDG_CACHE_HOME/aristotle` or
+//! `$HOME/.cache/aristotle`), and is skipped (with a message) when neither
+//! exists.
 
 use std::path::PathBuf;
 
@@ -14,11 +16,19 @@ use aristotle_render::style::Style;
 fn data_dir() -> Option<PathBuf> {
     let dir = std::env::var_os("ARISTOTLE_RENDER_DATA")
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(|h| PathBuf::from(h).join(".cache/aristotle/render/host/data"))
-        })?;
+        .or_else(|| cache_dir().map(|c| c.join("render/host/data")))?;
     dir.join("fonts").is_dir().then_some(dir)
+}
+
+/// `$ARISTOTLE_CACHE`, defaulting as `devloop/env.sh` does.
+fn cache_dir() -> Option<PathBuf> {
+    let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
+    var("ARISTOTLE_CACHE").map(PathBuf::from).or_else(|| {
+        var("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| var("HOME").map(|h| PathBuf::from(h).join(".cache")))
+            .map(|c| c.join("aristotle"))
+    })
 }
 
 fn sample_epub() -> PathBuf {

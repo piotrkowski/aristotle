@@ -6,7 +6,8 @@
 //! panel can show. Night images are `Ui::set_night`, the same inversion the
 //! device applies.
 //!
-//! Usage: `aristotle-ui-preview [OUT_DIR]`, default `~/.cache/aristotle/ui-preview/v2`.
+//! Usage: `aristotle-ui-preview [OUT_DIR]`, default `ui-preview/v2` in the cache
+//! directory, `$ARISTOTLE_CACHE` (as `devloop/env.sh` sets it).
 //! `ARISTOTLE_STOCK_HOME=PNG` adds `compare-library.png`, the stock home
 //! screen next to ours.
 
@@ -775,14 +776,24 @@ fn targets(out: &Path) {
     println!("wrote {}", path.display());
 }
 
+/// `$ARISTOTLE_CACHE`, defaulting as `devloop/env.sh` does.
+fn cache_dir() -> PathBuf {
+    let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
+    var("ARISTOTLE_CACHE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            var("XDG_CACHE_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(var("HOME").expect("HOME is set")).join(".cache"))
+                .join("aristotle")
+        })
+}
+
 fn main() {
     let out = std::env::args_os()
         .nth(1)
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").expect("HOME is set");
-            PathBuf::from(home).join(".cache/aristotle/ui-preview/v2")
-        });
+        .unwrap_or_else(|| cache_dir().join("ui-preview/v2"));
     std::fs::create_dir_all(&out).expect("output directory");
     let fonts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts");
     icons_sheet(&out);

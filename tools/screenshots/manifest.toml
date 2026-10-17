@@ -4,7 +4,7 @@
 # resolve against `base`; set SCREENSHOTS_BASE to override it, e.g. to point at
 # device captures. Paths may use ~ and $VARS. `out_dir` is relative to this file.
 
-base = "~/.cache/aristotle/ui-preview"
+base = "$ARISTOTLE_CACHE/ui-preview"
 out_dir = "../../assets/screenshots"
 
 # Frame styles; an output picks one with `style`, which overrides `default`.

@@ -18,8 +18,8 @@ tools/build-plato.sh                                             # device (also 
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh   # host
 
 # then
-tools/build-render.sh device   # -> ~/.cache/aristotle/render/device/{aristotle-render,data/}
-tools/build-render.sh host     # -> ~/.cache/aristotle/render/host/...
+tools/build-render.sh device   # -> $ARISTOTLE_CACHE/render/device/{aristotle-render,data/}
+tools/build-render.sh host     # -> $ARISTOTLE_CACHE/render/host/...
 CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host
 ```

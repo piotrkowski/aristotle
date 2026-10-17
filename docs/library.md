@@ -273,7 +273,7 @@ u32 × page count   start position of each page (here every 2300 positions)
   - `fpr` (kept for later);
   - font preferences (they map to the stock fonts, not ours).
 
-The unit tests build `.mbs`, `.mbp1` and `.apnx` files with the device layouts and invented values; real reading state is not committed. An ignored test parses real copies: `ARISTOTLE_SDR_SAMPLES=~/.cache/aristotle/sdr-samples cargo test -p aristotle-library device_samples -- --ignored --nocapture`.
+The unit tests build `.mbs`, `.mbp1` and `.apnx` files with the device layouts and invented values; real reading state is not committed. An ignored test parses real copies: `ARISTOTLE_SDR_SAMPLES=$ARISTOTLE_CACHE/sdr-samples cargo test -p aristotle-library device_samples -- --ignored --nocapture`.
 
 Firmware 5.13.6 used `.mbs`/`.mbp1` (MOBI 7 class) for both sideloaded `.mobi` books, not `.azw3f` **[dev]**.
 
