@@ -26,6 +26,7 @@ use crate::tree::{
 };
 use crate::ui::{Ui, UiEvent};
 use crate::widgets::{BusyMark, Slider, Steps, Toggle};
+use aristotle_i18n::{tf, tr, Msg};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -123,8 +124,11 @@ pub fn zone_at(screen: Rect, p: Point) -> Zone {
 }
 
 /// The opening of Bolesław Prus, *Lalka* (1890, public domain), lightly
-/// abridged, as sample content.
+/// abridged, as sample content. Book text, so it stays Polish in every UI
+/// language, like the chapter names below.
 const CHAPTER_NUMBER: &str = "Rozdział pierwszy";
+/// The sample chapter's short name, for the footer and the menu.
+const CHAPTER_SHORT: &str = "Rozdział I";
 const CHAPTER_TITLE: &str = "Jak wygląda firma J. Mincel i S. Wokulski przez szkło butelek";
 const PARAGRAPHS: [&str; 4] = [
     "W początkach roku 1878, kiedy świat polityczny zajmował się pokojem \
@@ -291,13 +295,12 @@ pub struct Menu {
 
 /// Builds the reader menu: a top bar (back to the library, the title) and a
 /// bottom sheet (position with chapter skips, then the typography and light
-/// settings). It starts hidden. The labels are Polish, like the rest of the
-/// UI until the English catalog lands.
+/// settings). It starts hidden. The labels are in the UI language.
 pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> Menu {
     let m = margin();
     // Top bar: back to the library and the title.
     let back_icon = t.icon(Icon::ArrowLeft, 44, INK);
-    let back_label = t.label("Biblioteka", st.ui());
+    let back_label = t.label(tr(Msg::LibraryTitle), st.ui());
     let g = t.gap(12, 1);
     let back = t.add(Node::row(0), [back_icon, g, back_label]);
     let back = t.pad(Insets::vh(0, 16), back);
@@ -358,7 +361,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
             .map(|(name, fam)| t.label(name, TextStyle::new(fam, crate::geom::pt(9.0))))
             .collect();
         let fonts = segmented(t, fonts, s.family, action::FONT);
-        rows.push(row(t, "Krój", fonts));
+        rows.push(row(t, tr(Msg::MenuFont), fonts));
     }
 
     let small = t.label("A", st.ui().size(30.0));
@@ -371,21 +374,21 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let large = t.label("A", st.ui().size(54.0));
     let large = t.button(Node::plain(), large, action::SIZE_UP);
     let size = t.add(Node::row(8), [small, steps, large]);
-    rows.push(row(t, "Rozmiar", size));
+    rows.push(row(t, tr(Msg::MenuSize), size));
 
     let spacing: Vec<NodeId> = [Icon::SpacingTight, Icon::SpacingNormal, Icon::SpacingLoose]
         .iter()
         .map(|i| t.icon(*i, 46, INK))
         .collect();
     let spacing = segmented(t, spacing, s.spacing, action::SPACING);
-    rows.push(row(t, "Odstępy", spacing));
+    rows.push(row(t, tr(Msg::MenuSpacing), spacing));
 
     let margins: Vec<NodeId> = [Icon::MarginsNarrow, Icon::MarginsNormal, Icon::MarginsWide]
         .iter()
         .map(|i| t.icon(*i, 46, INK))
         .collect();
     let margins = segmented(t, margins, s.margins, action::MARGINS);
-    rows.push(row(t, "Marginesy", margins));
+    rows.push(row(t, tr(Msg::MenuMargins), margins));
 
     let dim = icon_button(t, Icon::SunSmall, 54, action::LIGHT_DOWN);
     let light = t.add(
@@ -399,14 +402,14 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let slider = t.add(Node::column(0).flex(1), [slider]);
     let bright = icon_button(t, Icon::Sun, 54, action::LIGHT_UP);
     let light_row = t.add(Node::row(0), [dim, slider, bright]);
-    rows.push(row(t, "Światło", light_row));
+    rows.push(row(t, tr(Msg::MenuLight), light_row));
 
     let mut night_toggle = None;
     if spec.night {
         let toggle = t.custom(Toggle { on: s.night });
         night_toggle = Some(toggle);
         let moon = t.icon(Icon::Moon, 40, INK);
-        let hint = t.label("Ciemna strona, jasny tekst", st.small());
+        let hint = t.label(tr(Msg::MenuNightHint), st.small());
         let g = t.gap(14, 1);
         let fill = t.spacer(1);
         let night = t.add(Node::row(0), [moon, g, hint, fill, toggle]);
@@ -417,7 +420,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
             [night],
         );
         let night = t.align(0.0, 0.5, night);
-        rows.push(row(t, "Noc", night));
+        rows.push(row(t, tr(Msg::MenuNight), night));
     }
 
     let rows = t.add(Node::column(14), rows);
@@ -631,7 +634,7 @@ impl Reader {
         };
         let ids = build_menu(&mut t, st, &spec, &settings);
         let menu = ids.root;
-        t.set_text(ids.chapter_label, "Rozdział I");
+        t.set_text(ids.chapter_label, CHAPTER_SHORT);
         let root = t.add(Node::new(Kind::Stack), [reading, menu]);
         t.set_root(root);
 
@@ -687,10 +690,11 @@ impl Reader {
     fn update_position(&mut self, t: &mut Tree) {
         let minutes = (self.words_left() as f32 / WORDS_PER_MINUTE).ceil() as usize;
         let left = if self.current + 1 == self.pages.len() {
-            "Rozdział I · ostatnia strona".to_string()
+            tr(Msg::ReaderLastPage).to_string()
         } else {
-            format!("Rozdział I · zostało {minutes} min")
+            tf!(Msg::ReaderMinutesLeft, minutes = minutes)
         };
+        let left = format!("{CHAPTER_SHORT} · {left}");
         t.set_text(self.footer_left, &left);
         let book_page = BOOK_PAGE_OFFSET + self.current + 1;
         t.set_text(self.footer_right, &format!("{book_page} / {BOOK_PAGES}"));

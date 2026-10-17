@@ -57,13 +57,28 @@ pub struct PolishSyllables {
     pub min_word: usize,
 }
 
+impl PolishSyllables {
+    pub const DEFAULT: PolishSyllables = PolishSyllables {
+        min_left: 2,
+        min_right: 2,
+        min_word: 5,
+    };
+}
+
 impl Default for PolishSyllables {
     fn default() -> Self {
-        Self {
-            min_left: 2,
-            min_right: 2,
-            min_word: 5,
-        }
+        Self::DEFAULT
+    }
+}
+
+/// The hyphenator for UI text in the language `code` ("pl", "en"): the
+/// UI's hyphenation follows the UI language, while a book's follows the
+/// book. Only Polish has one; other languages break UI text at spaces.
+pub fn ui_hyphenator(code: &str) -> &'static dyn Hyphenator {
+    static POLISH: PolishSyllables = PolishSyllables::DEFAULT;
+    match code.split(['-', '_']).next() {
+        Some("pl") => &POLISH,
+        _ => &NoHyphenation,
     }
 }
 

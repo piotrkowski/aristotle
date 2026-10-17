@@ -1,5 +1,5 @@
-//! Settings ("Ustawienia"): light, night mode, covers, sleep, and what the
-//! device knows about itself. Offline only: there is no Wi-Fi, account or
+//! Settings: light, night mode, covers, sleep, the UI language, and what
+//! the device knows about itself. Offline only: there is no Wi-Fi, account or
 //! store section, because Aristotle has none of those.
 //!
 //! Sections are whole blocks in a paged list, so the screen turns pages like
@@ -15,6 +15,7 @@ use crate::text::{Align, Paragraph, TextEngine};
 use crate::theme::{margin, IconSize, Space, Styles, INK, RULE};
 use crate::tree::{pages, progress, ActionId, Cross, Feedback, Kind, Node, NodeId, Tree};
 use crate::widgets::{Battery, Slider, Toggle};
+use aristotle_i18n::{fmt_bytes, fmt_decimal, tf, tr, Msg};
 
 pub mod action {
     use crate::tree::ActionId;
@@ -33,13 +34,19 @@ pub mod action {
     pub const SLEEP: ActionId = 50;
     /// `USB + 0` is the network, `USB + 1` drive mode.
     pub const USB: ActionId = 60;
+    /// `LANGUAGE + i` picks `aristotle_i18n::locales()[i]`.
+    pub const LANGUAGE: ActionId = 70;
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
-/// 24-step scale. "Nocne" is a dim evening level (step 2 is raw 19 of
+/// 24-step scale. "Night" is a dim evening level (step 2 is raw 19 of
 /// 2047, next to the raw 20 the stock UI had been set to on the test unit).
-pub const LIGHT_PRESETS: [(&str, u32); 4] =
-    [("Wyłącz", 0), ("Nocne", 2), ("Średnie", 10), ("Jasne", 18)];
+pub const LIGHT_PRESETS: [(Msg, u32); 4] = [
+    (Msg::SettingsPresetOff, 0),
+    (Msg::SettingsPresetNight, 2),
+    (Msg::SettingsPresetMedium, 10),
+    (Msg::SettingsPresetBright, 18),
+];
 
 /// Screensaver delays offered, in minutes; `None` is never.
 pub const SLEEP_MINUTES: [Option<u32>; 4] = [Some(5), Some(15), Some(30), None];
@@ -59,7 +66,7 @@ pub enum Usb {
 pub struct BatteryInfo<'a> {
     pub level: f32,
     pub charging: bool,
-    /// "Ładuje się", "Naładowana", "Rozładowuje się".
+    /// "Charging", "Charged", "Discharging".
     pub state: &'a str,
     pub voltage_mv: u32,
     pub temperature_c: i32,
@@ -76,12 +83,12 @@ pub struct SystemView<'a> {
     pub battery: Option<BatteryInfo<'a>>,
     /// Free and total bytes of the userstore.
     pub storage: Option<(u64, u64)>,
-    /// "sobota, 17 października 2026".
+    /// "Saturday, 17 October 2026" (`aristotle_i18n::fmt_date`).
     pub date: &'a str,
     pub time: &'a str,
     /// `None` when the aristotle agent is not installed.
     pub usb: Option<Usb>,
-    /// "O czytniku" lines: a label and a value.
+    /// "About" lines: a label and a value.
     pub about: &'a [(&'a str, String)],
 }
 
@@ -98,52 +105,18 @@ pub struct Settings {
     pub light: Option<NodeId>,
 }
 
-const WEEKDAYS: [&str; 7] = [
-    "niedziela",
-    "poniedziałek",
-    "wtorek",
-    "środa",
-    "czwartek",
-    "piątek",
-    "sobota",
-];
-const MONTHS: [&str; 12] = [
-    "stycznia",
-    "lutego",
-    "marca",
-    "kwietnia",
-    "maja",
-    "czerwca",
-    "lipca",
-    "sierpnia",
-    "września",
-    "października",
-    "listopada",
-    "grudnia",
-];
-
-/// "sobota, 17 października 2026" (weekday 0 is Sunday, month from 1).
-pub fn polish_date(year: i32, month: u32, day: u32, weekday: u32) -> String {
-    let wd = WEEKDAYS[(weekday % 7) as usize];
-    let m = MONTHS[(month.clamp(1, 12) - 1) as usize];
-    format!("{wd}, {day} {m} {year}")
+/// "3.98 V" ("3,98 V").
+pub fn volts(mv: u32) -> String {
+    tf!(Msg::FormatVolts, value = fmt_decimal(mv as f64 / 1000.0, 2))
 }
 
-/// "4,1 GB", "512 MB": decimal units with a Polish decimal comma.
-pub fn polish_bytes(b: u64) -> String {
-    const GB: f64 = 1e9;
-    const MB: f64 = 1e6;
-    let b = b as f64;
-    if b >= GB {
-        format!("{:.1} GB", b / GB).replace('.', ",")
-    } else {
-        format!("{:.0} MB", b / MB)
-    }
-}
-
-/// "3,98 V".
-pub fn polish_volts(mv: u32) -> String {
-    format!("{:.2} V", mv as f64 / 1000.0).replace('.', ",")
+/// "4.1 GB free of 6.2 GB".
+pub fn free_of(free: u64, total: u64) -> String {
+    tf!(
+        Msg::SettingsFreeOf,
+        free = fmt_bytes(free),
+        total = fmt_bytes(total)
+    )
 }
 
 /// A section as items of the paged list: the small-caps heading travels
@@ -234,7 +207,7 @@ impl Settings {
         let mut t = Tree::new();
         let (status, busy) = status_line(&mut t, s, &v.status);
         let back = icon_button(&mut t, Icon::ArrowLeft, IconSize::STANDARD, action::BACK);
-        let title = t.label("Ustawienia", s.display());
+        let title = t.label(tr(Msg::SettingsTitle), s.display());
         let g = t.gap(Space::XS, 1);
         let header = t.add(Node::row(0), [back, g, title]);
         let header = t.pad(Insets::new(0, 0, 0, -26), header);
@@ -246,11 +219,11 @@ impl Settings {
         let mut rows = Vec::new();
         if let Some((step, steps)) = v.light {
             let value = if step == 0 {
-                "wyłączone".to_string()
+                tr(Msg::SettingsLightOff).to_string()
             } else {
-                format!("{step} z {steps}")
+                tf!(Msg::SettingsLightStep, step = step, steps = steps)
             };
-            let head = value_row(&mut t, s, Icon::Sun, "Podświetlenie", &value);
+            let head = value_row(&mut t, s, Icon::Sun, tr(Msg::SettingsLight), &value);
             let dim = icon_button(
                 &mut t,
                 Icon::SunSmall,
@@ -270,7 +243,7 @@ impl Settings {
             let bright = icon_button(&mut t, Icon::Sun, IconSize::STANDARD, action::LIGHT_UP);
             let line = t.add(Node::row(0), [dim, slider, bright]);
             let preset = LIGHT_PRESETS.iter().position(|(_, p)| *p == step);
-            let names: Vec<&str> = LIGHT_PRESETS.iter().map(|(n, _)| *n).collect();
+            let names: Vec<&str> = LIGHT_PRESETS.iter().map(|(n, _)| tr(*n)).collect();
             let presets = choice(&mut t, s, &names, preset, action::LIGHT_PRESET);
             let presets = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), presets);
             let block = t.add(Node::column(0), [head, line, presets]);
@@ -281,8 +254,8 @@ impl Settings {
             &mut t,
             s,
             Icon::Moon,
-            "Tryb nocny",
-            Some("Jasny tekst na czarnym tle, wszędzie"),
+            tr(Msg::SettingsNight),
+            Some(tr(Msg::SettingsNightHint)),
             Some(toggle),
         );
         let night = t.add(
@@ -298,14 +271,14 @@ impl Settings {
             &mut t,
             s,
             Icon::Library,
-            "Okładki w bibliotece",
-            Some("Karty to okładki złożone z tytułu i autora"),
+            tr(Msg::SettingsCovers),
+            Some(tr(Msg::SettingsCoversHint)),
             None,
         );
         let covers = choice(&mut t, s, &labels, selected, action::COVERS);
         let covers = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), covers);
         rows.push(t.add(Node::column(0), [covers_head, covers]));
-        sections.extend(section(&mut t, s, "Ekran", rows));
+        sections.extend(section(&mut t, s, tr(Msg::SettingsSectionScreen), rows));
 
         // Power.
         let mut rows = Vec::new();
@@ -319,7 +292,7 @@ impl Settings {
             let hint = format!(
                 "{} · {} · {} °C",
                 b.state,
-                polish_volts(b.voltage_mv),
+                volts(b.voltage_mv),
                 b.temperature_c
             );
             let icon = if b.charging {
@@ -327,22 +300,30 @@ impl Settings {
             } else {
                 Icon::Battery
             };
-            rows.push(row(&mut t, s, icon, "Bateria", Some(&hint), Some(ctl)));
+            let name = tr(Msg::SettingsBattery);
+            rows.push(row(&mut t, s, icon, name, Some(&hint), Some(ctl)));
         }
         let sleep_head = row(
             &mut t,
             s,
             Icon::Power,
-            "Wygaszacz",
-            Some("Po tylu minutach bez dotyku ekran gaśnie"),
+            tr(Msg::SettingsSleep),
+            Some(tr(Msg::SettingsSleepHint)),
             None,
         );
-        let labels = ["5 min", "15 min", "30 min", "Nigdy"];
+        let labels: Vec<String> = SLEEP_MINUTES
+            .iter()
+            .map(|m| match m {
+                Some(m) => tf!(Msg::FormatMinutes, m = m),
+                None => tr(Msg::SettingsSleepNever).to_string(),
+            })
+            .collect();
+        let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
         let selected = SLEEP_MINUTES.iter().position(|m| *m == v.sleep_minutes);
         let sleep = choice(&mut t, s, &labels, selected, action::SLEEP);
         let sleep = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), sleep);
         rows.push(t.add(Node::column(0), [sleep_head, sleep]));
-        sections.extend(section(&mut t, s, "Zasilanie", rows));
+        sections.extend(section(&mut t, s, tr(Msg::SettingsSectionPower), rows));
 
         // Device.
         let mut rows = Vec::new();
@@ -351,12 +332,12 @@ impl Settings {
             &mut t,
             s,
             Icon::Clock,
-            "Data i godzina",
+            tr(Msg::SettingsDateTime),
             Some(v.date),
             Some(time),
         ));
         if let Some((free, total)) = v.storage {
-            let hint = format!("{} wolne z {}", polish_bytes(free), polish_bytes(total));
+            let hint = free_of(free, total);
             let used = 1.0 - free as f32 / total.max(1) as f32;
             let bar = t.add(progress(used, 12), []);
             let bar = t.fixed(Some(180), None, Some(bar));
@@ -364,19 +345,20 @@ impl Settings {
                 &mut t,
                 s,
                 Icon::Storage,
-                "Pamięć na książki",
+                tr(Msg::SettingsStorage),
                 Some(&hint),
                 Some(bar),
             ));
         }
         if let Some(usb) = v.usb {
             let hint = match usb {
-                Usb::Network => "Sieć przez kabel i SSH. Dysk włącza się na 10 minut.".to_string(),
+                Usb::Network => tr(Msg::SettingsUsbNetworkHint).to_string(),
                 Usb::Storage { minutes_left } => {
-                    format!("Dysk USB jeszcze przez {minutes_left} min, potem znów sieć. Bez SSH.")
+                    tf!(Msg::SettingsUsbStorageHint, minutes = minutes_left)
                 }
             };
-            let head = row(&mut t, s, Icon::Usb, "Złącze USB", Some(&hint), None);
+            let name = tr(Msg::SettingsUsb);
+            let head = row(&mut t, s, Icon::Usb, name, Some(&hint), None);
             let selected = match usb {
                 Usb::Network => 0,
                 Usb::Storage { .. } => 1,
@@ -384,14 +366,25 @@ impl Settings {
             let c = choice(
                 &mut t,
                 s,
-                &["Sieć i SSH", "Dysk USB"],
+                &[tr(Msg::SettingsUsbNetwork), tr(Msg::SettingsUsbStorage)],
                 Some(selected),
                 action::USB,
             );
             let c = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), c);
             rows.push(t.add(Node::column(0), [head, c]));
         }
-        sections.extend(section(&mut t, s, "Urządzenie", rows));
+        // The UI language, each named in itself.
+        let name = tr(Msg::SettingsLanguage);
+        let head = row(&mut t, s, Icon::Language, name, None, None);
+        let locales = aristotle_i18n::locales();
+        let names: Vec<&str> = locales.iter().map(|l| l.name).collect();
+        let current = locales
+            .iter()
+            .position(|l| l.code == aristotle_i18n::language());
+        let c = choice(&mut t, s, &names, current, action::LANGUAGE);
+        let c = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), c);
+        rows.push(t.add(Node::column(0), [head, c]));
+        sections.extend(section(&mut t, s, tr(Msg::SettingsSectionDevice), rows));
 
         // About.
         let mut lines = Vec::new();
@@ -408,7 +401,12 @@ impl Settings {
         let info = t.icon(Icon::Info, IconSize::STANDARD, INK);
         let about = t.add(Node::row(Space::M).cross(Cross::Start), [info, lines]);
         let about = t.pad(Insets::vh(Space::M, 0), about);
-        sections.extend(section(&mut t, s, "O czytniku", vec![about]));
+        sections.extend(section(
+            &mut t,
+            s,
+            tr(Msg::SettingsSectionAbout),
+            vec![about],
+        ));
 
         let list = t.add(pages(0).flex(1), sections);
         let prev = icon_button(
@@ -467,10 +465,19 @@ impl Settings {
 /// A plausible device, for the preview and tests.
 pub fn sample_about() -> Vec<(&'static str, String)> {
     vec![
-        ("Program", "Aristotle 0.1.0".to_string()),
-        ("Czytnik", "Kindle Paperwhite 4".to_string()),
-        ("System Kindle", "5.13.6".to_string()),
-        ("Pamięć RAM", "392 MB wolne z 494 MB".to_string()),
+        (
+            tr(Msg::SettingsAboutSoftware),
+            "Aristotle 0.1.0".to_string(),
+        ),
+        (
+            tr(Msg::SettingsAboutReader),
+            "Kindle Paperwhite 4".to_string(),
+        ),
+        (tr(Msg::SettingsAboutFirmware), "5.13.6".to_string()),
+        (
+            tr(Msg::SettingsAboutMemory),
+            free_of(392_000_000, 494_000_000),
+        ),
     ]
 }
 
@@ -495,12 +502,12 @@ mod tests {
             battery: Some(BatteryInfo {
                 level: 0.82,
                 charging: false,
-                state: "Rozładowuje się",
+                state: "Discharging",
                 voltage_mv: 3980,
                 temperature_c: 26,
             }),
             storage: Some((4_100_000_000, 6_200_000_000)),
-            date: "sobota, 17 października 2026",
+            date: "Saturday, 17 October 2026",
             time: "21:38",
             usb: Some(Usb::Network),
             about,
@@ -509,10 +516,44 @@ mod tests {
 
     #[test]
     fn formats() {
-        assert_eq!(polish_date(2026, 10, 17, 6), "sobota, 17 października 2026");
-        assert_eq!(polish_bytes(4_100_000_000), "4,1 GB");
-        assert_eq!(polish_bytes(512_000_000), "512 MB");
-        assert_eq!(polish_volts(3980), "3,98 V");
+        aristotle_i18n::with_language("pl", || {
+            assert_eq!(volts(3980), "3,98 V");
+            assert_eq!(
+                free_of(4_100_000_000, 6_200_000_000),
+                "4,1 GB wolne z 6,2 GB"
+            );
+        });
+        aristotle_i18n::with_language("en", || {
+            assert_eq!(volts(3980), "3.98 V");
+            assert_eq!(free_of(392_000_000, 494_000_000), "392 MB free of 494 MB");
+        });
+    }
+
+    #[test]
+    fn every_language_is_offered_and_the_current_one_is_selected() {
+        for code in ["en", "pl"] {
+            aristotle_i18n::with_language(code, || {
+                let about = sample_about();
+                let mut text = TextEngine::new(Fonts::embedded());
+                let (tree, _) =
+                    Settings::build(&mut text, &Styles::new(FamilyId(0)), &view(&about));
+                let chips: Vec<_> = (0..tree.len())
+                    .map(|i| crate::tree::NodeId(i as u32))
+                    .filter(|&n| {
+                        tree.node(n)
+                            .action
+                            .is_some_and(|a| (action::LANGUAGE..action::LANGUAGE + 10).contains(&a))
+                    })
+                    .collect();
+                assert_eq!(chips.len(), aristotle_i18n::locales().len());
+                let selected: Vec<bool> = chips.iter().map(|&n| tree.node(n).inverted).collect();
+                let at = aristotle_i18n::locales()
+                    .iter()
+                    .position(|l| l.code == code)
+                    .unwrap();
+                assert!(selected[at] && selected.iter().filter(|s| **s).count() == 1);
+            });
+        }
     }
 
     #[test]

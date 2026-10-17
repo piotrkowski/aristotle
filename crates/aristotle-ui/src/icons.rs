@@ -66,11 +66,13 @@ pub enum Icon {
     MarginsNarrow,
     MarginsNormal,
     MarginsWide,
+    /// The UI language: a globe.
+    Language,
 }
 
 impl Icon {
     /// Every icon, in the order of the preview sheet.
-    pub const ALL: [Icon; 37] = [
+    pub const ALL: [Icon; 38] = [
         Icon::Library,
         Icon::ArrowLeft,
         Icon::Menu,
@@ -108,6 +110,7 @@ impl Icon {
         Icon::MarginsNarrow,
         Icon::MarginsNormal,
         Icon::MarginsWide,
+        Icon::Language,
     ];
 
     /// The English name, for the preview sheet and debugging.
@@ -150,6 +153,7 @@ impl Icon {
             Icon::MarginsNarrow => "margins-1",
             Icon::MarginsNormal => "margins-2",
             Icon::MarginsWide => "margins-3",
+            Icon::Language => "language",
         }
     }
 }
@@ -248,6 +252,10 @@ fn def(icon: Icon) -> Def {
         Icon::MarginsNarrow => ("M4 3H20V21H4ZM7 8H17M7 12H17M7 16H17", NONE),
         Icon::MarginsNormal => ("M4 3H20V21H4ZM9 8H15M9 12H15M9 16H15", NONE),
         Icon::MarginsWide => ("M4 3H20V21H4ZM10.5 8H13.5M10.5 12H13.5M10.5 16H13.5", NONE),
+        Icon::Language => (
+            "M21 12A9 9 0 1 1 3 12A9 9 0 1 1 21 12ZM3 12H21M12 3A4 9 0 0 1 12 21A4 9 0 0 1 12 3Z",
+            NONE,
+        ),
     };
     Def { stroke, fill }
 }

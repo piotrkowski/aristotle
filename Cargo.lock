@@ -83,6 +83,7 @@ dependencies = [
 name = "aristotle-ui"
 version = "0.1.0"
 dependencies = [
+ "aristotle-i18n",
  "png",
  "swash",
  "unicode-linebreak",

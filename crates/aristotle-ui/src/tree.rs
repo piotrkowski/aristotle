@@ -694,7 +694,7 @@ impl Tree {
                         text,
                         para,
                         width as f32,
-                        &crate::text::PolishSyllables::default(),
+                        crate::text::ui_hyphenator(aristotle_i18n::language()),
                     );
                     *cache = Some((width, layout));
                 }

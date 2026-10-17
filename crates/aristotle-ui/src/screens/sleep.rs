@@ -11,6 +11,7 @@ use crate::text::{Align, Paragraph};
 use crate::theme::{Space, Styles};
 use crate::tree::{Cross, Node, Tree};
 use crate::widgets::Cover;
+use aristotle_i18n::{tr, Msg};
 
 /// The screensaver for `book` (or a plain one without a book). `photo`
 /// shows the book's own cover when it has one.
@@ -47,7 +48,7 @@ pub fn build(s: &Styles, book: Option<&Book>, photo: bool) -> Tree {
     }
     let bottom = t.spacer(1);
     let hint = t.text(Paragraph::plain(
-        "Dotknij ekranu, aby wrócić",
+        tr(Msg::SleepWakeHint),
         s.caps(),
         Align::Center,
     ));

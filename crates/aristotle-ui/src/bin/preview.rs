@@ -6,10 +6,14 @@
 //! panel can show. Night images are `Ui::set_night`, the same inversion the
 //! device applies.
 //!
-//! Usage: `aristotle-ui-preview [OUT_DIR]`, default `~/.cache/aristotle/ui-preview/v2`.
+//! Usage: `aristotle-ui-preview [--lang CODE] [OUT_DIR]`, default
+//! `~/.cache/aristotle/ui-preview/v2`. `--lang` picks the UI language
+//! (`en`, the default, or any embedded locale such as `pl`); `--lang all`
+//! renders every language, each into `OUT_DIR/<code>`.
 //! `ARISTOTLE_STOCK_HOME=PNG` adds `compare-library.png`, the stock home
 //! screen next to ours.
 
+use aristotle_i18n::{fmt_date, tr, Msg};
 use aristotle_ui::canvas::{Canvas, Painter};
 use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};
 use aristotle_ui::icons::{self, Icon};
@@ -206,7 +210,7 @@ fn library_screens(out: &Path) {
             place: Place::Home { view, filter },
             hero: Some(hero),
             items,
-            sort: "Ostatnie",
+            sort: tr(Msg::LibrarySortRecent),
             status: STATUS,
             covers,
         })
@@ -275,7 +279,7 @@ fn library_screens(out: &Path) {
         place: Place::Folder { name: "Platon" },
         hero: None,
         items: &platon,
-        sort: "Tytuł",
+        sort: tr(Msg::LibrarySortTitle),
         status: STATUS,
         covers: CoverMode::Cards,
     });
@@ -304,7 +308,7 @@ fn library_screens(out: &Path) {
         },
         hero: None,
         items: &[],
-        sort: "Ostatnie",
+        sort: tr(Msg::LibrarySortRecent),
         status: STATUS,
         covers: CoverMode::None,
     });
@@ -336,6 +340,7 @@ fn library_screens(out: &Path) {
 
 fn settings_screens(out: &Path) {
     let about = settings_screen::sample_about();
+    let date = fmt_date(2026, 10, 17, 6);
     let view = SystemView {
         status: STATUS,
         light: Some((2, 24)),
@@ -345,12 +350,12 @@ fn settings_screens(out: &Path) {
         battery: Some(BatteryInfo {
             level: 0.82,
             charging: false,
-            state: "Rozładowuje się",
+            state: tr(Msg::SettingsBatteryDischarging),
             voltage_mv: 3980,
             temperature_c: 26,
         }),
         storage: Some((4_100_000_000, 6_200_000_000)),
-        date: "sobota, 17 października 2026",
+        date: &date,
         time: "21:38",
         usb: Some(Usb::Network),
         about: &about,
@@ -383,7 +388,7 @@ fn settings_screens(out: &Path) {
         battery: Some(BatteryInfo {
             level: 0.47,
             charging: true,
-            state: "Ładuje się",
+            state: tr(Msg::SettingsBatteryCharging),
             voltage_mv: 4105,
             temperature_c: 28,
         }),
@@ -699,7 +704,7 @@ fn targets(out: &Path) {
             },
             hero: Some(&books[0]),
             items: &items,
-            sort: "Ostatnie",
+            sort: tr(Msg::LibrarySortRecent),
             status: STATUS,
             covers: CoverMode::None,
         });
@@ -715,7 +720,7 @@ fn targets(out: &Path) {
         place: Place::Folder { name: "Platon" },
         hero: None,
         items: &platon,
-        sort: "Tytuł",
+        sort: tr(Msg::LibrarySortTitle),
         status: STATUS,
         covers: CoverMode::None,
     });
@@ -730,7 +735,7 @@ fn targets(out: &Path) {
         battery: Some(BatteryInfo {
             level: 0.82,
             charging: false,
-            state: "Rozładowuje się",
+            state: tr(Msg::SettingsBatteryDischarging),
             voltage_mv: 3980,
             temperature_c: 26,
         }),
@@ -775,21 +780,45 @@ fn targets(out: &Path) {
     println!("wrote {}", path.display());
 }
 
-fn main() {
-    let out = std::env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").expect("HOME is set");
-            PathBuf::from(home).join(".cache/aristotle/ui-preview/v2")
-        });
-    std::fs::create_dir_all(&out).expect("output directory");
+fn render_all(out: &Path) {
+    std::fs::create_dir_all(out).expect("output directory");
     let fonts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts");
-    icons_sheet(&out);
-    covers_sheet(&out);
-    library_screens(&out);
-    settings_screens(&out);
-    sleep_screens(&out);
-    reader_screens(&out, &fonts_dir);
-    targets(&out);
+    icons_sheet(out);
+    covers_sheet(out);
+    library_screens(out);
+    settings_screens(out);
+    sleep_screens(out);
+    reader_screens(out, &fonts_dir);
+    targets(out);
+}
+
+fn main() {
+    let mut lang = String::from("en");
+    let mut out = None;
+    let mut args = std::env::args_os().skip(1);
+    while let Some(a) = args.next() {
+        if a == "--lang" {
+            let v = args.next().expect("--lang needs a language code or `all`");
+            lang = v.to_string_lossy().into_owned();
+        } else {
+            out = Some(PathBuf::from(a));
+        }
+    }
+    let out = out.unwrap_or_else(|| {
+        let home = std::env::var_os("HOME").expect("HOME is set");
+        PathBuf::from(home).join(".cache/aristotle/ui-preview/v2")
+    });
+    if lang == "all" {
+        for l in aristotle_i18n::locales() {
+            aristotle_i18n::set_language(l.code);
+            render_all(&out.join(l.code));
+        }
+    } else {
+        let codes: Vec<&str> = aristotle_i18n::locales().iter().map(|l| l.code).collect();
+        assert!(
+            aristotle_i18n::set_language(&lang),
+            "unknown language {lang:?}; embedded: {codes:?}"
+        );
+        render_all(&out);
+    }
 }

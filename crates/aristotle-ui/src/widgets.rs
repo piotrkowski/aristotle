@@ -109,12 +109,16 @@ fn fnv(s: &str) -> u32 {
         .fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619))
 }
 
-/// "3", "2.5": a series number without a pointless ".0".
+/// "3", "2.5" ("2,5" in Polish): a series number without a pointless ".0".
 pub fn series_number(i: f32) -> String {
     if i.fract() == 0.0 {
         format!("{i:.0}")
     } else {
-        format!("{i}")
+        let s = format!("{i}");
+        match aristotle_i18n::locale().decimal {
+            "." => s,
+            sep => s.replacen('.', sep, 1),
+        }
     }
 }
 
@@ -125,7 +129,7 @@ pub fn series_number(i: f32) -> String {
 /// grays and inverted, needs no image decoding, and its binding (one of
 /// [`BINDINGS`], picked by shelf) groups an author's or a series' books at a
 /// glance. Large cards (150 px wide and up) carry the title, a short rule
-/// and the author in small capitals, with "Tom 3" above the title for a
+/// and the author in small capitals, with "Volume 3" above the title for a
 /// series; small ones a monogram, since the title is printed next to them,
 /// and the series number in a corner.
 pub struct Cover {
@@ -221,7 +225,8 @@ impl Widget for Cover {
                 p.style.max_lines = Some(2);
                 self.author_layout = Some(layout_paragraph(text, &p, inner, &NoHyphenation));
                 self.mark_layout = index.map(|i| {
-                    let p = Paragraph::plain(format!("Tom {i}"), small, Align::Center);
+                    let label = aristotle_i18n::tf!(aristotle_i18n::Msg::LibraryVolume, n = i);
+                    let p = Paragraph::plain(label, small, Align::Center);
                     layout_paragraph(text, &p, inner, &NoHyphenation)
                 });
             } else {

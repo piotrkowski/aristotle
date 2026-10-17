@@ -3,22 +3,22 @@
 //! One job: get back into a book, or find the next one. So the home screen
 //! holds the book being read at the top, then the library in three views:
 //!
-//! - **Książki**: every book, narrowed by a shelf chip: Wszystkie, Czytane
-//!   (being read), Nowe (never opened), Przeczytane (finished).
-//! - **Foldery**: the folders of `documents/` as they are on the device
+//! - **Books**: every book, narrowed by a shelf chip: All, Reading (being
+//!   read), New (never opened), Finished.
+//! - **Folders**: the folders of `documents/` as they are on the device
 //!   (author folders such as "Mickiewicz, Adam", topics such as
 //!   "Filozofia"), then the books lying loose at the top. A folder opens as
 //!   its own shelf, with subfolders first.
-//! - **Serie**: one shelf per series, its books in series order.
+//! - **Series**: one shelf per series, its books in series order.
 //!
-//! Lists turn pages, never scroll, and say where you are ("Strona 1 z 3").
+//! Lists turn pages, never scroll, and say where you are ("Page 1 of 3").
 //! There is no store, no recommendations, no reading lists and no "more
 //! for you": nothing on the screen exists to sell something.
 //!
 //! Covers are optional ([`CoverMode`]): none by default, a clean list of
 //! titles; typographic cards (`widgets::Cover`); or the books' own covers.
 //!
-//! Labels are Polish for now; an English catalog comes with the i18n crate.
+//! Labels come from `aristotle-i18n`, in the UI language.
 
 use super::icon_button;
 use crate::geom::{mm, Insets, MIN_TARGET};
@@ -27,6 +27,7 @@ use crate::text::{Align, Paragraph, TextEngine};
 use crate::theme::{margin, IconSize, Space, Styles, INK, INK_2, INK_3, RULE};
 use crate::tree::{pages, progress, ActionId, Cross, Feedback, Kind, Node, NodeId, Tree};
 use crate::widgets::{series_number, Battery, BusyMark, Cover, CoverMark, GrayImage};
+use aristotle_i18n::{fmt_duration, tf, tr, trn, Msg, Plural};
 
 /// Reading state of a book, as the library index keeps it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -45,7 +46,7 @@ pub struct Book {
     pub progress: f32,
     pub status: Status,
     /// Where the reader is, in words: a chapter title or a printed page
-    /// ("Strona 4 z 180"). Shown on the "continue reading" card; may be empty.
+    /// ("Page 4 of 180"). Shown on the "continue reading" card; may be empty.
     pub chapter: String,
     /// Reading time left, when known.
     pub minutes_left: Option<u32>,
@@ -140,11 +141,11 @@ impl View {
     pub const ALL: [View; 3] = [View::Books, View::Folders, View::Series];
 
     pub fn label(self) -> &'static str {
-        match self {
-            View::Books => "Książki",
-            View::Folders => "Foldery",
-            View::Series => "Serie",
-        }
+        tr(match self {
+            View::Books => Msg::LibraryViewBooks,
+            View::Folders => Msg::LibraryViewFolders,
+            View::Series => Msg::LibraryViewSeries,
+        })
     }
 }
 
@@ -161,12 +162,12 @@ impl Filter {
     pub const ALL: [Filter; 4] = [Filter::All, Filter::Reading, Filter::New, Filter::Finished];
 
     pub fn label(self) -> &'static str {
-        match self {
-            Filter::All => "Wszystkie",
-            Filter::Reading => "Czytane",
-            Filter::New => "Nowe",
-            Filter::Finished => "Przeczytane",
-        }
+        tr(match self {
+            Filter::All => Msg::LibraryFilterAll,
+            Filter::Reading => Msg::LibraryFilterReading,
+            Filter::New => Msg::LibraryFilterNew,
+            Filter::Finished => Msg::LibraryFilterFinished,
+        })
     }
 
     pub fn accepts(self, b: &Book) -> bool {
@@ -195,11 +196,11 @@ impl CoverMode {
     pub const ALL: [CoverMode; 3] = [CoverMode::None, CoverMode::Cards, CoverMode::Photos];
 
     pub fn label(self) -> &'static str {
-        match self {
-            CoverMode::None => "Bez okładek",
-            CoverMode::Cards => "Karty",
-            CoverMode::Photos => "Zdjęcia",
-        }
+        tr(match self {
+            CoverMode::None => Msg::CoversNone,
+            CoverMode::Cards => Msg::CoversCards,
+            CoverMode::Photos => Msg::CoversPhotos,
+        })
     }
 }
 
@@ -298,25 +299,14 @@ fn press_feedback(covers: CoverMode) -> Feedback {
     }
 }
 
-/// "Strona 2 z 5": the pager and reader position label.
+/// "Page 2 of 5": the pager and reader position label.
 pub fn page_of(page: usize, count: usize) -> String {
-    format!("Strona {page} z {count}")
+    tf!(Msg::CommonPageOf, page = page, count = count)
 }
 
-/// Polish plural: `plural(5, "książka", "książki", "książek")`.
-pub fn plural(n: usize, one: &str, few: &str, many: &str) -> String {
-    let w = if n == 1 {
-        one
-    } else if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) {
-        few
-    } else {
-        many
-    };
-    format!("{n} {w}")
-}
-
+/// "3 books".
 pub fn books_label(n: usize) -> String {
-    plural(n, "książka", "książki", "książek")
+    trn(Plural::LibraryBooks, n)
 }
 
 /// The status line node, and its busy mark (hidden; show it with
@@ -407,7 +397,7 @@ impl Library {
             },
             hero: books.first(),
             items: &items,
-            sort: "Ostatnie",
+            sort: tr(Msg::LibrarySortRecent),
             status: StatusLine {
                 clock: "21:38",
                 battery: Some(0.82),
@@ -437,7 +427,7 @@ impl Library {
         let title;
         match shelf.place {
             Place::Home { .. } => {
-                title = t.label("Biblioteka", s.display());
+                title = t.label(tr(Msg::LibraryTitle), s.display());
                 let fill = t.spacer(1);
                 let settings =
                     icon_button(&mut t, Icon::Settings, IconSize::STANDARD, action::SETTINGS);
@@ -449,11 +439,11 @@ impl Library {
                 let mut p = Paragraph::plain(name, s.headline(), Align::Left);
                 p.style.max_lines = Some(2);
                 title = t.text(p);
-                let kind = if matches!(shelf.place, Place::Folder { .. }) {
-                    "Folder"
+                let kind = tr(if matches!(shelf.place, Place::Folder { .. }) {
+                    Msg::LibraryFolder
                 } else {
-                    "Seria"
-                };
+                    Msg::LibrarySeries
+                });
                 let count = shelf
                     .items
                     .iter()
@@ -542,7 +532,8 @@ impl Library {
                 } => {
                     let mut sub = books_label(*books);
                     if *reading > 0 {
-                        sub.push_str(&format!(" · {reading} w trakcie"));
+                        sub.push_str(" · ");
+                        sub.push_str(&tf!(Msg::LibraryFolderReading, n = reading));
                     }
                     Self::shelf_row(&mut t, s, Icon::Folder, name, &sub, id)
                 }
@@ -551,9 +542,10 @@ impl Library {
                     books,
                     finished,
                 } => {
-                    let mut sub = plural(*books, "tom", "tomy", "tomów");
+                    let mut sub = trn(Plural::LibraryVolumes, *books);
                     if *finished > 0 {
-                        sub.push_str(&format!(" · {finished} przeczytane"));
+                        sub.push_str(" · ");
+                        sub.push_str(&tf!(Msg::LibrarySeriesFinished, n = finished));
                     }
                     Self::shelf_row(&mut t, s, Icon::Series, name, &sub, id)
                 }
@@ -562,19 +554,17 @@ impl Library {
         }
         let mut children = rows.clone();
         if rows.is_empty() {
-            let msg = match shelf.place {
+            let msg = tr(match shelf.place {
                 Place::Home {
                     view: View::Folders,
                     ..
-                } => "Brak folderów. Książki leżą prosto w documents.",
+                } => Msg::LibraryNoFolders,
                 Place::Home {
                     view: View::Series, ..
-                } => "Żadna książka nie należy do serii.",
-                _ if shelf.items.is_empty() && shelf.hero.is_none() => {
-                    "Brak książek. Skopiuj je do folderu documents."
-                }
-                _ => "Brak książek na tej półce.",
-            };
+                } => Msg::LibraryNoSeries,
+                _ if shelf.items.is_empty() && shelf.hero.is_none() => Msg::LibraryNoBooks,
+                _ => Msg::LibraryEmptyShelf,
+            });
             let l = t.text(Paragraph::plain(msg, s.ui().gray(INK_2), Align::Center));
             children.push(t.pad(Insets::vh(mm(10.0), Space::L), l));
         }
@@ -614,7 +604,7 @@ impl Library {
     }
 
     fn hero(t: &mut Tree, s: &Styles, b: &Book, covers: CoverMode) -> NodeId {
-        let caps = t.label("Czytaj dalej", s.caps());
+        let caps = t.label(tr(Msg::LibraryContinueReading), s.caps());
         let mut tp = Paragraph::plain(&b.title, s.headline(), Align::Left);
         tp.style.max_lines = Some(2);
         let title = t.text(tp);
@@ -628,8 +618,7 @@ impl Library {
         let chapter = t.text(cp);
         let chapter = t.add(Node::column(0).flex(1), [chapter]);
         let left = match b.minutes_left {
-            Some(min) if min >= 60 => format!("{pct:.0}% · {} godz. {} min", min / 60, min % 60),
-            Some(min) => format!("{pct:.0}% · {min} min"),
+            Some(min) => format!("{pct:.0}% · {}", fmt_duration(min)),
             None => format!("{pct:.0}%"),
         };
         let left = t.label(&left, s.small());
@@ -695,13 +684,13 @@ impl Library {
             }
             Status::Finished => {
                 let check = t.icon(Icon::Check, 30, INK_2);
-                let l = t.label("Przeczytana", s.small());
+                let l = t.label(tr(Msg::LibraryBookFinished), s.small());
                 let g = t.gap(Space::XS, 1);
                 t.add(Node::row(0), [check, g, l])
             }
             Status::Unread => match &series {
                 Some(text) => t.label(text, s.small().gray(INK_3)),
-                None => t.label("Nowa", s.caps()),
+                None => t.label(tr(Msg::LibraryBookNew), s.caps()),
             },
         };
         let status = t.fixed(None, Some(34), Some(status));
@@ -830,16 +819,17 @@ pub fn sample_items(books: &[Book], view: View) -> Vec<Item> {
     }
 }
 
-/// The series line of a library card: "Name · tom n", or "Tom n" inside the
-/// series' own view. A missing index arrives as 0 (and a 0 or negative one
-/// numbers nothing), so it is never shown as "tom 0": the name alone, or no
-/// line inside the series.
+/// The series line of a library card: "Name · vol. n", or "Volume n"
+/// inside the series' own view. A missing index arrives as 0 (and a 0 or
+/// negative one numbers nothing), so it is never shown as "vol. 0": the
+/// name alone, or no line inside the series.
 fn series_label(name: &str, index: f32, in_series: bool) -> Option<String> {
     let numbered = index > 0.0;
+    let n = series_number(index);
     match (in_series, numbered) {
-        (true, true) => Some(format!("Tom {}", series_number(index))),
+        (true, true) => Some(tf!(Msg::LibraryVolume, n = n)),
         (true, false) => None,
-        (false, true) => Some(format!("{name} · tom {}", series_number(index))),
+        (false, true) => Some(tf!(Msg::LibrarySeriesVolume, series = name, n = n)),
         (false, false) => Some(name.to_string()),
     }
 }
@@ -855,11 +845,27 @@ mod tests {
             Some("Gazeta")
         );
         assert_eq!(series_label("Gazeta", 0.0, true), None);
-        assert_eq!(
-            series_label("Dialogi", 3.0, false).as_deref(),
-            Some("Dialogi · tom 3")
-        );
-        assert_eq!(series_label("Dialogi", 3.0, true).as_deref(), Some("Tom 3"));
+        aristotle_i18n::with_language("en", || {
+            assert_eq!(
+                series_label("Dialogues", 3.0, false).as_deref(),
+                Some("Dialogues · vol. 3")
+            );
+            assert_eq!(
+                series_label("Dialogues", 2.5, true).as_deref(),
+                Some("Volume 2.5")
+            );
+        });
+        aristotle_i18n::with_language("pl", || {
+            assert_eq!(
+                series_label("Dialogi", 3.0, false).as_deref(),
+                Some("Dialogi · tom 3")
+            );
+            assert_eq!(series_label("Dialogi", 3.0, true).as_deref(), Some("Tom 3"));
+            assert_eq!(
+                series_label("Dialogi", 2.5, true).as_deref(),
+                Some("Tom 2,5")
+            );
+        });
     }
     use crate::geom::{SCREEN_HEIGHT, SCREEN_WIDTH};
     use crate::text::{FamilyId, Fonts};
@@ -881,7 +887,7 @@ mod tests {
             place: Place::Home { view, filter },
             hero: None,
             items,
-            sort: "Ostatnie",
+            sort: "Recent",
             status: StatusLine {
                 clock: "12:00",
                 battery: Some(0.5),
@@ -954,13 +960,18 @@ mod tests {
     }
 
     #[test]
-    fn polish_plurals() {
-        assert_eq!(books_label(1), "1 książka");
-        assert_eq!(books_label(3), "3 książki");
-        assert_eq!(books_label(5), "5 książek");
-        assert_eq!(books_label(12), "12 książek");
-        assert_eq!(books_label(22), "22 książki");
-        assert_eq!(plural(2, "tom", "tomy", "tomów"), "2 tomy");
+    fn plurals_follow_the_language() {
+        aristotle_i18n::with_language("pl", || {
+            assert_eq!(books_label(1), "1 książka");
+            assert_eq!(books_label(3), "3 książki");
+            assert_eq!(books_label(5), "5 książek");
+            assert_eq!(books_label(12), "12 książek");
+            assert_eq!(books_label(22), "22 książki");
+        });
+        aristotle_i18n::with_language("en", || {
+            assert_eq!(books_label(1), "1 book");
+            assert_eq!(books_label(22), "22 books");
+        });
     }
 
     #[test]

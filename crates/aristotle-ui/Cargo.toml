@@ -15,6 +15,7 @@ embedded-fonts = []
 preview = ["dep:png"]
 
 [dependencies]
+aristotle-i18n = { path = "../aristotle-i18n" }
 swash = { version = "0.2", default-features = false, features = ["std", "scale", "render"] }
 zeno = { version = "0.3", default-features = false, features = ["std", "eval"] }
 unicode-linebreak = "0.1"
