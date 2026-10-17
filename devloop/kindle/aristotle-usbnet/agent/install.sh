@@ -14,6 +14,13 @@ say() {
     eips 0 1 "$*                                        " > /dev/null 2>&1
 }
 
+# Two agents would fight over the USB port. One installed before the project's
+# rename is moved over by migrate.sh, which can roll back.
+if [ -e /etc/upstart/aristotle.conf ]; then
+    say "aristotle: earlier agent found; use Migrate agent instead"
+    exit 1
+fi
+
 mkdir -p "$S"
 cp "$HERE/boot.sh" "$HERE/aristotlectl" "$S/"
 chmod 755 "$S/boot.sh" "$S/aristotlectl"

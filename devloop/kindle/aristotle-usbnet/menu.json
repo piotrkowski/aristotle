@@ -16,6 +16,18 @@
           "status": false
         },
         {
+          "name": "Migrate agent from an earlier install",
+          "action": "sh ./agent/migrate.sh kual",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Undo agent migration",
+          "action": "sh ./agent/rollback.sh kual",
+          "exitmenu": false,
+          "status": false
+        },
+        {
           "name": "Start USB network once (manual)",
           "action": "sh ./bin/start.sh",
           "exitmenu": false,
