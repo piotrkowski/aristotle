@@ -329,7 +329,7 @@ impl Library {
         t.add(
             Node::new(Kind::Padding(Insets::all(0)))
                 .action(action::RESUME)
-                .feedback(Feedback::Outline),
+                .feedback(Feedback::Invert),
             [row],
         )
     }
@@ -373,7 +373,7 @@ impl Library {
         t.add(
             Node::new(Kind::MinSize(crate::geom::Size::new(0, MIN_TARGET)))
                 .action(id)
-                .feedback(Feedback::Outline),
+                .feedback(Feedback::Invert),
             [item],
         )
     }
