@@ -29,6 +29,8 @@ Hold **Library** for one second to quit. The stock interface returns after 30 to
 
 ## The agent (optional)
 
+Yes, you can use SSH over USB, without an internet connection. It is quite useful.
+
 The agent provides USB SSH at `192.168.15.244`, drive-mode switching from settings, and an update block. See [Host setup](../device/README.md).
 
 1. Copy your SSH public key to `extensions/aristotle/authorized_keys` on the Kindle drive.
