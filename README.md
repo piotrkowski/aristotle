@@ -63,7 +63,7 @@ The stock interface stays installed: Aristotle stops it while it runs, and it co
 Reading positions and highlights carry over between the stock reader and Aristotle, through the stock sidecar files and `My Clippings.txt` ([docs/library.md](docs/library.md)).
 
 Uninstalling removes everything the agent put on the device, including its SSH key.
-There is also a way out without SSH: connect the Kindle as a USB drive, create an empty file named `aristotle-disable` at its root, and restart it. The agent then does not start, and the stock system takes over.
+There is also a way out without SSH: in KUAL choose Aristotle › USB drive mode for 10 minutes, connect the Kindle to a computer, create an empty file named `aristotle-disable` at its root, and restart it. The agent then does not start, and the stock system takes over.
 
 ## Documentation
 
