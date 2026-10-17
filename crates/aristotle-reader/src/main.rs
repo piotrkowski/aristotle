@@ -29,6 +29,7 @@ mod open;
 mod pagecache;
 mod panel;
 mod prefs;
+mod prewarm;
 mod progress;
 mod session;
 mod shelf;
@@ -58,9 +59,10 @@ use aristotle_ui::tree::{Constraints, Kind, Node, NodeId, PaintCx, Refresh, Tree
 use aristotle_ui::ui::{Ui, UiEvent};
 use aristotle_ui::widgets::{Slider, Steps};
 
-use crate::open::Opening;
+use crate::open::{Opening, Pending};
 use crate::panel::{Content, Panel};
 use crate::prefs::Prefs;
+use crate::prewarm::Prewarm;
 use crate::progress::{Debounce, Saver};
 use crate::session::{Prepared, Session, Source};
 use crate::shelf::{Covers, ShelfModel, SORTS};
@@ -207,6 +209,8 @@ fn run() -> Result<(), Error> {
         saver,
         snapshots: snapshot::Writer::new(&args.library),
         opening: None,
+        pending: None,
+        prewarm: Prewarm::default(),
         debounce: Debounce::default(),
         prefs,
         ui,
@@ -280,6 +284,11 @@ struct App {
     snapshots: snapshot::Writer,
     /// The book being opened in the background ([`Screen::Opening`]).
     opening: Option<Box<Opening>>,
+    /// A book without a snapshot opening on a worker, the library still
+    /// on screen.
+    pending: Option<Box<Pending>>,
+    /// Snapshots made ahead of time while the library is idle.
+    prewarm: Prewarm,
     debounce: Debounce,
     prefs: Prefs,
     ui: Ui,
@@ -426,8 +435,11 @@ impl App {
                     timeout = timeout.min(Duration::from_millis(250));
                 }
             }
-            if self.opening.is_some() {
+            if self.opening.is_some() || self.pending.is_some() {
                 timeout = timeout.min(Duration::from_millis(10));
+            }
+            if let Some(d) = self.prewarm.deadline() {
+                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
             let events = match touch.poll(timeout.max(Duration::from_millis(1))) {
                 Ok(e) => e,
@@ -467,6 +479,13 @@ impl App {
         if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
             self.adopt(result)?;
         }
+        if let Some(result) = self.pending.as_ref().and_then(|p| p.worker.poll()) {
+            self.finish_pending(result)?;
+        }
+        if matches!(self.screen, Screen::Library { .. }) && self.pending.is_none() {
+            self.prewarm
+                .tick(&self.lib, &self.prefs.style(), &self.mobi_cache);
+        }
         if let Screen::Reader(r) = &mut self.screen {
             if r.session.poll_pagination() {
                 let (pn, pp) = r.session.prerender();
@@ -487,6 +506,7 @@ impl App {
 
     fn on_touch(&mut self, ev: &aristotle_hal::input::TouchEvent) -> Result<Flow, Error> {
         let ev = ui_event(ev);
+        self.prewarm.input();
         if self.opening.is_some() {
             return self.on_opening_touch(ev);
         }
@@ -516,6 +536,11 @@ impl App {
     }
 
     fn on_library_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
+        // Anything but opening a book gives up a book still opening.
+        let opens = |id: u32| id == ui_lib::action::RESUME || id >= ui_lib::action::BOOK;
+        if !matches!(ev, UiEvent::Action { id, .. } if opens(id)) {
+            self.cancel_pending();
+        }
         let Screen::Library { model, view } = &mut self.screen else {
             return Ok(Flow::Continue);
         };
@@ -524,10 +549,10 @@ impl App {
                 perf!("quit: title held");
                 return Ok(Flow::Quit);
             }
-            UiEvent::Action { id, .. } => match id {
+            UiEvent::Action { id, node, .. } => match id {
                 ui_lib::action::RESUME => {
                     if let Some(book) = model.hero_id().map(String::from) {
-                        self.open_book(&book)?;
+                        self.open_book(&book, Some(node))?;
                     }
                 }
                 ui_lib::action::SORT => {
@@ -537,7 +562,7 @@ impl App {
                 id if id >= ui_lib::action::BOOK => {
                     if let Some(book) = model.book_id((id - ui_lib::action::BOOK) as usize) {
                         let book = book.to_string();
-                        self.open_book(&book)?;
+                        self.open_book(&book, Some(node))?;
                     }
                 }
                 id if (ui_lib::action::FILTER..ui_lib::action::FILTER + 4).contains(&id) => {
@@ -562,7 +587,11 @@ impl App {
         Ok(Flow::Continue)
     }
 
-    fn open_book(&mut self, id: &str) -> Result<(), Error> {
+    fn open_book(&mut self, id: &str, card: Option<NodeId>) -> Result<(), Error> {
+        if self.pending.as_ref().is_some_and(|p| p.id == id) {
+            return Ok(());
+        }
+        self.cancel_pending();
         let Some(rec) = self.lib.book(id).cloned() else {
             return Ok(());
         };
@@ -578,12 +607,56 @@ impl App {
         if let Some(snap) = open::find_snapshot(&src, &style) {
             return self.open_from_snapshot(src, style, snap, t0);
         }
-        // Nothing to show before the layout: open it here.
-        let prepared = match Session::prepare(src, style, false) {
-            Ok(p) => p,
+        // Nothing to show before the layout: the tapped card stays inverted
+        // as the acknowledgement, the book opens on a worker, and the
+        // library keeps taking input (another card, a filter) meanwhile.
+        if let Some(card) = card {
+            self.ui.tree.set_inverted(card, true);
+        }
+        perf!(
+            "open: \"{}\": no snapshot, opening in the background",
+            rec.meta.title
+        );
+        self.pending = Some(Box::new(Pending {
+            id: id.to_string(),
+            title: rec.meta.title.clone(),
+            worker: open::spawn_with(src, style, false),
+            card,
+            tapped: t0,
+        }));
+        Ok(())
+    }
+
+    /// Forget a book opening without a snapshot (the reader tapped
+    /// something else): its worker drops to idle priority, its card is
+    /// released.
+    fn cancel_pending(&mut self) {
+        let Some(p) = self.pending.take() else {
+            return;
+        };
+        if let Some(card) = p.card {
+            self.ui.tree.set_inverted(card, false);
+        }
+        perf!(
+            "open: \"{}\" given up {:.0} ms after the tap",
+            p.title,
+            ms(p.tapped.elapsed())
+        );
+    }
+
+    /// Show a book opened without a snapshot: one mode-8 flash to its page.
+    fn finish_pending(&mut self, result: Result<Prepared, Error>) -> Result<(), Error> {
+        let Some(p) = self.pending.take() else {
+            return Ok(());
+        };
+        let prepared = match result {
+            Ok(prepared) => prepared,
             Err(e) => {
-                eprintln!("aristotle: {}: {e:#}", rec.meta.title);
-                return Ok(());
+                eprintln!("aristotle: {}: {e:#}", p.title);
+                if let Some(card) = p.card {
+                    self.ui.tree.set_inverted(card, false);
+                }
+                return self.render_ui();
             }
         };
         let times = prepared.times;
@@ -597,24 +670,29 @@ impl App {
         self.ui.gesture_config_mut().long_press_us = 500_000;
         self.render_ui()?;
         perf!(
-            "open: \"{}\": book {:.0} ms, position {:.0} ms, first page {:.0} ms, submitted after {:.0} ms; page numbers {}; no snapshot",
+            "open: \"{}\": book {:.0} ms, position {:.0} ms, first page {:.0} ms, submitted {:.0} ms after the tap; page numbers {}; no snapshot",
             session.title,
             ms(times.open),
             ms(times.place),
             ms(times.render),
-            ms(t0.elapsed()),
+            ms(p.tapped.elapsed()),
             if times.pages_cached { "from cache" } else { "being computed in the background" }
         );
-        self.lib.mark_opened(id, aristotle_library::library::now());
+        self.lib
+            .mark_opened(&p.id, aristotle_library::library::now());
         self.debounce.changed(Instant::now());
-        let (pn, pp) = session.prerender();
-        perf!(
-            "open: prerender next {:.0} ms, previous {:.0} ms",
-            ms(pn),
-            ms(pp)
-        );
         let gestures = TurnGestures::new(self.ui.bounds());
+        let old = std::mem::replace(&mut self.screen, Screen::Opening);
         self.enter_reader(session, menu, page_node, settings, gestures);
+        drop(old);
+        if let Screen::Reader(r) = &mut self.screen {
+            let (pn, pp) = r.session.prerender();
+            perf!(
+                "open: prerender next {:.0} ms, previous {:.0} ms",
+                ms(pn),
+                ms(pp)
+            );
+        }
         Ok(())
     }
 
@@ -622,7 +700,7 @@ impl App {
     /// book itself on a worker thread (see open.rs).
     fn open_from_snapshot(
         &mut self,
-        src: Source,
+        mut src: Source,
         style: Style,
         mut snap: snapshot::Loaded,
         t0: Instant,
@@ -645,6 +723,8 @@ impl App {
             ms(snap.decode)
         );
         let (title, id, stamp) = (src.title.clone(), src.id.clone(), src.stamp);
+        // Open exactly where the snapshot is, not where its locator maps.
+        src.exact = Some(snap.info.location);
         let worker = open::spawn(src, style.clone());
         let t = Instant::now();
         let next = snap.take_next().map(|(i, p)| (i, Rc::new(p)));

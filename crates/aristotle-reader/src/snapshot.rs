@@ -228,8 +228,9 @@ pub fn load(data_dir: &Path, key: &Key, style: &Style) -> Option<Loaded> {
     Some(loaded)
 }
 
-/// [`load`] on bytes already read.
-fn parse(data: &[u8], key: &Key, style: &Style) -> Option<Loaded> {
+/// The header and the compressed pages, if `data` is a whole snapshot for
+/// `key` with the geometry of `style`.
+fn parse_header<'a>(data: &'a [u8], key: &Key, style: &Style) -> Option<(Header, Vec<&'a [u8]>)> {
     if data.get(..8)? != MAGIC {
         return None;
     }
@@ -250,6 +251,20 @@ fn parse(data: &[u8], key: &Key, style: &Style) -> Option<Loaded> {
         blobs.push(data.get(at..at + size)?);
         at += size;
     }
+    Some((header, blobs))
+}
+
+/// Whether a snapshot for `key` exists, without decoding its pages.
+pub fn is_valid(data_dir: &Path, key: &Key, style: &Style) -> bool {
+    std::fs::read(path(data_dir, &key.book))
+        .ok()
+        .is_some_and(|data| parse_header(&data, key, style).is_some())
+}
+
+/// [`load`] on bytes already read.
+fn parse(data: &[u8], key: &Key, style: &Style) -> Option<Loaded> {
+    let (header, blobs) = parse_header(data, key, style)?;
+    let geometry = (style.width, style.height, style.stride);
     let page = decode_page(blobs[0], style.width, style.height, style.stride)?;
     let mut infos = header.pages.into_iter();
     let info = infos.next()?;
@@ -473,6 +488,10 @@ mod tests {
         }
         std::fs::write(&file, &good).unwrap();
         assert!(load(&dir, &k, &s).is_some());
+        assert!(is_valid(&dir, &k, &s));
+        std::fs::write(&file, &good[..good.len() - 1]).unwrap();
+        assert!(!is_valid(&dir, &k, &s));
+        std::fs::write(&file, &good).unwrap();
         // A first page saved for another locator than its key is not ours.
         let odd = Snapshot {
             key: k.clone(),

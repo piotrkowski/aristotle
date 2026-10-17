@@ -65,6 +65,13 @@ pub struct Source {
     pub data_dir: PathBuf,
     pub mobi_cache: PathBuf,
     pub saved: Option<Progress>,
+    /// A page start to open at instead of placing `saved`: the location of
+    /// a snapshot made for exactly this progress, so the book opens on the
+    /// page the snapshot shows, whatever rounding the locator went through.
+    pub exact: Option<usize>,
+    /// Whether to paginate the whole book in the background when its page
+    /// numbers are not cached (not for snapshots made ahead of time).
+    pub paginate: bool,
 }
 
 impl Source {
@@ -80,6 +87,8 @@ impl Source {
             data_dir: lib.data_dir().to_path_buf(),
             mobi_cache: mobi_cache.to_path_buf(),
             saved: rec.progress.clone(),
+            exact: None,
+            paginate: true,
         })
     }
 }
@@ -138,13 +147,15 @@ impl Session {
             &src.id,
             src.stamp,
             &src.path,
-            &src.mobi_cache,
+            src.paginate.then_some(src.mobi_cache.as_path()),
         );
         let t = Instant::now();
-        let target = progress::positions(src.saved.as_ref())
-            .iter()
-            .find_map(|p| book.location_of(p))
-            .unwrap_or(0);
+        let target = src.exact.unwrap_or_else(|| {
+            progress::positions(src.saved.as_ref())
+                .iter()
+                .find_map(|p| book.location_of(p))
+                .unwrap_or(0)
+        });
         let current = book
             .page_start(target)
             .ok_or_else(|| format_err!("the book has no pages"))?;
@@ -221,7 +232,7 @@ impl Session {
             &self.id,
             self.stamp,
             &self.path,
-            &self.mobi_cache,
+            Some(&self.mobi_cache),
         );
         self.paginator = paginator;
         cached
@@ -370,7 +381,8 @@ impl Session {
 }
 
 /// Use the stored pagination for `book` and `style`, or start one in the
-/// background. Returns whether it was cached, and the pagination thread.
+/// background (with `paginate_with`, the MOBI cache directory). Returns
+/// whether it was cached, and the pagination thread.
 fn start_pagination(
     book: &mut Book,
     style: &Style,
@@ -378,7 +390,7 @@ fn start_pagination(
     id: &str,
     stamp: (u64, i64),
     path: &Path,
-    mobi_cache: &Path,
+    paginate_with: Option<&Path>,
 ) -> (bool, Option<Paginator>) {
     if book.engine() != Engine::Plato {
         return (true, None);
@@ -388,6 +400,9 @@ fn start_pagination(
         book.set_pagination(pages);
         return (true, None);
     }
+    let Some(mobi_cache) = paginate_with else {
+        return (false, None);
+    };
     let paginator = Paginator::start(
         path.to_path_buf(),
         style.clone(),
