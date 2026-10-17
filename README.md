@@ -40,6 +40,8 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
 - Highlights go to `My Clippings.txt` in the stock format and to Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
+- Reading positions sync with KOReader through a KOSync server (EPUB chapters, PDF pages).
+- Books download from OPDS catalogs, such as calibre's content server, into the library.
 
 | Speed | Stock | Aristotle |
 |---|--:|--:|

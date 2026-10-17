@@ -112,6 +112,7 @@ aristotlectl mode net          # USB network + SSH (default)
 aristotlectl mode storage [N]  # USB drive mode for N minutes (default 10); SSH drops meanwhile
 aristotlectl net off|scoped    # Wi-Fi policy
 aristotlectl net status        # mode, allowed addresses, rule counters
+aristotlectl net allow add|remove HOST:PORT FEATURE   # a tagged net-allow line
 aristotlectl takeover on|off   # tell the watchdog the stock GUI is down on purpose
 aristotlectl gui-restart       # restart the stock GUI now
 aristotlectl app status        # Aristotle at boot: on/off, running, failed launches
@@ -308,7 +309,7 @@ the expected files.
 
 ## Network
 
-The reader opens no connections and listens on no port. Aristotle's only
+The reader listens on no port and opens connections only to the progress-sync server and the OPDS catalogs set up in its settings (`docs/library.md`, "Network"). Aristotle's only
 network is [the USB link](#the-usb-link) for development. Wi-Fi stays with the
 stock system unless you switch on the `scoped` policy, which lets the device
 reach a short list of hosts, such as a dashboard server.
@@ -387,6 +388,16 @@ time.example.net:123/udp
 
 Host names may contain letters, digits, dots and hyphens. Lines that don't
 parse are skipped and logged to `/var/local/aristotle/log`.
+
+The app's settings manage their own lines. Saving a sync server or a
+catalog runs `aristotlectl net allow add HOST:PORT sync|opds`, which appends
+`HOST:PORT   # aristotle:sync` (or `opds`) unless that tagged line is there,
+and deleting it runs `remove`, which deletes only lines with that entry and
+that tag. In `scoped` mode the change is applied at once; in `off` mode the
+line waits for `scoped`. The entry is checked with the same parser as the
+rest of the file. The app also checks each request and redirect against the
+list in `scoped` mode, so a missing host fails with a clear error instead
+of a timeout.
 
 ### How it works
 

@@ -30,7 +30,7 @@ Ui::render ── layout ─► candidate rects ─► repaint into Canvas ─�
 | `tree` | The node tree: layout, painting, hit testing, and mutators that record damage. |
 | `ui` | `Ui` holds the tree, the canvas and a copy of what the panel shows. It computes damage and dispatches gestures. |
 | `icons`, `widgets`, `theme` | The icon set, custom leaves (cover card, battery, busy mark, toggle, slider, size steps) and the design tokens. |
-| `screens` | `library`, `settings`, `sleep` and `reader`. |
+| `screens` | `library`, `settings`, `network` (sync, catalogs, feeds), `sleep` and `reader`. |
 
 ### Tree and layout
 
@@ -157,7 +157,7 @@ Spacing comes in multiples of 8 px (`Space::XS` 8 to `XXL` 64). Grays are panel 
 
 Light grays wash out under the frontlight, so hierarchy comes from size, weight and space. Controls and progress fills are pure black and white and change with DU.
 
-`icons::Icon::ALL` lists 38 outline icons on a 24-unit grid. `icons::stroke_px` picks a whole-pixel stroke per size. At the standard 48 px one unit is 2 px, so straight strokes cover whole pixels and stay pure black under A2 and DU. Icons sit in 9 mm buttons (`screens::icon_button`).
+`icons::Icon::ALL` lists 40 outline icons on a 24-unit grid. `icons::stroke_px` picks a whole-pixel stroke per size. At the standard 48 px one unit is 2 px, so straight strokes cover whole pixels and stay pure black under A2 and DU. Icons sit in 9 mm buttons (`screens::icon_button`).
 
 ## Adding a screen
 

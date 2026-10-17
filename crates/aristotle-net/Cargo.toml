@@ -1,0 +1,24 @@
+[package]
+name = "aristotle-net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Aristotle's network client: HTTP with the device's host allowlist, Basic and Digest auth, KOSync progress sync and OPDS 1.2 catalogs"
+
+[features]
+default = []
+# HTTPS through rustls with ring and the webpki root certificates. ring
+# compiles C, so this feature is built like aristotle-render (a C cross
+# compiler for the target, see tools/build-render.sh); without it the crate
+# is pure Rust and speaks plain HTTP only.
+tls = ["ureq/rustls"]
+
+[dependencies]
+libc.workspace = true
+ureq = { version = "3.4", default-features = false }
+md-5 = "0.11"
+roxmltree = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

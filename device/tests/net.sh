@@ -89,6 +89,42 @@ check "off: apply succeeds" "[ $? = 0 ]"
 check "off: stock INPUT and OUTPUT restored" "diff $WORK/stock-INPUT $T/INPUT && diff $WORK/stock-OUTPUT $T/OUTPUT"
 check "off: chains removed" "[ ! -e $T/ARISTOTLE_IN ] && [ ! -e $T/ARISTOTLE_OUT ]"
 
+# aristotlectl net allow, as the app's settings call it: tagged lines in
+# net-allow, the user's own lines left alone, applied at once in scoped
+# mode only.
+cp "$HERE/../extension/agent/net.sh" "$S/net.sh"
+# aristotlectl works only in a folder that is its owner's alone; here the
+# owner is the user running the test.
+chmod 700 "$S"
+AGENT_TEST_OWNER=$(id -u)
+export AGENT_TEST_OWNER
+CTL="sh $HERE/../extension/agent/aristotlectl"
+printf '%s\n' 'calibre.lan:8080   # my own line' > "$S/net-allow"
+$CTL net allow add calibre.lan:8080 opds > /dev/null
+check "allow add: tagged line appended" "grep -qx 'calibre.lan:8080 *# aristotle:opds' $S/net-allow && grep -q '# my own line' $S/net-allow"
+$CTL net allow add calibre.lan:8080 opds > /dev/null
+check "allow add: twice adds one line" "[ \$(grep -c 'aristotle:opds' $S/net-allow) = 1 ]"
+check "allow add: the line parses" "$NET parse < $S/net-allow 2>&1 | sort -u | grep -qx 'calibre.lan 8080 tcp'"
+check "allow add: off mode applies nothing" "[ ! -e $T/ARISTOTLE_OUT ]"
+for bad in 'bad host:80 opds' 'calibre.lan:99999 opds' 'calibre.lan:80 Opds!' 'calibre.lan:80'; do
+    # shellcheck disable=SC2086 # the words are the arguments
+    $CTL net allow add $bad > /dev/null 2>&1
+    check "allow add: refuses '$bad'" "[ $? = 2 ]"
+done
+check "allow add: refused entries left no trace" "[ \$(grep -c . $S/net-allow) = 2 ]"
+echo scoped > "$S/net-mode"
+$CTL net allow add dash.example.org:8443 sync > /dev/null
+check "allow add: scoped mode applies at once" "grep -q -- '-d 203.0.113.7 -p tcp --dport 8443 -j ACCEPT' $T/ARISTOTLE_OUT"
+$CTL net allow remove calibre.lan:8080 opds > /dev/null
+check "allow remove: only the tagged line goes" "! grep -q aristotle:opds $S/net-allow && grep -q '# my own line' $S/net-allow"
+$CTL net allow remove dash.example.org:8443 sync > /dev/null
+check "allow remove: scoped rules follow" "! grep -q 'dport 8443' $T/ARISTOTLE_OUT"
+$CTL net allow remove dash.example.org:8443 sync > /dev/null
+check "allow remove: twice is harmless" "[ $? = 0 ]"
+echo off > "$S/net-mode"
+$NET apply
+check "off again: stock INPUT and OUTPUT restored" "diff $WORK/stock-INPUT $T/INPUT && diff $WORK/stock-OUTPUT $T/OUTPUT"
+
 if [ $failures = 0 ]; then
     echo "net: all checks passed"
 else

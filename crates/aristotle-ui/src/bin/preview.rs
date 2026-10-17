@@ -23,6 +23,7 @@ use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{
     self, sample_items, CoverMode, Filter, Item, Library, Place, Shelf, StatusLine, View,
 };
+use aristotle_ui::screens::network::{self, CatalogsView, EntryView, FeedView, SyncView};
 use aristotle_ui::screens::reader::{self, Reader, Settings, Zone};
 use aristotle_ui::screens::settings::{self as settings_screen, BatteryInfo, SystemView, Usb};
 use aristotle_ui::screens::sleep;
@@ -361,6 +362,8 @@ fn settings_screens(out: &Path) {
         date: &date,
         time: "21:38",
         usb: Some(Usb::Network),
+        sync: Some("anna at http://192.168.15.201:17200"),
+        catalogs: 2,
         about: &about,
     };
     let mut text = TextEngine::new(Fonts::embedded());
@@ -416,6 +419,93 @@ fn settings_screens(out: &Path) {
     ids.sync(&mut ui.tree);
     ui.render();
     save(ui.screen(), &out.join("settings-page2-charging-night.png"));
+}
+
+/// Settings › Network: sync, the catalogs, a feed and a book.
+fn network_screens(out: &Path) {
+    let styles = Styles::new(FamilyId(0));
+    let shown = |tree: Tree, text: TextEngine, f: &network::Frame| {
+        let mut ui = Ui::new(tree, text, W, H);
+        ui.layout();
+        f.sync(&mut ui.tree);
+        ui
+    };
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = SyncView {
+        status: STATUS,
+        server: Some("http://192.168.15.201:17200"),
+        username: Some("anna"),
+        has_key: true,
+        auto: true,
+        message: "Logged in as anna.",
+        import_path: "/mnt/us/aristotle/sync.json",
+    };
+    let (tree, f) = network::build_sync(&mut text, &styles, &v);
+    let mut ui = shown(tree, text, &f);
+    day_night(&mut ui, out, "sync");
+    // Flipping the switch and a new message: one partial update.
+    let toggled = SyncView {
+        auto: false,
+        message: "Checking…",
+        ..v
+    };
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, f) = network::build_sync(&mut text, &styles, &toggled);
+    ui.set_tree_with(tree, aristotle_ui::tree::Refresh::Auto);
+    ui.layout();
+    f.sync(&mut ui.tree);
+    let d = ui.render();
+    log("sync: switch off, checking", &ui, &d);
+    save(
+        &damage_overlay(&mut ui, &d, "sync: switch off"),
+        &out.join("sync-damage.png"),
+    );
+
+    let cats = network::sample::catalogs();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = CatalogsView {
+        status: STATUS,
+        catalogs: &cats,
+        message: "",
+        import_path: "/mnt/us/aristotle/catalogs.json",
+    };
+    let (tree, f) = network::build_catalogs(&mut text, &styles, &v);
+    let mut ui = shown(tree, text, &f);
+    day_night(&mut ui, out, "catalogs");
+
+    let rows = network::sample::feed_rows();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = FeedView {
+        status: STATUS,
+        title: "calibre Library :: Newest",
+        rows: &rows,
+        searchable: true,
+        more_before: false,
+        more_after: true,
+        message: "",
+    };
+    let (tree, f) = network::build_feed(&mut text, &styles, &v);
+    let mut ui = shown(tree, text, &f);
+    day_night(&mut ui, out, "catalog-feed");
+
+    let formats = vec![
+        "EPUB · 1.2 MB".to_string(),
+        "AZW3".to_string(),
+        "PDF".to_string(),
+    ];
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = EntryView {
+        status: STATUS,
+        title: "Lalka",
+        authors: "Bolesław Prus",
+        summary: "Warszawa, rok 1878. Stanisław Wokulski, kupiec galanteryjny, wraca z wojny bogaty i zakochany.",
+        formats: &formats,
+        downloaded: true,
+        message: "Saved as Calibre/Lalka.epub.",
+    };
+    let (tree, f) = network::build_entry(&mut text, &styles, &v);
+    let mut ui = shown(tree, text, &f);
+    day_night(&mut ui, out, "catalog-entry");
 }
 
 fn sleep_screens(out: &Path) {
@@ -747,6 +837,8 @@ fn targets(out: &Path) {
         date: "",
         time: "21:38",
         usb: Some(Usb::Network),
+        sync: Some("anna at http://192.168.15.201:17200"),
+        catalogs: 2,
         about: &about,
     };
     let mut text = TextEngine::new(Fonts::embedded());
@@ -756,6 +848,62 @@ fn targets(out: &Path) {
     dump_targets(&mut ui, "settings-1", &mut s);
     ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
     dump_targets(&mut ui, "settings-2", &mut s);
+    ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+    dump_targets(&mut ui, "settings-3", &mut s);
+    // The network screens, with a sync account and two catalogs.
+    let styles = Styles::new(FamilyId(0));
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = SyncView {
+        status: STATUS,
+        server: Some("http://192.168.15.201:17200"),
+        username: Some("anna"),
+        has_key: true,
+        auto: true,
+        message: "",
+        import_path: "/mnt/us/aristotle/sync.json",
+    };
+    let (tree, _) = network::build_sync(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "sync", &mut s);
+    let cats = network::sample::catalogs();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = CatalogsView {
+        status: STATUS,
+        catalogs: &cats,
+        message: "",
+        import_path: "/mnt/us/aristotle/catalogs.json",
+    };
+    let (tree, _) = network::build_catalogs(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalogs", &mut s);
+    let rows = network::sample::feed_rows();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = FeedView {
+        status: STATUS,
+        title: "Feed",
+        rows: &rows,
+        searchable: true,
+        more_before: false,
+        more_after: true,
+        message: "",
+    };
+    let (tree, _) = network::build_feed(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalog-feed", &mut s);
+    let formats = vec!["EPUB · 1.2 MB".to_string(), "PDF".to_string()];
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = EntryView {
+        status: STATUS,
+        title: "Apology",
+        authors: "Plato",
+        summary: "A public-domain test book.",
+        formats: &formats,
+        downloaded: false,
+        message: "",
+    };
+    let (tree, _) = network::build_entry(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalog-entry", &mut s);
     let mut t = Tree::new();
     let page = t.spacer(1);
     let spec = MenuSpec {
@@ -804,6 +952,7 @@ fn render_all(out: &Path) {
     covers_sheet(out);
     library_screens(out);
     settings_screens(out);
+    network_screens(out);
     sleep_screens(out);
     reader_screens(out, &fonts_dir);
     targets(out);

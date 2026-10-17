@@ -96,7 +96,14 @@
     "about_software": "Software",
     "about_reader": "E-reader",
     "about_firmware": "Kindle firmware",
-    "about_memory": "Memory"
+    "about_memory": "Memory",
+    "section_network": "Network",
+    "sync": "Progress sync",
+    "sync_off": "Share your place in a book with KOReader",
+    "sync_on": "{user} at {server}",
+    "catalogs": "Catalogs",
+    "catalogs_none": "Download books from OPDS catalogs",
+    "catalogs_count": {"one": "{n} catalog", "other": "{n} catalogs"}
   },
   "sleep": {
     "wake_hint": "Touch the screen to return"
@@ -134,7 +141,12 @@
     "no_highlights": "No highlights or bookmarks yet. Hold a word to select it.",
     "bookmark": "Bookmark",
     "go_to_title": "Go to position",
-    "go": "Go"
+    "go": "Go",
+    "sync_title": "Position from another device",
+    "sync_body": "{device} is at {percent}. Go there?",
+    "sync_body_chapter": "{device} is at {percent}, in “{chapter}”. Go there?",
+    "sync_go": "Go there",
+    "sync_stay": "Stay here"
   },
   "dict": {
     "none": "No dictionaries. Copy StarDict dictionaries (.ifo, .idx, .dict.dz) to /mnt/us/dictionaries.",
@@ -150,5 +162,62 @@
     "source": "source",
     "tag": "highlights",
     "note": "Note"
+  },
+  "sync": {
+    "title": "Progress sync",
+    "intro": "When you close a book, your place in it goes to a KOSync server. It comes back when you open the book here or in KOReader.",
+    "server": "Server",
+    "user": "User name",
+    "password": "Password",
+    "not_set": "Not set",
+    "password_saved": "Saved, as its MD5 key only",
+    "auto": "Sync automatically",
+    "auto_hint": "Fetch the position when a book opens, send it when the book closes",
+    "log_in": "Log in",
+    "register": "Register",
+    "forget": "Forget this server",
+    "import": "Load sync.json",
+    "import_hint": "Reads {path}",
+    "state_off": "No server yet.",
+    "state_unchecked": "Not logged in yet.",
+    "state_checking": "Checking…",
+    "state_ok": "Logged in as {user}.",
+    "state_registered": "Registered and logged in as {user}.",
+    "imported": "Loaded from {path}.",
+    "nothing_to_import": "There is no {path}.",
+    "type_later": "Typing comes with the on-screen keyboard. Until then, put the settings in {path}.",
+    "error_taken": "This user name is taken.",
+    "error_closed": "The server does not accept new users.",
+    "error_file": "Can't read {path}: {error}"
+  },
+  "catalogs": {
+    "title": "Catalogs",
+    "add": "Add catalog",
+    "import": "Load catalogs.json",
+    "import_hint": "Reads {path}",
+    "empty": "No catalogs yet.",
+    "loading": "Loading…",
+    "empty_feed": "Nothing here.",
+    "search": "Search",
+    "results": "Results for “{terms}”",
+    "no_formats": "No file this reader opens",
+    "download": "Download {format}",
+    "downloading": "Downloading… {percent}",
+    "downloaded": "Saved as {path}.",
+    "read_now": "Read now",
+    "removed": "Removed {name}.",
+    "not_feed": "This is not an OPDS catalog.",
+    "too_large": "The book is larger than {size}.",
+    "no_space": "Not enough free space."
+  },
+  "net": {
+    "not_allowed": "{host} is not in the allowed hosts. Add it with aristotlectl net allow.",
+    "unreachable": "Can't reach the server. Is Wi-Fi on?",
+    "timeout": "The server did not answer in time.",
+    "no_https": "This build has no HTTPS. Use an http:// address.",
+    "clock": "The server's certificate does not fit the device's time. Check the date and time.",
+    "tls": "The secure connection failed: {detail}",
+    "refused": "The server refused the user name or password.",
+    "other": "Error: {detail}"
   }
 }

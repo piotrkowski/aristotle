@@ -25,6 +25,10 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # Data only: webpki-roots, the root certificates of the tls feature
+    # (Mozilla's list). Use and redistribution need only the licence text,
+    # which the bundle carries.
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "MPL-2.0",

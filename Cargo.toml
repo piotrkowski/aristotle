@@ -5,6 +5,7 @@ members = [
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",
+    "crates/aristotle-net",
     "crates/aristotle-ui",
     "crates/aristotle-render",
     "crates/aristotle",
@@ -17,6 +18,7 @@ default-members = [
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",
+    "crates/aristotle-net",
     "crates/aristotle-ui",
 ]
 # Plato's own workspace (our fork, a submodule): plato-core is a path

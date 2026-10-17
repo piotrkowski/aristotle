@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Written for the tests in the shape of Project Gutenberg's OpenSearch
+     description. -->
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>Project Gutenberg</ShortName>
+  <Description>Search the Project Gutenberg ebook catalog.</Description>
+  <InputEncoding>UTF-8</InputEncoding>
+  <Url type="text/html" template="https://www.gutenberg.org/ebooks/search/?query={searchTerms}"/>
+  <Url type="application/atom+xml;profile=opds-catalog" template="https://www.gutenberg.org/ebooks/search.opds/?query={searchTerms}"/>
+</OpenSearchDescription>
