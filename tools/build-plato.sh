@@ -184,7 +184,9 @@ for tool in ar ranlib; do
     chmod +x "$w"
 done
 export PATH="$B/bin:$PATH"
-CFLAGS="-O2"
+# One section per function and object, so the final link (--gc-sections)
+# drops what nothing calls; MuPDF's own rules already do this.
+CFLAGS="-O2 -ffunction-sections -fdata-sections"
 XCC="$B/bin/$PFX-cc"
 XCXX="$B/bin/$PFX-c++"
 XAR="$B/bin/$PFX-ar"
