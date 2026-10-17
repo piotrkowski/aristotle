@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Device guard, sourced (not run) by every script that changes the device
 # outside /mnt/us: agent/install.sh, agent/migrate.sh, bin/start.sh and
 # takeover.sh. Aristotle is built and tested on one model and one firmware

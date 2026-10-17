@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Host-side test of the device scripts other than the migration: the device
 # guard (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and
 # takeover.sh, uninstall.sh, the kill switch in boot.sh, and the takeover
