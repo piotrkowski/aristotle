@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/aristotle-hal",
-    "crates/aristotle-bench",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",
@@ -15,7 +14,6 @@ members = [
 # two with tools/build-render.sh after tools/build-plato.sh.
 default-members = [
     "crates/aristotle-hal",
-    "crates/aristotle-bench",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",

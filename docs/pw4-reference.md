@@ -83,7 +83,7 @@ The EPDC driver loads waveforms with `request_firmware("eink/waveform")` from `/
 
 ### Waveform modes and timings
 
-The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where A2 is mode 6. The PW2 numbering does not apply. Times were measured with `aristotle-bench` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
+The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where A2 is mode 6. The PW2 numbering does not apply. Times were measured with `aristotle-observe bench latency` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
 
 | Mode | Name | Time |
 | --- | --- | --- |

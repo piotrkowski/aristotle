@@ -8,7 +8,7 @@ Drawing into the memory-mapped framebuffer does not change the panel. An update 
 
 The PW4 driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`. In the older PW2 numbering, "A2" is 4, which on this device is REAGL and almost four times slower.
 
-One update on an idle panel, 120 × 120 region, black and white toggles, median of 6 (`aristotle-bench`):
+One update on an idle panel, 120 × 120 region, black and white toggles, median of 6 (`aristotle-observe bench latency`):
 
 | Mode | Name | Use | Time |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ One update on an idle panel, 120 × 120 region, black and white toggles, median 
 
 ## One update at a time
 
-`aristotle-bench --bin stream` submits 24 small updates at a fixed interval and records each one's latency and how long its submit blocks.
+`aristotle-observe bench stream` submits 24 small updates at a fixed interval and records each one's latency and how long its submit blocks.
 
 | Updates | Interval | Latency p50 | Submit blocks |
 | --- | --- | --- | --- |
@@ -91,4 +91,4 @@ The floor is one A2 update, about 120 ms. The p50 of 199 ms is about 80 ms above
 | Framebuffer, update ioctl, waveform numbers | `crates/aristotle-hal/src/framebuffer.rs` |
 | Display thread, completion tracking | `crates/aristotle-hal/src/display.rs` |
 | Touch input with kernel timestamps | `crates/aristotle-hal/src/input.rs` |
-| Waveform and streaming benchmarks | `crates/aristotle-bench/` |
+| Waveform, streaming and page-turn benchmarks | `crates/aristotle-observe/src/bench/` |

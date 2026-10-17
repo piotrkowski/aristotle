@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Page-turn strategy experiment on real text.
+//! `aristotle-observe bench pageturn`: page-turn strategies on real text.
 //!
 //! Alternates between two full-screen text pages (raw 8-bit framebuffer
 //! dumps, stride 1088) and measures, per strategy, when the new page is
@@ -8,7 +8,7 @@
 //! (`docs/native-vs-aristotle.md`).
 //!
 //! ```text
-//! pageturn PAGE.raw [TURNS] [PAUSE_MS] [STRATEGY]
+//! aristotle-observe bench pageturn PAGE.raw [TURNS] [PAUSE_MS] [STRATEGY]
 //! ```
 //!
 //! The second page is the first shifted down by 37 rows, so every glyph
@@ -22,6 +22,11 @@
 //! - `du+gl16`: black and white page with DU first (visible), then the
 //!   anti-aliased page with GL16 (settled).
 //! - `a2+gl16`: as above, but the first pass uses A2.
+//!
+//! With a `PAUSE_MS` above 0 it is a demo for judging by eye: each strategy
+//! starts from a full flash, and the turns are `PAUSE_MS` apart, for example
+//! `bench pageturn /var/tmp/page.raw 4 3000`. Run it with the stock GUI
+//! stopped (`takeover.sh start`).
 
 use std::fs;
 use std::io;
@@ -70,8 +75,7 @@ fn median(mut v: Vec<u128>) -> u128 {
     v[v.len() / 2]
 }
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+pub fn run(args: &[String]) -> io::Result<()> {
     let path = args
         .first()
         .cloned()
@@ -98,6 +102,13 @@ fn main() -> io::Result<()> {
     for name in ["gl16", "glr16", "du", "du+gl16", "a2+gl16"] {
         if only.as_deref().is_some_and(|o| o != name) {
             continue;
+        }
+        if pause_ms > 0 {
+            // Demo: start each strategy from a clean page.
+            println!("== {name}");
+            blit(&mut fb, &a);
+            let m = fb.update(screen, Waveform::GC16, true)?;
+            fb.wait(m)?;
         }
         let (mut visible, mut settled) = (Vec::new(), Vec::new());
         for t in 0..turns {

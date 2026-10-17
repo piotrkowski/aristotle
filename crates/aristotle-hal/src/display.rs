@@ -3,7 +3,7 @@
 //!
 //! # Why
 //!
-//! Measured on the PW4 (`aristotle-bench --bin stream`): the Lab126 EPDC
+//! Measured on the PW4 (`aristotle-observe bench stream`): the Lab126 EPDC
 //! driver effectively runs one update at a time. An update submitted while
 //! another is still being displayed makes the submit ioctl block until the
 //! earlier one finishes (about 120 ms for A2), whether or not the two regions

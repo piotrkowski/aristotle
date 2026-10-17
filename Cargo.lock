@@ -42,13 +42,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aristotle-bench"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
-]
-
-[[package]]
 name = "aristotle-hal"
 version = "0.1.0"
 dependencies = [

@@ -33,8 +33,7 @@ docs/, site/        developer documents and the project site
 | `aristotle-library` | Finds, indexes and describes EPUB, MOBI/AZW3, PDF, TXT and CBZ files. Covers, clippings, export, and `aristotle-library-cli` ([Library](library.md)) |
 | `aristotle-render` | Plato's document engine and MuPDF: opening, pagination, page rendering, footnotes ([Reader](reader.md)) |
 | `aristotle-reader` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
-| `aristotle-bench` | EPDC latency per waveform, parallel updates, page turns |
-| `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches |
+| `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches. `bench` measures EPDC latency per waveform, streamed updates and page-turn strategies |
 
 `aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The reader depends on all of them, and takes `aristotle-ui` without its embedded fonts.
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! EPDC latency benchmark. Prints submit-to-complete times per waveform for a
-//! small region, then checks whether disjoint regions refresh concurrently and
-//! how overlapping ones queue. Results drive the refresh policy.
+//! `aristotle-observe bench latency`: EPDC latency per waveform. Prints
+//! submit-to-complete times per waveform for a small region, then checks
+//! whether disjoint regions refresh concurrently and how overlapping ones
+//! queue. Results drive the refresh policy.
 
 use std::time::{Duration, Instant};
 
@@ -23,7 +24,7 @@ fn tile(i: u32) -> Rect {
     }
 }
 
-fn main() -> std::io::Result<()> {
+pub fn run() -> std::io::Result<()> {
     let mut fb = Framebuffer::open("/dev/fb0")?;
     let screen = fb.full_screen();
     fb.fill(screen, 0xff);

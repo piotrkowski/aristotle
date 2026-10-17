@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! EPDC streaming experiment: how does A2 latency behave when updates arrive
-//! continuously, as they do while a finger draws?
+//! `aristotle-observe bench stream`: how does A2 latency behave when updates
+//! arrive continuously, as they do while a finger draws?
 //!
 //! Submits `COUNT` small A2 updates at a fixed interval along a horizontal
 //! path and measures each one's submit-to-complete time on a waiter thread.
@@ -11,7 +11,7 @@
 //!
 //! Also reports how long the submit ioctl itself blocked, which revealed that
 //! the driver runs one update at a time (see `docs/eink-rendering.md`). Pass
-//! `waveforms` to compare A2, DU and GL16 instead.
+//! `waveforms` (`bench stream waveforms`) to compare A2, DU and GL16 instead.
 
 use std::sync::mpsc;
 use std::thread;
@@ -27,14 +27,14 @@ fn pct(sorted: &[u64], p: f64) -> f64 {
     sorted[((sorted.len() - 1) as f64 * p).round() as usize] as f64 / 1000.0
 }
 
-fn main() -> std::io::Result<()> {
+pub fn run(args: &[String]) -> std::io::Result<()> {
     let mut fb = Framebuffer::open("/dev/fb0")?;
     let screen = fb.full_screen();
     fb.fill(screen, 0xff);
     let m = fb.update(screen, Waveform::GC16, true)?;
     fb.wait(m)?;
 
-    let only_waveforms = std::env::args().any(|a| a == "waveforms");
+    let only_waveforms = args.iter().any(|a| a == "waveforms");
     let cases: Vec<(bool, u64, Waveform)> = if only_waveforms {
         [Waveform::A2, Waveform::DU, Waveform::GL16]
             .into_iter()

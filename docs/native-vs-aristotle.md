@@ -40,7 +40,7 @@ The Goodix touchscreen declares only multi-touch axes, and the input core drops 
 
 ## Page-turn strategy experiment
 
-`aristotle-bench --bin pageturn` alternates two full-screen pages with the stock GUI stopped: a Polish novel page as the stock reader rendered it, and the same page shifted by 37 rows. Times are the median of 6 turns, and two runs agreed within 5 ms.
+`aristotle-observe bench pageturn` alternates two full-screen pages with the stock GUI stopped: a Polish novel page as the stock reader rendered it, and the same page shifted by 37 rows. Times are the median of 6 turns, and two runs agreed within 5 ms.
 
 | Strategy | Visible | Settled |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ The Goodix touchscreen declares only multi-touch axes, and the input core drops 
 | DU, then GL16 | 291 ms | 771 ms |
 | **A2, then GL16** | **150 ms** | **630 ms** |
 
-"Visible" is the end of the first update that shows the new page. Two-step strategies show a black-and-white page first. Blitting a page takes well under a millisecond (`Framebuffer::blit`). A slow demo of all five (`devloop/kindle/pageturn-demo.sh`) looked fine, but its two pages differed only by the shift, so little residue built up.
+"Visible" is the end of the first update that shows the new page. Two-step strategies show a black-and-white page first. Blitting a page takes well under a millisecond (`Framebuffer::blit`). A slow demo of all five (`aristotle-observe bench pageturn PAGE.raw 4 3000`) looked fine, but its two pages differed only by the shift, so little residue built up.
 
 ### What real reading showed
 
