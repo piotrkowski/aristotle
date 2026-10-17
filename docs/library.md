@@ -4,6 +4,8 @@
 
 Sources are marked as in the rest of the docs: **[fw]** read from firmware 5.13.6, **[host]** verified on the host with real files, **[dev]** verified on files copied from our device, **[KOReader]**, **[calibre]** borrowed from those projects, and **[inference]** for anything not yet confirmed.
 
+<img src="../assets/screenshots/library.png" width="325" alt="The library on the device: the book to continue at the top, then the Books, Folders and Series views, the shelves All, Reading, New and Finished, and a page of books">
+
 ## Layout
 
 | Module | What |

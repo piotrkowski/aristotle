@@ -116,7 +116,7 @@ Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-tr
 | Library filter tab | 60–64 ms | 552–741 ms | 2 | no | a2, gl16 |
 | Shelf page | 51–53 ms | 516–535 ms | 2 | every 5th | a2, gl16 (gck16 when flashing) |
 | Sort | 59–61 ms | 743–749 ms | 2 | no | a2, gl16 |
-| Open the "Czytaj dalej" book | 67 ms | 1282 ms | 2 | yes | a2, gck16 full |
+| Open the "Continue reading" book | 67 ms | 1282 ms | 2 | yes | a2, gck16 full |
 
 What this shows, to fix next:
 

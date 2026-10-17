@@ -184,7 +184,7 @@ Night mode mirrors the palette exactly rather than using a second, softer one: w
 
 - **Status line:** the time at the left; percentage and battery at the right (the battery draws a bolt while charging). A hidden busy mark sits in its middle ([Transitions](#transitions)).
 - **Header:** the display title with the settings gear, or on a shelf a back arrow, the shelf's name in headline size, "Folder · 3 książki" and the sort button.
-- **Tabs** ("Książki", "Foldery", "Serie"): text with a 5 px black underline under the chosen one.
+- **Tabs** ("Books", "Folders", "Series"): text with a 5 px black underline under the chosen one.
 - **Chips** (shelves, presets, choices): pill-shaped; the chosen one solid black with white bold text, the others a 2 px `RULE` outline. They answer touch-down by inverting.
 - **List rows:** title, author, then a status line (progress bar and percentage, "✓ Finished", "New" in small capitals, or "Series · vol. 2"); a 1 px `RULE` hairline below. Folder and series rows carry their icon and a chevron.
 - **Cards** (optional covers, `widgets::Cover`): see [Covers](#covers).
@@ -205,7 +205,12 @@ One family of 37 icons (`icons::Icon::ALL`): library, back, menu, settings, sear
 
 ## Night mode
 
-Night mode shows every screen, the library, the reader page, the menu and the settings, as white on black. It is one switch (the "Noc" row of the reader menu and "Tryb nocny" in the settings), stored in `reader.json`.
+Night mode shows every screen, the library, the reader page, the menu and the settings, as white on black. It is one switch (the "Night" row of the reader menu and "Night mode" in the settings), stored in `reader.json`.
+
+<p>
+  <img src="../assets/screenshots/reader.png" width="325" alt="Book I, Chapter I of Aristotle's Nicomachean Ethics in English, black on white">
+  <img src="../assets/screenshots/reader-night.png" width="325" alt="The same page in night mode, white on black">
+</p>
 
 ### How the screen is inverted
 
@@ -254,6 +259,11 @@ The rule: nothing may look buggy. Each user action becomes one coherent update o
 | Screensaver after the idle time, and waking | 1 full mode 8 each (the waking touch does nothing else) | about 570 ms |
 
 ## Screens and the stock UI
+
+<p>
+  <img src="../assets/screenshots/reader-menu.png" width="325" alt="The reader menu over a page: Library, Contents, Highlights and Go to at the top; chapter and page, size, spacing, margins, light and night below">
+  <img src="../assets/screenshots/settings.png" width="325" alt="Settings: frontlight in 24 steps with presets, night mode, covers in the library, battery and the screensaver delay">
+</p>
 
 The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every screen from this crate: the library with `Library::build_shelf` from a `Shelf` (a `Place`: home with a view and a shelf, or a folder or series; the book to continue; rows as `Item`s; sort label; status line; cover mode), the settings with `Settings::build` from a `SystemView`, the screensaver with `sleep::build`, and the reader menu with `build_menu` over pages rendered by Plato. Every label comes from `aristotle-i18n` in the UI language, English by default.
 
