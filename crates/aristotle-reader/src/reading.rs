@@ -1456,6 +1456,7 @@ fn dict_body(l: &Lookup, no_dicts: bool, full: bool) -> RichText {
 }
 
 /// The dictionary popup for a lookup.
+#[allow(clippy::too_many_arguments)]
 fn dict_popup(
     t: &mut Tree,
     st: &aristotle_ui::theme::Styles,
