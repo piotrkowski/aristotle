@@ -1,7 +1,8 @@
 # Reading interactions of the Aristotle reader, on the test book "Próba
-# czytania": contents, dictionary popups (Polish, Greek, a Greek form, the
-# dictionary switcher), selecting by dragging, highlighting, a Latin gloss,
-# a footnote, the bookmark corner, the highlights list, go to 50 %.
+# czytania": contents, dictionary popups (Polish, Polish at night, Greek
+# with "Więcej", the dictionary switcher, a Greek form), selecting by
+# dragging, highlighting, a Latin gloss, a footnote, the bookmark corner,
+# the highlights list, go to 50 %.
 #
 # Coordinates come from `aristotle --preview` on the same book with the
 # default typography (10 pt, normal spacing and margins: reader.json absent
@@ -14,9 +15,15 @@
 #   indexes on the host (aristotle --index-dicts) into
 #   /mnt/us/.aristotle/dict-index/ (else the device builds them at start;
 #   lookups say "Słownik jest indeksowany" until then).
-# Run, the app in front with the book open:
-#   ssh kindle sh /mnt/us/aristotle/run-aristotle.sh --open "Próba czytania"
+# Run, the app in front with the book open. --test-clippings keeps the
+# scenario's highlight out of the owner's My Clippings.txt (their notes
+# pipeline imports it on every plug-in); check it is byte-identical:
+#   ssh kindle md5sum "/mnt/us/documents/My Clippings.txt"
+#   ssh kindle sh /mnt/us/aristotle/run-aristotle.sh --open "Próba czytania" \
+#       --test-clippings /var/tmp/reading-test/My\ Clippings.txt
 #   /var/tmp/aristotle-observe run /var/tmp/reading.txt
+#   ssh kindle md5sum "/mnt/us/documents/My Clippings.txt"   # unchanged
+#   ssh kindle cat "/var/tmp/reading-test/My Clippings.txt"  # the test highlight
 # Snapshots go to /var/tmp/snap-NAME.raw (devloop/host/fb2png.py).
 wait 3000
 snap 00-open
@@ -25,7 +32,7 @@ tap 536 70
 wait 1500
 snap 01-menu
 label contents
-tap 215 178
+tap 215 180
 wait 1500
 snap 02-contents
 label first chapter
@@ -40,12 +47,42 @@ label close
 tap 300 260
 wait 1500
 snap 05-closed
+label menu
+tap 536 70
+wait 1500
+label night on
+tap 634 1361
+wait 1500
+label close menu
+tap 536 640
+wait 1500
+snap 05n-night-page
+label hold dusza at night
+hold 559 302 700
+wait 2000
+snap 05n-night-dict
+label close
+tap 300 260
+wait 1500
+label menu
+tap 536 70
+wait 1500
+label night off
+tap 634 1361
+wait 1500
+label close menu
+tap 536 640
+wait 1500
 label hold psyche
 hold 875 302 700
 wait 2000
 snap 06-dict-greek
+label more
+tap 354 1377
+wait 1500
+snap 06m-dict-greek-more
 label other dictionary
-tap 930 834
+tap 930 845
 wait 1500
 snap 07-dict-greek-switched
 label close
@@ -59,12 +96,12 @@ label close
 tap 300 260
 wait 1500
 label select
-drag 403 356 933 356 700 600
+drag 401 356 933 356 700 600
 wait 2000
 snap 09-selection-drag
 snap 10-selection-actions
 label highlight
-tap 162 1377
+tap 162 194
 wait 1500
 snap 11-highlighted
 label select latin
@@ -75,10 +112,10 @@ tap 583 191
 wait 1500
 snap 12-gloss
 label close
-tap 369 581
+tap 369 423
 wait 1500
 label footnote
-tap 338 356
+tap 337 342
 wait 1500
 snap 13-footnote
 label close
@@ -92,7 +129,7 @@ label menu
 tap 536 70
 wait 1500
 label highlights
-tap 535 178
+tap 535 180
 wait 1500
 snap 15-highlights
 label back
@@ -102,7 +139,7 @@ label menu
 tap 536 70
 wait 1500
 label go to
-tap 856 178
+tap 856 180
 wait 1500
 label +10
 tap 548 1233
