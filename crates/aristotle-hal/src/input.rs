@@ -177,6 +177,16 @@ impl TouchScreen {
             (Ok(x), Ok(y)) if x.maximum > 0 && y.maximum > 0 => (x, y),
             _ => (abs_info(&file, ABS_X)?, abs_info(&file, ABS_Y)?),
         };
+        // The input core drops a value equal to the last one it passed on
+        // for that slot, before we opened the device too: a first touch at
+        // the same x (or y) as the last touch before the app started arrives
+        // without it. Start the kernel's current slot where the kernel says
+        // it is (EVIOCGABS reports the current slot's values).
+        let slot = abs_info(&file, ABS_MT_SLOT)
+            .map_or(0, |s| s.value.clamp(0, MAX_SLOTS as i32 - 1) as usize);
+        let mut slots = [Slot::default(); MAX_SLOTS];
+        slots[slot].x = abs_x.value;
+        slots[slot].y = abs_y.value;
         Ok(Self {
             file,
             path,
@@ -185,8 +195,8 @@ impl TouchScreen {
             abs_y,
             screen: (width, height),
             transform,
-            slots: [Slot::default(); MAX_SLOTS],
-            slot: 0,
+            slots,
+            slot,
             grabbed: false,
             raw_events: 0,
         })

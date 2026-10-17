@@ -379,6 +379,18 @@ impl Session {
         Ok(page)
     }
 
+    /// Use `page` as the rendered page at `location`: a snapshot's page that
+    /// differs from a fresh render only in its header or footer, already on
+    /// the panel (see `App::adopt`). Rendering the location again, after
+    /// new page numbers or marks, replaces it.
+    pub fn keep_page(&mut self, location: usize, page: Rc<Page>) {
+        self.pages.retain(|(l, _)| *l != location);
+        if self.pages.len() >= KEEP_PAGES {
+            self.pages.remove(0);
+        }
+        self.pages.push((location, page));
+    }
+
     pub fn is_rendered(&self, location: usize) -> bool {
         self.pages.iter().any(|(l, _)| *l == location)
     }

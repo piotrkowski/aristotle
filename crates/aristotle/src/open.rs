@@ -15,10 +15,12 @@
 //! 3. When the worker is done, the main loop adopts the session
 //!    ([`reconcile`], [`compare`]). If the book places the saved position on
 //!    the page the snapshot showed and renders it to the same pixels,
-//!    nothing is sent: the open was one mode-8 flash. Otherwise (another
-//!    location, or a header or footer that changed, say page numbers that
-//!    were not known when the snapshot was taken) the real page replaces it
-//!    with one full mode-9 update, never a partial fix-up.
+//!    nothing is sent: the open was one mode-8 flash. If only the header or
+//!    footer differ (page numbers that were not known when the snapshot was
+//!    saved, minutes left at another reading speed), the snapshot's page
+//!    stays as the session's page until the next turn, and nothing is sent
+//!    either. Otherwise (another location, other text) the real page
+//!    replaces it with one full mode-9 update, never a partial fix-up.
 //!
 //! Without a snapshot ([`Pending`]) there is nothing to show early: the
 //! tapped card stays inverted, the worker opens the book, and the library
@@ -194,7 +196,7 @@ pub fn reconcile(
 pub enum Verdict {
     Same,
     /// Only the header or footer bands differ (say, page numbers that were
-    /// not known when the snapshot was taken).
+    /// not known when the snapshot was taken): the shown page is kept.
     Chrome,
     /// The text differs.
     Page,
@@ -534,7 +536,13 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
         lib.set_progress(b, p);
     }
     for rec in crate::prewarm::candidates(&lib) {
-        let Some((src, key)) = crate::prewarm::job_for(&lib, rec, &style, &mobi_cache) else {
+        let Some((src, key)) = crate::prewarm::job_for(
+            &lib,
+            rec,
+            &style,
+            &mobi_cache,
+            crate::speed::DEFAULT_SECS_PER_PAGE,
+        ) else {
             continue;
         };
         let t = Instant::now();

@@ -13,7 +13,8 @@
 # - every open: the card inverts on touch-down, then exactly one flash to
 #   the book page; "open: ... snapshot submitted after N ms" (except the
 #   very first open, which writes the snapshot), then "book ready ... snapshot
-#   Same" and no "corrected page" update;
+#   Same" (or "Chrome": a footer that changed since, kept) and no "corrected
+#   page" update;
 # - the turn during the open: "turn Forward: ... a snapshot page";
 # - the menu during the open: it opens at once with the chapter and page
 #   labels;

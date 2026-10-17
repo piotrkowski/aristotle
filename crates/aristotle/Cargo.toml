@@ -37,3 +37,5 @@ png = "0.18"
 [dev-dependencies]
 # Same version as plato-core; the export test runs a clippings parser's regexes.
 regex = "1.12.2"
+# As aristotle-render has it: the open test writes a small EPUB.
+zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }

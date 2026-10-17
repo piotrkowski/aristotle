@@ -19,8 +19,10 @@
 //!   chapter cannot be interrupted, so a cancelled job finishes it at idle
 //!   priority and then throws everything away.
 //! - **No page numbers:** the job does not paginate whole books (the page
-//!   numbers come with the first real open), so the snapshot shows the
-//!   page without "x / y" exactly as the first real open would render it.
+//!   numbers come with the first real open), so without page numbers on
+//!   disk the snapshot shows the page without "x / y", as the first real
+//!   open renders it. The footer's minutes use the reader's measured speed,
+//!   as a real open does.
 //!
 //! Nothing here keeps the device awake: when powerd suspends it, the thread
 //! is frozen with the rest of the process.
@@ -93,7 +95,9 @@ impl Prewarm {
 
     /// Call between events while the library is on screen and no book is
     /// opening: reaps a finished job and starts the next one when quiet.
-    pub fn tick(&mut self, lib: &Library, style: &Style, mobi_cache: &Path) {
+    /// `secs_per_page` is the reading speed the progress line uses, as for
+    /// a real open, or the footers would differ.
+    pub fn tick(&mut self, lib: &Library, style: &Style, mobi_cache: &Path, secs_per_page: f32) {
         if let Some(j) = &self.job {
             if !j.handle.is_finished() {
                 return;
@@ -106,7 +110,7 @@ impl Prewarm {
             return;
         }
         for rec in candidates(lib) {
-            let Some((src, key)) = job_for(lib, rec, style, mobi_cache) else {
+            let Some((src, key)) = job_for(lib, rec, style, mobi_cache, secs_per_page) else {
                 continue;
             };
             if !self
@@ -126,15 +130,18 @@ impl Prewarm {
 }
 
 /// The source (without background pagination) and the key of a snapshot
-/// made ahead of time for `rec`; `None` without a saved position.
+/// made ahead of time for `rec`, with the reading speed `secs_per_page`
+/// (the footer's minutes left); `None` without a saved position.
 pub fn job_for(
     lib: &Library,
     rec: &BookRecord,
     style: &Style,
     mobi_cache: &Path,
+    secs_per_page: f32,
 ) -> Option<(Source, Key)> {
     let progress = rec.progress.as_ref()?;
     let mut src = Source::new(lib, rec, mobi_cache).ok()?;
+    src.secs_per_page = secs_per_page;
     let key = Key::new(&rec.id, src.stamp, style, progress.locator.clone());
     src.paginate = false;
     Some((src, key))

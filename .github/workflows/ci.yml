@@ -95,6 +95,9 @@ jobs:
       - run: tools/build-render.sh host
         env:
           CARGO_CMD: clippy
+      # The typesetting tests read the fonts and hyphenation patterns that a
+      # host build puts in $ARISTOTLE_CACHE/render/host.
+      - run: tools/build-render.sh host
       - run: tools/build-render.sh host
         env:
           CARGO_CMD: test
