@@ -166,7 +166,7 @@ English is the default. `crates/aristotle-i18n/locales/en.json` defines the mess
 ### Adding a language
 
 1. Copy `crates/aristotle-i18n/locales/en.json` to `<code>.json`.
-2. Translate messages without changing `{placeholder}` names. Fill in `@locale`, including names, months, weekdays, and date and time patterns.
+2. Translate messages without changing `{placeholder}` names. Fill in `@locale`, including names, months, weekdays, quotation marks, and date and time patterns.
 3. If needed, add plural rules and tests in `crates/aristotle-i18n/src/plural.rs`.
 4. Run `cargo test -p aristotle-i18n`. An incomplete catalog can set `"complete": false` and fall back to English.
 5. Check all screens with `aristotle-ui-preview --lang <code>` and the app's `--preview` mode.

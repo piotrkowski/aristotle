@@ -53,6 +53,8 @@ pub struct Locale {
     pub months: [&'static str; 12],
     /// Weekday names, Sunday first.
     pub weekdays: [&'static str; 7],
+    /// Opening and closing quotation marks: “ ” in English, „ ” in Polish.
+    pub quotes: [&'static str; 2],
     /// With `{weekday}`, `{day}`, `{month}`, `{year}`.
     pub date: &'static str,
     /// With `{h}` (hour), `{hh}` (two-digit hour), `{mm}` (minutes).
@@ -115,6 +117,12 @@ pub fn locale() -> &'static Locale {
         .with(Cell::get)
         .unwrap_or_else(|| CURRENT.load(Ordering::Relaxed));
     &LOCALES[i]
+}
+
+/// `text` in the quotation marks of the language in use.
+pub fn quoted(text: &str) -> String {
+    let [open, close] = locale().quotes;
+    format!("{open}{text}{close}")
 }
 
 /// The code of the language in use.
@@ -413,6 +421,12 @@ mod tests {
             assert_eq!(fmt_bytes(512_000_000), "512 MB");
             assert_eq!(fmt_duration(742), "12 godz. 22 min");
         });
+    }
+
+    #[test]
+    fn quotation_marks_follow_the_language() {
+        assert_eq!(with_language("en", || quoted("aim at")), "“aim at”");
+        assert_eq!(with_language("pl", || quoted("dusza")), "„dusza”");
     }
 
     #[test]

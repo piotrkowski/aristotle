@@ -41,6 +41,7 @@ struct Meta {
     decimal: String,
     months: Vec<String>,
     weekdays: Vec<String>,
+    quotes: Vec<String>,
     date: String,
     time: String,
 }
@@ -155,7 +156,7 @@ fn meta(file: &str, v: Option<&Value>) -> Meta {
     };
     for k in m.keys() {
         let known = [
-            "name", "complete", "decimal", "months", "weekdays", "date", "time",
+            "name", "complete", "decimal", "months", "weekdays", "quotes", "date", "time",
         ];
         if !known.contains(&k.as_str()) {
             fail(file, format_args!("{META}.{k}: unknown field"));
@@ -185,6 +186,7 @@ fn meta(file: &str, v: Option<&Value>) -> Meta {
         decimal,
         months: strings(file, "months", m.get("months"), 12),
         weekdays: strings(file, "weekdays", m.get("weekdays"), 7),
+        quotes: strings(file, "quotes", m.get("quotes"), 2),
         date,
         time,
     }
@@ -450,6 +452,7 @@ fn main() {
         writeln!(w, "        decimal: {:?},", m.decimal).unwrap();
         writeln!(w, "        months: {:?},", m.months).unwrap();
         writeln!(w, "        weekdays: {:?},", m.weekdays).unwrap();
+        writeln!(w, "        quotes: {:?},", m.quotes).unwrap();
         writeln!(w, "        date: {:?},", m.date).unwrap();
         writeln!(w, "        time: {:?},", m.time).unwrap();
         writeln!(w, "        messages: &[").unwrap();
