@@ -44,11 +44,13 @@ In `aristotle_hal::display::Display`, the input loop draws and calls `display.da
 
 ## Measuring stroke latency
 
-1. `aristotle-pen-live record=/var/tmp/pen.rec` draws as usual and writes each touch event with its kernel timestamp. `EVIOCSCLOCKID` switches the evdev clock to `CLOCK_MONOTONIC`, so the timestamps compare with `monotonic_us()`.
-2. `aristotle-pen-bench /var/tmp/pen.rec [params]` replays the recording at its original pace through the same `Pen` code. Gaps between strokes are shortened to 300 ms.
+The display thread came out of a finger-drawing experiment, the most demanding stream of updates the panel gets. The stroke renderer and its tools were removed later, since the PW4 has no pen; they remain in the history as the `aristotle-pen` crate.
+
+1. A live drawing tool wrote each touch event with its kernel timestamp. `EVIOCSCLOCKID` switches the evdev clock to `CLOCK_MONOTONIC`, so the timestamps compare with `monotonic_us()`.
+2. A replay benchmark played the recording back at its original pace through the same stroke code. Gaps between strokes were shortened to 300 ms.
 3. An event's latency runs from its timestamp until the update that shows it completes. The panel's optical settling comes on top.
 
-`devloop/kindle/pen-sweep.sh` runs several variants in one go. The reference recording has 604 events in 52 strokes, including fast and slow lines, handwriting and two fingers.
+The reference recording had 604 events in 52 strokes, including fast and slow lines, handwriting and two fingers.
 
 ## Results
 
@@ -89,7 +91,4 @@ The floor is one A2 update, about 120 ms. The p50 of 199 ms is about 80 ms above
 | Framebuffer, update ioctl, waveform numbers | `crates/aristotle-hal/src/framebuffer.rs` |
 | Display thread, completion tracking | `crates/aristotle-hal/src/display.rs` |
 | Touch input with kernel timestamps | `crates/aristotle-hal/src/input.rs` |
-| Stroke rendering, record/replay format | `crates/aristotle-pen/src/lib.rs` |
-| Live drawing and recording | `crates/aristotle-pen/src/bin/live.rs` |
-| Replay benchmark | `crates/aristotle-pen/src/bin/bench.rs` |
 | Waveform and streaming benchmarks | `crates/aristotle-bench/` |

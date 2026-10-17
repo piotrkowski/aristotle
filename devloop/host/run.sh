@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Build a crate for the Kindle, copy it over the USB network, run it, and save
 # a PNG of the e-ink framebuffer.
-#   devloop/host/run.sh [PACKAGE[:BINARY]] [ARGS...]     (default: aristotle-hello)
+#   devloop/host/run.sh PACKAGE[:BINARY] [ARGS...]
+#   devloop/host/run.sh aristotle-observe caps
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 . "$REPO/devloop/env.sh"
-SPEC=${1:-aristotle-hello}
-[ $# -gt 0 ] && shift
+[ $# -gt 0 ] || { echo "usage: $0 PACKAGE[:BINARY] [ARGS...]" >&2; exit 2; }
+SPEC=$1
+shift
 PKG=${SPEC%%:*}
 NAME=${SPEC#*:}
 TARGET=armv7-unknown-linux-musleabihf

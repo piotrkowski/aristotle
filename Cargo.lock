@@ -42,14 +42,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aristotle-app"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
- "aristotle-ui",
-]
-
-[[package]]
 name = "aristotle-bench"
 version = "0.1.0"
 dependencies = [
@@ -61,13 +53,6 @@ name = "aristotle-hal"
 version = "0.1.0"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "aristotle-hello"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
 ]
 
 [[package]]
@@ -100,13 +85,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aristotle-pen"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
-]
-
-[[package]]
 name = "aristotle-reader"
 version = "0.1.0"
 dependencies = [
@@ -134,13 +112,6 @@ dependencies = [
  "percent-encoding",
  "plato-core",
  "zip",
-]
-
-[[package]]
-name = "aristotle-touch"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
 ]
 
 [[package]]

@@ -98,7 +98,7 @@ The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, wher
 | 9 | GLKW16 (night) | 544 ms |
 | 257 | AUTO (picked DU for this content) | 309 ms |
 
-A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms (`aristotle-hello`) [dev].
+A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms, from an early bring-up test since removed [dev].
 
 The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. `docs/eink-rendering.md` has the measurements and the display thread built on them.
 
