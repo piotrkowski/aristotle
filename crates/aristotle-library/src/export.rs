@@ -1,8 +1,8 @@
 //! Exporting highlights: the stock Kindle's `My Clippings.txt` and a clean
 //! Markdown file per book.
 //!
-//! The owner's notes pipeline (a host tool that turns `My Clippings.txt`
-//! into Obsidian notes) must keep working unchanged, so the clippings are
+//! Tools that read `My Clippings.txt` (note-taking importers, scripts that
+//! turn it into Obsidian notes) must keep working unchanged, so the clippings are
 //! written exactly as the stock reader writes them in its en_GB locale
 //! ([`crate::clippings`] documents the template, read from firmware
 //! 5.13.6):
@@ -121,9 +121,8 @@ fn location_label(loc: Option<(u32, u32)>) -> String {
 }
 
 /// One clippings entry with CRLF line ends, separator included. A note is
-/// a "Your Note" entry at its highlight's first location: the owner's
-/// parser attaches a pending note to the next highlight whose range starts
-/// there.
+/// a "Your Note" entry at its highlight's first location: common parsers
+/// attach a pending note to the next highlight whose range starts there.
 pub fn entry(title_line: &str, kind: &AnnotationKind, a: &Annotation, text: &str) -> String {
     let (label, loc) = match kind {
         AnnotationKind::Highlight => ("Your Highlight", a.location),
@@ -153,7 +152,7 @@ pub fn entries(book: &BookRecord) -> Vec<(String, String)> {
         };
         // A note goes first: the stock reader writes it right before or
         // after its highlight, and parsers that attach notes to the next
-        // highlight (the owner's does) need it before.
+        // highlight (the one ported in the reader's tests does) need it before.
         if let Some(note) = a.note.as_deref().filter(|n| !n.trim().is_empty()) {
             out.push((one_line(note), entry(&head, &AnnotationKind::Note, a, note)));
         }
@@ -219,8 +218,7 @@ pub fn append_clippings(path: &Path, book: &BookRecord) -> io::Result<usize> {
 }
 
 /// File name of a book's Markdown notes: "Title — Author.md", with the
-/// characters Obsidian and FAT reject removed (the owner's pipeline names
-/// its notes the same way).
+/// characters Obsidian and FAT reject removed.
 pub fn markdown_name(book: &BookRecord) -> String {
     let author = book
         .meta
@@ -246,7 +244,7 @@ fn yaml_string(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// "lok. 60-63", the location as the owner's notes write it.
+/// "lok. 60-63", the location as the Polish notes write it.
 pub fn location_pl(loc: Option<(u32, u32)>) -> Option<String> {
     match loc? {
         (a, b) if b > a => Some(format!("lok. {a}-{b}")),
@@ -254,8 +252,8 @@ pub fn location_pl(loc: Option<(u32, u32)>) -> Option<String> {
     }
 }
 
-/// A book's highlights as Markdown in the shape of the owner's Obsidian
-/// notes: front matter, title, author, then one quote per highlight with
+/// A book's highlights as Markdown in the shape of an Obsidian
+/// note: front matter, title, author, then one quote per highlight with
 /// its chapter, location and date, and the note if there is one.
 pub fn markdown(book: &BookRecord) -> String {
     let author = book
@@ -433,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn markdown_in_the_owners_shape() {
+    fn markdown_in_the_obsidian_shape() {
         let md = markdown(&book());
         assert!(md.starts_with(
             "---\ntytuł: \"Fedon\"\nautor: \"Platon\"\nźródło: Aristotle\ntags: [kindle, zakreślenia]\n---\n\n# Fedon\n\n*Platon*\n"

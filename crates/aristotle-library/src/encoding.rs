@@ -2,7 +2,7 @@
 //!
 //! A general-purpose crate such as `encoding_rs` would add a few hundred
 //! kilobytes of tables to the device binary for encodings we never meet. The
-//! owner's library is mostly Polish, so the encodings that matter are UTF-8,
+//! libraries tested so far are mostly Polish, so the encodings that matter are UTF-8,
 //! UTF-16 (PDF strings, some OPFs), Windows-1250 and ISO-8859-2 (old Polish
 //! files), Windows-1252 (MOBI files from Western tools) and PDFDocEncoding.
 //! Each single-byte table only lists the upper half; the lower half is ASCII.

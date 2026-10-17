@@ -725,7 +725,12 @@ mod tests {
         // No text length in record 0, so the page map supplies the percent.
         fs::write(
             &book,
-            crate::mobi::testutil::build("Pan Tadeusz", &[(100, "Adam Mickiewicz".as_bytes())], &[], 6),
+            crate::mobi::testutil::build(
+                "Pan Tadeusz",
+                &[(100, "Adam Mickiewicz".as_bytes())],
+                &[],
+                6,
+            ),
         )
         .unwrap();
         let pages = sidecar::testutil::even_pages(180);

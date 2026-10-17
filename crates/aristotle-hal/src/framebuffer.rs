@@ -291,7 +291,7 @@ struct FixScreenInfo {
 
 /// Submits EPDC updates from another thread through its own file descriptor.
 /// The pixels are whatever is in the shared framebuffer mapping when the
-/// driver processes the update, so drawing stays on the owner of
+/// driver processes the update, so drawing stays with whoever holds the
 /// [`Framebuffer`] while this handle only issues the (blocking) ioctl.
 pub struct Updater {
     file: File,
@@ -334,7 +334,7 @@ impl Updater {
             width: right - rect.left,
             height: bottom - rect.top,
         };
-        // Keep markers disjoint from the owner's, which counts up from 1.
+        // Keep markers disjoint from the `Framebuffer`'s, which count up from 1.
         let marker = self.next_marker;
         self.next_marker = self.next_marker.wrapping_add(1).max(0x8000_0000);
         let mut data = UpdateDataRex {

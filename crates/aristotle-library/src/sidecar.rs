@@ -16,7 +16,10 @@
 //! The KRDS layout below comes from the firmware's `ObjectReader`,
 //! `ObjectWriter` and `State` classes (`ReaderContentSDK.jar`), confirmed by
 //! decompiling 5.13.6, and verified byte for byte on `.mbs` and `.mbp1`
-//! files copied from our device. Everything is big-endian
+//! files copied from our device. These format notes come from
+//! interoperability analysis, so that a reader can take over the user's own
+//! reading positions and annotations; this module is our own code and
+//! contains no Amazon code. Everything is big-endian
 //! (`java.io.DataOutputStream`):
 //!
 //! ```text

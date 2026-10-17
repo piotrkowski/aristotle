@@ -3,7 +3,7 @@
 //!
 //! Everything here is read-only except [`set_usb_mode`], which asks the
 //! aristotle agent (`devloop/kindle/aristotle-usbnet/agent/`) to switch through
-//! its own `aristotlectl`, the same command the owner runs over SSH.
+//! its own `aristotlectl`, the same command a developer runs over SSH.
 
 use std::fs;
 use std::io;

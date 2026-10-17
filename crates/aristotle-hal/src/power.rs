@@ -142,14 +142,14 @@ pub const LIGHT_STEPS: u32 = 24;
 /// The LM3695 drives the LEDs with a current proportional to its 11-bit
 /// register, so light output is about linear in the raw value, while the
 /// eye judges brightness roughly by its cube root. A linear slider would
-/// crowd every useful night level into its first few percent (the owner
-/// reads at raw 20 of 2047). So the steps are equal in CIE 1976 lightness:
+/// crowd every useful night level into its first few percent (a comfortable
+/// level in the dark is about raw 20 of 2047). So the steps are equal in CIE 1976 lightness:
 /// step `s` targets L* = 100 s / 24, and the raw value is that L*'s relative
 /// luminance times `max`. The first steps fall in L*'s linear toe (9, 19,
 /// 30, 44, ... of 2047), fine enough for reading in the dark; the last step
 /// is the full range. Whether the LM3695 on our unit really maps linearly
-/// (it also has an exponential mode) is an inference from the owner's
-/// setting, not a measurement.
+/// (it also has an exponential mode) is an inference from one reading
+/// setting (raw 20), not a measurement.
 pub fn light_raw(step: u32, max: u32) -> u32 {
     let step = step.min(LIGHT_STEPS);
     if step == 0 || max == 0 {
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn light_curve_is_perceptually_even() {
-        // The owner's night level (raw 20) is the second step.
+        // A typical night level (raw 20) is the second step.
         assert_eq!(light_step(20, MAX), 2);
         assert!(light_raw(1, MAX) <= 12);
         // Equal steps in L*: neighbouring raw values grow by a shrinking
