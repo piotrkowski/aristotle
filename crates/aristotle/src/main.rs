@@ -53,6 +53,7 @@ mod open;
 mod overlay;
 mod pagecache;
 mod panel;
+mod powerd;
 mod prefs;
 mod preview;
 mod prewarm;
@@ -74,7 +75,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use aristotle_hal::input::{monotonic_us, Phase as HalPhase, TouchScreen, Transform};
-use aristotle_hal::power::{self, Battery, Frontlight, LIGHT_STEPS};
+use aristotle_hal::power::{Battery, Frontlight, LIGHT_STEPS};
 use aristotle_hal::system;
 use aristotle_library::{Library, ScanOptions, Status};
 use aristotle_render::page::Page;
@@ -287,19 +288,10 @@ fn run() -> Result<(), Error> {
     let mut touch =
         TouchScreen::open(w, h, Transform::default()).context("can't open the touchscreen")?;
     touch.grab(true)?;
-    // Our screensaver replaces the stock one, which powerd would otherwise
-    // draw over our screen. The previous value is put back on exit.
-    let screensaver_was = power::screensaver_prevented().ok();
-    if let Err(e) = power::prevent_screensaver(true) {
-        eprintln!("aristotle: can't hold off the stock screensaver: {e}");
-    }
-    let mut app = build_app(
-        &args,
-        panel,
-        prefs,
-        start_dictionaries(&args),
-        screensaver_was,
-    )?;
+    // Our screensaver replaces the stock one, and powerd's events drive it
+    // (powerd.rs). Put back as found on exit.
+    let sleep_ctl = powerd::Sleep::start();
+    let mut app = build_app(&args, panel, prefs, start_dictionaries(&args), sleep_ctl)?;
     perf!("startup: first frame submitted");
     open::warm_up();
 
@@ -368,7 +360,7 @@ fn build_app(
     panel: Panel,
     prefs: Prefs,
     dict: Service,
-    screensaver_was: Option<bool>,
+    sleep_ctl: powerd::Sleep,
 ) -> Result<App, Error> {
     let (w, h) = panel.size();
     aristotle_i18n::set_language(&prefs.language);
@@ -417,7 +409,7 @@ fn build_app(
         asleep: None,
         last_touch: Instant::now(),
         clock: String::new(),
-        screensaver_was,
+        sleep_ctl,
         swallow: false,
         dict: Some(dict),
         speed: Speed::load(&args.library),
@@ -505,8 +497,8 @@ struct App {
     last_touch: Instant,
     /// The time the status line shows, to refresh it each minute.
     clock: String,
-    /// `preventScreenSaver` before we set it.
-    screensaver_was: Option<bool>,
+    /// powerd: its screensaver and suspend events, the idle timer.
+    sleep_ctl: powerd::Sleep,
     /// The touch that woke the screensaver: ignored until it lifts.
     swallow: bool,
     /// Dictionary lookups (a thread of their own).
@@ -862,7 +854,8 @@ impl App {
     // --- Screensaver ------------------------------------------------------
 
     fn sleep_deadline(&self) -> Option<Instant> {
-        if self.asleep.is_some() {
+        // Asleep, or powerd was asked and has a few seconds to answer.
+        if self.asleep.is_some() || self.sleep_ctl.sleep_pending() {
             return None;
         }
         self.prefs
@@ -870,9 +863,10 @@ impl App {
             .map(|m| self.last_touch + Duration::from_secs(m as u64 * 60))
     }
 
-    /// Nobody has touched the screen for the chosen time: save, put the
-    /// light out and show the screensaver.
-    fn fall_asleep(&mut self) -> Result<(), Error> {
+    /// powerd went to its screensaver (power button, cover, idle time), or
+    /// it did not answer ours: save, put the light out and show the
+    /// screensaver. `by_powerd`: powerd will suspend the CPU in a minute.
+    fn fall_asleep(&mut self, by_powerd: bool) -> Result<(), Error> {
         // The screensaver replaces the screen: no redraw for a book still
         // opening, a book opening without a snapshot is given up, and no
         // snapshots are made ahead of time while asleep.
@@ -895,18 +889,27 @@ impl App {
             .map(|rec| shelf::screen_book(&self.lib, &rec, &mut self.covers, photos));
         let tree = sleep::build(&self.styles, book.as_ref(), photos);
         self.ui.set_tree(tree);
-        perf!("sleep: screensaver after {} min", self.prefs.sleep_minutes);
+        self.sleep_ctl.asleep(by_powerd);
+        perf!(
+            "sleep: screensaver ({})",
+            if by_powerd { "powerd" } else { "own" }
+        );
         self.render_ui()
     }
 
-    /// A touch on the screensaver: the light and the screen come back.
-    fn wake(&mut self) -> Result<(), Error> {
+    /// powerd left its screensaver, or a touch woke ours: the light and
+    /// the screen come back.
+    fn wake(&mut self, by_powerd: bool) -> Result<(), Error> {
         if let Some(step) = self.asleep.take() {
             self.set_light_step(step);
         }
         self.last_touch = Instant::now();
+        self.sleep_ctl.awake(by_powerd, self.last_touch);
         self.prewarm.input();
-        perf!("sleep: woken");
+        perf!(
+            "sleep: woken ({})",
+            if by_powerd { "powerd" } else { "touch" }
+        );
         match &self.screen {
             Screen::Library { .. } => self.show_library(Refresh::Full),
             Screen::Settings { page, .. } => {
@@ -954,16 +957,21 @@ impl App {
             if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
                 timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
-            let events = match touch.poll(timeout.max(Duration::from_millis(1))) {
-                Ok(e) => e,
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
-            };
+            if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
+                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
+            }
+            let (events, _) =
+                match touch.poll_with(timeout.max(Duration::from_millis(1)), self.sleep_ctl.fd()) {
+                    Ok(e) => e,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e.into()),
+                };
             for ev in &events {
                 if self.on_touch(ev)? == Flow::Quit {
                     return Ok(());
                 }
             }
+            self.on_power()?;
             if self.asleep.is_none() {
                 let ticked = self.ui.tick(monotonic_us());
                 for ev in ticked {
@@ -978,10 +986,52 @@ impl App {
             }
             self.panel.poll();
             self.background()?;
-            if self.sleep_deadline().is_some_and(|d| Instant::now() >= d) {
-                self.fall_asleep()?;
+            let now = Instant::now();
+            if self.sleep_deadline().is_some_and(|d| now >= d) && self.sleep_ctl.request_sleep(now)
+            {
+                self.fall_asleep(false)?;
+            }
+            match self.sleep_ctl.tick(Instant::now(), self.asleep.is_some()) {
+                powerd::Action::Sleep if self.asleep.is_none() => self.fall_asleep(false)?,
+                powerd::Action::Wake if self.asleep.is_some() => self.wake(false)?,
+                _ => {}
             }
         }
+    }
+
+    /// powerd's events: its screensaver, waking, suspending.
+    fn on_power(&mut self) -> Result<(), Error> {
+        use aristotle_hal::powerd::PowerEvent as P;
+        for ev in self.sleep_ctl.events() {
+            match ev {
+                P::GoingToScreenSaver(src) => {
+                    perf!("power: goingToScreenSaver {src}");
+                    if self.asleep.is_none() {
+                        self.fall_asleep(true)?;
+                    } else {
+                        self.sleep_ctl.powerd_took_over();
+                    }
+                }
+                P::OutOfScreenSaver(src) => {
+                    perf!("power: outOfScreenSaver {src}");
+                    if self.asleep.is_some() {
+                        self.wake(true)?;
+                        self.ui.reset_gestures();
+                        if let Screen::Reader(r) = &mut self.screen {
+                            r.gestures.reset();
+                        }
+                    }
+                }
+                P::ReadyToSuspend(delay) => {
+                    perf!("power: readyToSuspend {delay}");
+                    if self.asleep.is_none() {
+                        self.sleep_ctl.resync();
+                    }
+                }
+                other => perf!("power: {other:?}"),
+            }
+        }
+        Ok(())
     }
 
     /// Whether the UI tree (not the page-turn path) owns input right now.
@@ -1044,9 +1094,12 @@ impl App {
 
     fn on_touch(&mut self, ev: &aristotle_hal::input::TouchEvent) -> Result<Flow, Error> {
         if self.asleep.is_some() {
-            // Any touch wakes; the rest of that touch does nothing.
+            // Any touch wakes (through powerd when it is powerd's
+            // screensaver); the rest of that touch does nothing.
             if ev.phase == HalPhase::Down {
-                self.wake()?;
+                if self.sleep_ctl.touch_asleep(Instant::now()) {
+                    self.wake(false)?;
+                }
                 self.ui.reset_gestures();
                 if let Screen::Reader(r) = &mut self.screen {
                     r.gestures.reset();
@@ -1062,6 +1115,7 @@ impl App {
             return Ok(Flow::Continue);
         }
         self.last_touch = Instant::now();
+        self.sleep_ctl.touched();
         let ev = ui_event(ev);
         self.prewarm.input();
         if self.opening.is_some() {
@@ -2130,9 +2184,7 @@ impl App {
         if let Some(step) = app.asleep.take() {
             app.set_light_step(step);
         }
-        if app.screensaver_was == Some(false) {
-            let _ = power::prevent_screensaver(false);
-        }
+        app.sleep_ctl.restore();
         app.save_snapshot();
         app.saver.save(&app.lib);
         app.speed.save();
