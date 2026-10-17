@@ -12,9 +12,12 @@ itself is the `aristotle` crate.
 | `probe/` | A read-only probe, a KUAL extension | `/mnt/us/extensions/aristotle-probe/` |
 | `tests/` | Host-side tests of the scripts above, against a fake device root | stays on the host |
 
-`tools/host/install-extensions.sh` copies both extensions, the app bundle from
-`tools/build-render.sh device` if it is built, `takeover.sh` and the dev-loop public key to a
-Kindle in drive mode, then ejects it. Earlier versions installed the extension
+`tools/package.sh` defines what goes on the USB drive: `aristotle/` (the app
+bundle from `tools/build-render.sh device`) and `extensions/aristotle/` (the
+extension with `takeover.sh`). The release zip holds exactly that.
+`tools/host/install-extensions.sh` copies the same tree (the app only if it is
+built), the probe and the dev-loop public key to a Kindle in drive mode, then
+ejects it. Earlier versions installed the extension
 to `/mnt/us/extensions/aristotle-usbnet/`; the install script removes that
 folder.
 
