@@ -42,7 +42,9 @@
       <li><strong>MRPI</strong>, to install packages;</li>
       <li><strong>KOReader</strong>, for its SSH server.</li>
     </ul>
-    <p>Follow <a href="https://kindlemodding.org">kindlemodding.org</a> for all four. Aristotle reads DRM-free books only.</p>
+    <p>Follow <a href="https://kindlemodding.org">kindlemodding.org</a> for all four.</p>
+    <p>Aristotle contains no jailbreak, exploit or DRM-removal code. It runs only on a Kindle you have already jailbroken with the community's tools, and it opens DRM-free books only. It uses the e-ink waveforms and firmware already on your device; it never ships, copies off or uploads them.</p>
+    <p>The Paperwhite 4 (2018, PQ94WIF) on firmware 5.13.x is the only tested device. On anything else the install scripts refuse to run; developers can override that with <code>ARISTOTLE_FORCE=1</code>.</p>
     <p>The stock system stays installed underneath. Installing the device agent writes one file to the root filesystem (<code>/etc/upstart/aristotle-agent.conf</code>); everything else lives in the user storage and in <code>/var/local</code>.</p>
 
     <h2 id="build">Build</h2>
@@ -76,7 +78,8 @@ devloop/host/install-extensions.sh</code></pre>
       <li>On the Kindle: <strong>KUAL › Aristotle › Remove agent</strong>.</li>
       <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots) and <code>extensions/aristotle-*</code> from the Kindle's storage.</li>
     </ol>
-    <p>Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>
+    <p>Removing the agent takes away everything it put on the device, including its SSH key. Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>
+    <p>If you cannot reach the Kindle over SSH, connect it as a USB drive, create an empty file named <code>aristotle-disable</code> at its root, and restart it. The agent then does not start, and the stock system takes over.</p>
   </div>
 
   <nav class="pager" aria-label="Guides">
@@ -87,7 +90,7 @@ devloop/host/install-extensions.sh</code></pre>
 <footer class="site-footer">
   <div class="inner">
     <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
-    <p>Not affiliated with Amazon. Kindle and Paperwhite are trademarks of Amazon.com, Inc.</p>
+    <p>Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.</p>
   </div>
 </footer>
 </body>
