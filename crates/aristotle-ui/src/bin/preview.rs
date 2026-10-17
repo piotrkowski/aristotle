@@ -909,6 +909,7 @@ fn targets(out: &Path) {
     let spec = MenuSpec {
         title: "Fedon",
         families: None,
+        font_list: false,
         night: true,
         top_extra: 0,
         bottom_extra: 0,

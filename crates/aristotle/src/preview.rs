@@ -245,6 +245,56 @@ impl Driver {
     }
 }
 
+/// Reading fonts: the list (`--fonts DIR`), the first family in it, back
+/// to Literata, the menu closed. Each step is one full-screen update.
+fn fonts_steps(d: &mut Driver, menu: Point) -> Result<(), Error> {
+    use aristotle_ui::screens::reader::action::FONT_LIST;
+    let sent = |d: &Driver| match &d.app.panel {
+        // Full-screen updates: the tapped row's A2 outline comes first.
+        Panel::Memory(m) => m.updates.iter().filter(|u| u.full_screen).count(),
+        Panel::Device(_) => 0,
+    };
+    let family = |d: &Driver| match &d.app.screen {
+        Screen::Reader(r) => r.session.style.font_family.clone(),
+        _ => String::new(),
+    };
+    d.tap("menu", menu)?;
+    d.snap("03a-menu-font")?;
+    let p = d.button(FONT_LIST)?;
+    let n = sent(d);
+    d.tap("fonts", p)?;
+    d.snap("03b-fonts")?;
+    let ok = d.overlay_is(|o| matches!(o, Overlay::Fonts { .. })) && sent(d) == n + 1;
+    d.check("font list open, one update", ok);
+    let families = match &d.app.screen {
+        Screen::Reader(r) => match &r.overlay {
+            Overlay::Fonts { rows, .. } => rows.iter().filter(|r| r.pick.is_some()).count(),
+            _ => 0,
+        },
+        _ => 0,
+    };
+    if families > 1 {
+        let p = d.button(act::ITEM + 1)?;
+        let n = sent(d);
+        d.tap("own font", p)?;
+        d.snap("03c-own-font")?;
+        let ok = family(d) != crate::fonts::DEFAULT && sent(d) == n + 1;
+        d.check("book in the chosen font, one update", ok);
+        let p = d.button(FONT_LIST)?;
+        d.tap("fonts", p)?;
+        let p = d.button(act::ITEM)?;
+        let n = sent(d);
+        d.tap("Literata", p)?;
+        d.snap("03d-literata")?;
+        let ok = family(d) == crate::fonts::DEFAULT && sent(d) == n + 1;
+        d.check("back in Literata, one update", ok);
+    } else {
+        let p = d.button(act::BACK)?;
+        d.tap("back", p)?;
+    }
+    d.tap("close menu", Point { x: 536, y: 400 })
+}
+
 fn write_png(m: &Memory, path: &Path) -> Result<(), Error> {
     let f = BufWriter::new(File::create(path)?);
     let mut enc = png::Encoder::new(f, m.width, m.height);
@@ -351,6 +401,7 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     let p = d.button(act::ITEM)?;
     d.tap("first chapter", p)?;
     d.snap("03-chapter-1")?;
+    fonts_steps(&mut d, menu)?;
 
     // Dictionary: a Polish word.
     let p = d.word("dusza")?;

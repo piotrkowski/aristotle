@@ -76,6 +76,8 @@ pub mod action {
     pub const PREV_CHAPTER: ActionId = 4;
     pub const NEXT_CHAPTER: ActionId = 5;
     pub const FONT: ActionId = 10;
+    /// The device's font row: open the list of fonts.
+    pub const FONT_LIST: ActionId = 15;
     pub const SIZE_DOWN: ActionId = 20;
     pub const SIZE_UP: ActionId = 21;
     pub const SPACING: ActionId = 30;
@@ -261,6 +263,10 @@ pub struct MenuSpec<'a> {
     /// Reading faces for the font row, each label set in its own face;
     /// `None` hides the row.
     pub families: Option<[FamilyId; 3]>,
+    /// The device's font row instead: the reading font's name, set in its
+    /// own face (`FamilyId(settings.family)`; the text comes later through
+    /// [`Menu::font_label`]), opening the list of fonts ([`action::FONT_LIST`]).
+    pub font_list: bool,
     /// Offer night mode.
     pub night: bool,
     /// Extra white below the top bar and above the bottom sheet, so their
@@ -289,6 +295,8 @@ pub struct Menu {
     pub size_steps: NodeId,
     /// The night [`Toggle`], if offered.
     pub night_toggle: Option<NodeId>,
+    /// The reading font's name in the font row, if offered.
+    pub font_label: Option<NodeId>,
     /// The busy mark at the right of the top bar, hidden: shown while a
     /// change takes longer than about 300 ms (laying out a long chapter).
     pub busy: NodeId,
@@ -363,6 +371,23 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
             .collect();
         let fonts = segmented(t, fonts, s.family, action::FONT);
         rows.push(row(t, tr(Msg::MenuFont), fonts));
+    }
+    let mut font_label = None;
+    if spec.font_list {
+        let style = TextStyle::new(FamilyId(s.family as u16), crate::geom::pt(9.0));
+        let mut name = Paragraph::plain("", style, Align::Left);
+        name.style.max_lines = Some(1);
+        let name = t.text(name);
+        font_label = Some(name);
+        let name = t.add(Node::column(0).flex(1), [name]);
+        let more = t.icon(Icon::ChevronRight, 44, INK_2);
+        let r = t.add(Node::row(0), [name, more]);
+        let r = t.align(0.0, 0.5, r);
+        let r = t.add(
+            Node::new(Kind::Padding(Insets::all(0))).action(action::FONT_LIST),
+            [r],
+        );
+        rows.push(row(t, tr(Msg::MenuFont), r));
     }
 
     let small = t.label("A", st.ui().size(30.0));
@@ -444,6 +469,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
         light,
         size_steps,
         night_toggle,
+        font_label,
         busy,
     }
 }
@@ -629,6 +655,7 @@ impl Reader {
         let spec = MenuSpec {
             title: "Lalka",
             families: Some(families),
+            font_list: false,
             night: true,
             top_extra: 0,
             bottom_extra: 0,

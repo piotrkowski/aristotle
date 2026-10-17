@@ -199,7 +199,30 @@ mod tests {
         wider.margin_mm = 8;
         let mut german = s.clone();
         german.language = Some("de".into());
+        // Another reading font, and the same family copied again after its
+        // files changed (`fonts::prepare` names the folder by their stamp).
+        let mut charis = s.clone();
+        charis.font_family = "Charis".into();
+        charis.font_dir = "/data/reading-fonts/Charis-00000000000000aa".into();
+        let mut charis_again = charis.clone();
+        charis_again.font_dir = "/data/reading-fonts/Charis-00000000000000bb".into();
+        for st in [&charis, &charis_again] {
+            assert_ne!(
+                crate::snapshot::look(st),
+                crate::snapshot::look(&s),
+                "snapshots too"
+            );
+        }
+        assert_ne!(
+            crate::snapshot::look(&charis),
+            crate::snapshot::look(&charis_again)
+        );
+        assert_ne!(
+            cache_path(dir, "abc", 100, 5, &charis),
+            cache_path(dir, "abc", 100, 5, &charis_again)
+        );
         for other in [
+            cache_path(dir, "abc", 100, 5, &charis),
             cache_path(dir, "abc", 100, 5, &bigger),
             cache_path(dir, "abc", 100, 5, &looser),
             cache_path(dir, "abc", 100, 5, &wider),

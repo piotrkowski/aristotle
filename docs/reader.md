@@ -64,7 +64,7 @@ The data directory is `data/` next to the binary, or the path given by `--data`.
 | Path | Contents |
 | --- | --- |
 | `fonts/` | Plato's required fonts and fallback glyphs |
-| `serif/` | Literata from `crates/aristotle-render/assets/fonts/` |
+| `serif/` | Literata from `crates/aristotle-render/assets/fonts/`, also the fallback for Latin and Greek letters a chosen font lacks |
 | `css/` | `epub.css` and `html.css` |
 | `hyphenation-patterns/` | Polish, US and UK English, Ancient Greek, and Latin patterns |
 
@@ -128,6 +128,19 @@ Defaults come from `Style::pw4`.
 | Footer | Chapter progress, page count when known, and percentage, 7 pt |
 
 The book's CSS applies. The menu offers seven sizes from 8 to 15 pt, line heights of 1.2, 1.3, or 1.5 em, and margins of 3, 5, or 8 mm. Constants are `FONT_PT`, `LINE_HEIGHT`, and `MARGIN_MM` in `prefs.rs`.
+
+### Your own fonts
+
+The menu's Font row opens a list of Literata and the families in `/mnt/us/fonts` (`--fonts DIR`), the folder the stock reader takes custom fonts from. Each name is set in its own regular face when that file is up to 2 MB, else in the UI font. Picking one lays the book out again at the same place and shows it under the menu; "Back" returns to the menu. Each is one full update after the A2 outline of the tapped row, which reaches the panel 84 to 87 ms after the release; the relayout itself took 177 to 199 ms on the Apology [dev]. `fonts.rs` does the rest:
+
+- **Families.** FreeType reads each TTF and OTF file's family and style names, the same names Plato matches, so what the list shows is what Plato loads. Styles go to regular, italic, bold and bold italic by Plato's names (Regular, Roman, Book; Italic; Bold, Semibold, Medium; Bold Italic), then by common variants (Normal, Oblique), then by the file name (`Family-BoldItalic.ttf`). Of two files for one slot, the one earlier in Plato's list wins. Files FreeType cannot open, files over 20 MB, hidden files and families without a regular face are left out; a family of one file of any style uses it as regular. A family named Literata is hidden behind the built-in one.
+- **Cache.** The folder is read when the list opens, not at start: 372 ms the first time for 15 files (four families) [dev], 4 ms from the cache [dev]. `fonts.json` keeps the list with a hash of the folder's mtime and its font files' names, sizes and mtimes, and is read again only when that changes (FAT keeps mtimes to 2 s, and replacing a file need not touch the folder).
+- **A folder per family.** Plato's `FontFamily::from_name` opens every font file in a directory to find a family name, and each layout thread does it per book. Pointed at the user's folder, every open would pay for every font there. So the chosen family's faces, four at most, are copied to `reading-fonts/<name>-<stamp>/` in the library data directory, and `Style::font_dir` points there. FAT has no links, so a copy it is: about 1.8 MB for Charis' two faces. The stamp hashes the sources' paths, sizes and mtimes, and the copy is made in a `.part` folder and renamed, so an interrupted copy is never used. Older copies of the family are deleted. A regular face whose style name Plato does not know (Normal) is copied alone, because Plato then uses the single file for every style instead of failing.
+- **Invalidation.** The font's name and folder are part of the `Style`, so page numbers on disk (`pagecache::style_key`) and snapshots (`snapshot::look`) of another font, or of an older copy of the same one, are not used.
+- **At start** the preferences name the family; the app finds its copy again (a stat per file when the folder is unchanged) and reads in Literata if the family is gone, until it comes back.
+- **Missing letters.** Plato replaces a glyph its font lacks with one from a fallback font chosen by script. Without MuPDF's Noto fonts (`MUPDF_FONTS`), the fork takes Latin and Greek from `serif/Literata-Regular.ttf` (`core: tofu fallback to Literata for Latin and Greek`); before, they fell to the symbol font and showed boxes. Checked on the host with a copy of Gentium Book cut to ASCII: the test book's Polish letters and ψυχή came out in Literata.
+
+The header and footer stay in Literata (`style::CHROME_FAMILY`). MuPDF's reflow (TXT, and MOBI the converter can't take) does not take the font. `aristotle --preview` with `--fonts DIR` opens the list, picks the first family and goes back to Literata (`03a` to `03d`).
 
 ### Hyphenation
 
@@ -277,10 +290,11 @@ The footer shows the chapter and estimated minutes left. `speed.rs` averages for
 | `library_view`, `sort` | `0`, `0` |
 | `language` | `en` |
 | `clippings` | `true` |
+| `font` | `Literata` |
 
 The frontlight level is read from the device, not saved. See `prefs.rs` for all fields.
 
-The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR` or `$ARISTOTLE_DATA`. It contains the index, covers, preferences, dictionary indexes, page starts, snapshots, and converted MOBI cache. `--data` selects renderer assets, not library state. `aristotle --help` lists options.
+The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR` or `$ARISTOTLE_DATA`. It contains the index, covers, preferences, dictionary indexes, page starts, snapshots, converted MOBI cache, the list of font families in the fonts folder (`fonts.json`) and a copy of the chosen family (`reading-fonts/`). `--data` selects renderer assets, not library state. `aristotle --help` lists options.
 
 ## Timing log
 

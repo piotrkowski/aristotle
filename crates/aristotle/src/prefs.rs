@@ -17,6 +17,8 @@ use aristotle_ui::screens::library::{CoverMode, View};
 use aristotle_ui::screens::reader::Settings;
 use serde::{Deserialize, Serialize};
 
+use crate::fonts;
+
 /// Body sizes in points for the menu's seven size steps. Step 2 is 10 pt,
 /// the default chosen for Literata (`docs/reader.md`). The
 /// steps match the UI prototype's pixel sizes (34 to 62 px at 300 DPI).
@@ -99,6 +101,16 @@ pub struct Prefs {
     /// the stock reader does. Off, highlights stay in the library index and
     /// the Markdown notes, and the user's file is never written.
     pub clippings: bool,
+    /// The reading font's family name: [`fonts::DEFAULT`] or a family from
+    /// the user's fonts folder (`fonts.rs`).
+    pub font: String,
+    /// Where Plato loads [`Prefs::font`] from, once the app has prepared
+    /// it; `None` reads in Literata. Not stored: found again at each start.
+    #[serde(skip)]
+    pub font_dir: Option<String>,
+    /// The UI's family for drawing the font's name in the menu.
+    #[serde(skip)]
+    pub font_ui: usize,
 }
 
 impl Default for Prefs {
@@ -116,6 +128,9 @@ impl Default for Prefs {
             sort: 0,
             language: "en".into(),
             clippings: true,
+            font: fonts::DEFAULT.into(),
+            font_dir: None,
+            font_ui: 0,
         }
     }
 }
@@ -144,6 +159,9 @@ impl Prefs {
         self.margins = self.margins.min(MARGIN_MM.len() - 1);
         self.library_view = self.library_view.min(View::ALL.len() - 1);
         self.sort = self.sort.min(crate::shelf::SORTS.len() - 1);
+        if self.font.trim().is_empty() {
+            self.font = fonts::DEFAULT.into();
+        }
         if !aristotle_i18n::locales()
             .iter()
             .any(|l| l.code == self.language)
@@ -160,7 +178,20 @@ impl Prefs {
         s.font_size = FONT_PT[p.size];
         s.line_height = LINE_HEIGHT[p.spacing];
         s.margin_mm = MARGIN_MM[p.margins];
+        if let Some(dir) = p.font_dir.filter(|_| p.font != fonts::DEFAULT) {
+            s.font_family = p.font;
+            s.font_dir = dir;
+        }
         s
+    }
+
+    /// The reading font in use: [`Prefs::font`] once prepared, else
+    /// Literata.
+    pub fn font_in_use(&self) -> &str {
+        match self.font_dir {
+            Some(_) => &self.font,
+            None => fonts::DEFAULT,
+        }
     }
 
     /// The menu's view of these preferences, with the frontlight level
@@ -172,7 +203,7 @@ impl Prefs {
             margins: self.margins,
             light,
             night: self.night,
-            ..Settings::default()
+            family: self.font_ui,
         }
     }
 
@@ -263,6 +294,9 @@ mod tests {
             sort: 2,
             language: "pl".into(),
             clippings: false,
+            font: "Gentium Book".into(),
+            font_dir: None,
+            font_ui: 0,
         };
         p.save(&dir).unwrap();
         assert_eq!(Prefs::load(&dir), p);
@@ -312,6 +346,37 @@ mod tests {
         let q = Prefs::load(&dir);
         assert_eq!(q.view(), View::Series);
         assert_eq!(q.sort, crate::shelf::SORTS.len() - 1);
+    }
+
+    #[test]
+    fn reading_font() {
+        let dir = crate::testdir("prefs-font");
+        let mut p = Prefs::default();
+        assert_eq!(p.font, "Literata");
+        assert_eq!(p.style().font_family, "Literata");
+        // Chosen but not prepared (the files are gone): Literata.
+        p.font = "Charis".into();
+        assert_eq!(p.style().font_dir, Style::pw4().font_dir);
+        assert_eq!(p.font_in_use(), "Literata");
+        p.font_dir = Some("/data/reading-fonts/Charis-0123".into());
+        let s = p.style();
+        assert_eq!(
+            (s.font_family.as_str(), s.font_dir.as_str()),
+            ("Charis", "/data/reading-fonts/Charis-0123")
+        );
+        assert_eq!(p.font_in_use(), "Charis");
+        // Stored by name; the folder is found again at start.
+        p.save(&dir).unwrap();
+        let text = std::fs::read_to_string(dir.join(Prefs::FILE)).unwrap();
+        assert!(text.contains(r#""font": "Charis""#), "{text}");
+        assert!(!text.contains("reading-fonts"), "{text}");
+        let q = Prefs::load(&dir);
+        assert_eq!((q.font.as_str(), q.font_dir.as_deref()), ("Charis", None));
+        // Older files and empty names read in Literata.
+        std::fs::write(dir.join(Prefs::FILE), br#"{"size": 3}"#).unwrap();
+        assert_eq!(Prefs::load(&dir).font, "Literata");
+        std::fs::write(dir.join(Prefs::FILE), br#"{"font": " "}"#).unwrap();
+        assert_eq!(Prefs::load(&dir).font, "Literata");
     }
 
     #[test]
