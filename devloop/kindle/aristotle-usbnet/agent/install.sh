@@ -1,0 +1,35 @@
+#!/bin/sh
+# Install the aristotle agent: one upstart job on the root filesystem, the rest in
+# /var/local/aristotle. Run as root on the device (from KUAL or SSH). Idempotent.
+set -u
+HERE=$(cd "$(dirname "$0")" && pwd)
+S=/var/local/aristotle
+EXT=$(dirname "$HERE")
+
+say() {
+    printf '%s\n' "$*"
+    eips 0 1 "$*                                        " > /dev/null 2>&1
+}
+
+mkdir -p "$S"
+cp "$HERE/boot.sh" "$HERE/aristotlectl" "$S/"
+chmod 755 "$S/boot.sh" "$S/aristotlectl"
+if [ -s "$EXT/authorized_keys" ]; then
+    cp "$EXT/authorized_keys" "$S/authorized_keys"
+fi
+[ -s "$S/authorized_keys" ] || { say "aristotle: no authorized_keys, not installing"; exit 1; }
+
+# The single root-filesystem write: the upstart job. mntroot is the stock tool
+# for a temporary read-write root.
+if ! cmp -s "$HERE/aristotle.conf" /etc/upstart/aristotle.conf 2> /dev/null; then
+    mntroot rw || { say "aristotle: mntroot rw failed"; exit 1; }
+    cp "$HERE/aristotle.conf" /etc/upstart/aristotle.conf
+    sync
+    mntroot ro
+fi
+initctl reload-configuration 2> /dev/null
+# Hand the USB port over from a manual "Start" session, if one is running.
+[ -f /var/run/aristotle-dropbear.pid ] && kill "$(cat /var/run/aristotle-dropbear.pid)" 2> /dev/null
+rm -f /var/run/aristotle-dropbear.pid
+stop aristotle > /dev/null 2>&1
+start aristotle && say "aristotle agent installed and running"

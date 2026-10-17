@@ -1,16 +1,28 @@
 {
   "items": [
     {
-      "name": "Aristotle USB network",
+      "name": "Aristotle",
       "items": [
         {
-          "name": "Start (SSH over the USB cable)",
+          "name": "Install agent (SSH on every boot)",
+          "action": "sh ./agent/install.sh",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Remove agent",
+          "action": "sh ./agent/uninstall.sh",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Start USB network once (manual)",
           "action": "sh ./bin/start.sh",
           "exitmenu": false,
           "status": false
         },
         {
-          "name": "Stop",
+          "name": "Stop USB network (manual)",
           "action": "sh ./bin/stop.sh",
           "exitmenu": false,
           "status": false

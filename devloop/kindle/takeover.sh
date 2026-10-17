@@ -47,6 +47,8 @@ state() {
 case "${1:-status}" in
 start)
     mem
+    # Tell the aristotle agent's watchdog that the stock GUI is down on purpose.
+    mkdir -p /var/local/aristotle && touch /var/local/aristotle/takeover
     stop "$GUI" > /dev/null 2>&1
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
@@ -64,6 +66,7 @@ start)
     mem
     ;;
 stop)
+    rm -f /var/local/aristotle/takeover
     for job in $EXTRA; do
         start "$job" > /dev/null 2>&1
     done

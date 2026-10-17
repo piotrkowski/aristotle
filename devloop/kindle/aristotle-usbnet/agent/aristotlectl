@@ -1,0 +1,55 @@
+#!/bin/sh
+# Remote control for the aristotle agent (run over SSH as root).
+#   aristotlectl status            agent, USB mode, network, stock GUI, last log lines
+#   aristotlectl mode net          USB network + SSH (default)
+#   aristotlectl mode storage [N]  USB drive mode for N minutes (default 10), then
+#                                back to net automatically. SSH drops meanwhile.
+#   aristotlectl takeover on|off   tell the watchdog the stock GUI is down on purpose
+#   aristotlectl gui-restart       restart the stock GUI now
+#   aristotlectl log [N]           last N log lines (default 40)
+#   aristotlectl reboot            reboot; the agent brings SSH back on boot
+set -u
+S=/var/local/aristotle
+
+case "${1:-status}" in
+status)
+    initctl status aristotle 2> /dev/null || echo "aristotle job not installed"
+    printf 'usb-mode: %s\n' "$(cat "$S/usb-mode" 2> /dev/null || echo net)"
+    printf 'takeover: %s\n' "$([ -e "$S/takeover" ] && echo on || echo off)"
+    printf 'stock GUI: cvm %s, Xorg %s\n' \
+        "$(pgrep -f /usr/java/bin/cvm > /dev/null && echo up || echo down)" \
+        "$(pgrep -x Xorg > /dev/null && echo up || echo down)"
+    printf 'uptime: %s\n' "$(uptime)"
+    tail -5 "$S/log" 2> /dev/null
+    ;;
+mode)
+    case "${2:-}" in
+    net) rm -f "$S/usb-mode" ;;
+    storage) echo "storage $(($(date +%s) + ${3:-10} * 60))" > "$S/usb-mode" ;;
+    *) echo "usage: aristotlectl mode net|storage [MINUTES]" >&2; exit 2 ;;
+    esac
+    echo "requested; the agent applies it within 15 s"
+    ;;
+takeover)
+    case "${2:-}" in
+    on) touch "$S/takeover" ;;
+    off) rm -f "$S/takeover" ;;
+    *) echo "usage: aristotlectl takeover on|off" >&2; exit 2 ;;
+    esac
+    ;;
+gui-restart)
+    stop lab126_gui > /dev/null 2>&1
+    sleep 3
+    start lab126_gui > /dev/null 2>&1
+    echo "stock GUI restarting (about 2 minutes)"
+    ;;
+log) tail -"${2:-40}" "$S/log" ;;
+reboot)
+    sync
+    reboot
+    ;;
+*)
+    sed -n '2,12p' "$0"
+    exit 2
+    ;;
+esac
