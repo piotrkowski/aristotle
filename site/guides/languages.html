@@ -31,14 +31,18 @@
 
   <div class="prose">
     <h2 id="interface">The interface</h2>
-    <p>The interface is in Polish for now. English and other languages come with translation catalogs, which are being built. This guide will have the steps once they land; until then, <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/ui-framework.md#adding-a-language">Adding a language</a> in the UI framework notes is the place to watch.</p>
-    <p>The plan, from the <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/architecture.md#languages">architecture notes</a>:</p>
-    <ul>
-      <li>One catalog per language, as Rust code: a missing or misspelt message fails to compile.</li>
-      <li>Plural forms per language: English has one and other; Polish has one, few and many (2 książki, 5 książek).</li>
-      <li>The catalog also holds month and weekday names, the decimal separator, and how dates, sizes and durations are written.</li>
-      <li>The language is a setting: Automatic, English, Polski.</li>
-    </ul>
+    <p>The interface is in English by default, with Polish as a translation. Settings › Language lists every language built in, each by its own name, and switching redraws the screen at once.</p>
+    <p>Every message lives in one JSON file per language, <code>crates/aristotle-i18n/locales/&lt;code&gt;.json</code>, with <code>en.json</code> the source of truth. Messages are grouped one level deep by screen (<code>"library": {"title": "Library"}</code>), with <code>{name}</code> placeholders, and plural messages hold their forms (<code>{"one": "{n} book", "other": "{n} books"}</code>). The build checks every file against <code>en.json</code> and embeds it, so the Kindle reads no files and a broken translation fails the build.</p>
+
+    <h2 id="adding">Adding a language</h2>
+    <ol>
+      <li>Copy <code>crates/aristotle-i18n/locales/en.json</code> to <code>&lt;code&gt;.json</code>, named with the language's code (<code>de.json</code>).</li>
+      <li>Translate every message and fill in <code>"@locale"</code>: <code>name</code> in the language itself, <code>decimal</code>, the twelve <code>months</code> as they appear in a date, the seven <code>weekdays</code> from Sunday, and the <code>date</code> (<code>{weekday}</code>, <code>{day}</code>, <code>{month}</code>, <code>{year}</code>) and <code>time</code> (<code>{h}</code>, <code>{hh}</code>, <code>{mm}</code>) patterns. Keep every <code>{placeholder}</code>; plural messages need the forms the language's rule uses.</li>
+      <li>If the language's plurals are not "one for 1, other otherwise", add a rule to <code>crates/aristotle-i18n/src/plural.rs</code> (<code>Rule::for_language</code>, <code>categories</code>, <code>select</code>) with tests over 0, 1, 2, 5, 12, 14, 21, 22, 25, 112 and 122. Polish, for example, has one, few and many: 1 książka, 2 książki, 5 książek.</li>
+      <li>Build with <code>cargo test -p aristotle-i18n</code>. It names every missing key and wrong placeholder. A translation still in progress can say <code>"complete": false</code> in <code>"@locale"</code>; its missing messages then fall back to English, with a build warning.</li>
+      <li>Look at every screen: <code>aristotle-ui-preview --lang &lt;code&gt;</code>, and the reader's <code>aristotle --preview ... --lang &lt;code&gt;</code>. Long words may need shorter wording in chips and segment labels.</li>
+    </ol>
+    <p>The language then appears in the settings by itself. The details are in <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/ui-framework.md#adding-a-language">Adding a language</a> in the UI framework notes.</p>
 
     <h2 id="books">Your books</h2>
     <p>Books are hyphenated in their own language, whatever the interface language. The default build ships patterns for Polish, English (US and UK), Ancient Greek and Latin. Others can be added at build time, by name in <code>HYPH_LANGS</code> (German is <code>de-1996</code>, French <code>fr</code>):</p>

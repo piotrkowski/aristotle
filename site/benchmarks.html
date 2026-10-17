@@ -96,7 +96,7 @@
           <tr><th scope="row">Page turn, page shown</th><td class="num" data-label="Stock">564–588 ms</td><td class="num ours" data-label="Aristotle">440 ms</td><td class="notes" data-label="Notes">One full mode-9 update, the stock reader's own request; the next page is prerendered</td></tr>
           <tr><th scope="row">Page turn, screen settled</th><td class="num" data-label="Stock">826–890 ms</td><td class="num ours" data-label="Aristotle">440 ms</td><td class="notes" data-label="Notes">Stock sends a second update for its footer; ours draws the footer in the same frame</td></tr>
           <tr><th scope="row">Open a book</th><td class="num" data-label="Stock">0.8 s</td><td class="num ours" data-label="Aristotle">0.56 s</td><td class="notes" data-label="Notes">The page left last time, from a snapshot, in one mode-8 flash</td></tr>
-          <tr><th scope="row">Back to the library</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">52 ms / 765 ms</td><td class="notes" data-label="Notes">Tap mark, then the library in one flash (acknowledged / settled)</td></tr>
+          <tr><th scope="row">Back to the library</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">552 ms</td><td class="notes" data-label="Notes">Settled: a tap mark, then the library in one flash</td></tr>
           <tr><th scope="row">Reader menu</th><td class="num" data-label="Stock">239–264 ms / 748–780 ms</td><td class="num ours" data-label="Aristotle">513–577 ms</td><td class="notes" data-label="Notes">Stock toolbar: first update / settled. Ours: one update, nothing before it; to be fixed</td></tr>
           <tr><th scope="row">Touch acknowledged</th><td class="num dim" data-label="Stock">none before the result</td><td class="num ours" data-label="Aristotle">51–67 ms</td><td class="notes" data-label="Notes">Library controls invert (A2) on touch-down</td></tr>
           <tr><th scope="row">Wake from the screensaver</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">441 ms</td><td class="notes" data-label="Notes">One full update of the page that was on screen</td></tr>
@@ -171,8 +171,8 @@
           <tr><th scope="col">Lookup</th><th scope="col" class="num">Lookup</th><th scope="col" class="num">Popup handed to the panel</th></tr>
         </thead>
         <tbody>
-          <tr><th scope="row">Polish word, pl-pl (1.4 million forms)</th><td class="num ours" data-label="Lookup">89 ms</td><td class="num ours" data-label="Popup handed to the panel">239 ms</td></tr>
-          <tr><th scope="row">Ancient Greek word</th><td class="num ours" data-label="Lookup">10.5 ms</td><td class="num ours" data-label="Popup handed to the panel">71 ms</td></tr>
+          <tr><th scope="row">Polish word, pl-pl (1.37 million forms)</th><td class="num ours" data-label="Lookup">89 ms</td><td class="num ours" data-label="Popup handed to the panel">239 ms</td></tr>
+          <tr><th scope="row">Ancient Greek word, grc-pl</th><td class="num ours" data-label="Lookup">10.5 ms</td><td class="num ours" data-label="Popup handed to the panel">71 ms</td></tr>
           <tr><th scope="row">Footnote</th><td class="num ours" data-label="Lookup">2 ms</td><td class="num dim" data-label="Popup handed to the panel">–</td></tr>
         </tbody>
       </table>

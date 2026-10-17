@@ -515,21 +515,18 @@ a.button:hover {
   margin: 0;
 }
 
-.figures .shot {
-  border-radius: 3.4% / 2.5%;
-  box-shadow: 0 0 0 1px var(--hairline), var(--shadow);
-  overflow: hidden;
-  background: #fff;
-  aspect-ratio: 1072 / 1448;
-}
-
+/* The shots carry their own frame and shadow (tools/screenshots), inside a
+   transparent margin of 32 of their 602 px; the caption lines up with the
+   card. */
 .figures img {
+  display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
 }
 
 .figures figcaption {
-  margin-top: 0.8rem;
+  margin-top: 0.2rem;
+  padding: 0 5.3%;
   font-family: var(--sans);
   font-size: 0.85rem;
   color: var(--muted);

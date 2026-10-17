@@ -1,7 +1,8 @@
 // The demo's frame set. Everything below the first line is plain JSON, so a
 // script can rewrite it; it is wrapped in a script so the site also works from
-// file://, where browsers refuse to fetch a .json file. To swap in device
-// captures or another language, change this file and the images it names.
+// file://, where browsers refuse to fetch a .json file. The images are made by
+// tools/screenshots/compose.sh from device captures; to swap them, change
+// that manifest, this file, or both.
 //
 // screen: panel size in pixels; hotspot rects are [x, y, width, height] in
 //   those pixels.
@@ -14,118 +15,125 @@
 //   "overlay" a partial update with no flash: the reader menu;
 //   "none"    an instant swap.
 //   "key" binds a keyboard key (ArrowRight, ArrowLeft, Escape).
+//   Only transitions the captures show are offered: the day menu was
+//   captured over the English page and the night menu over the Greek one, so
+//   night mode is switched in the settings.
 // tour: the guided path. A step is reached when its frame is shown after the
 //   previous step's. "target" marks the hotspot to suggest; "action" adds a
 //   button below the device.
 window.ARISTOTLE_DEMO = {
   "screen": { "width": 1072, "height": 1448 },
   "start": "library",
-  "note": "Frames are host renders of the current interface, pixel for pixel; the interface is in Polish for now. The dictionary step uses a short test text. Books shown are in the public domain.",
+  "note": "Frames are screenshots of a Kindle Paperwhite 4 running Aristotle. The book is from Project Gutenberg; the dictionary is a Wiktionary export (CC BY-SA).",
   "frames": {
     "library": {
       "image": "demo/frames/library.png",
-      "alt": "The library: Lalka by Bolesław Prus as the book to continue, at 43 %, above a list of four books with progress bars.",
+      "alt": "The library: Nicomachean Ethics, Book I, by Aristotle as the book to continue, at 33 %, above a list of four books with the shelves All, Reading, New and Finished.",
       "hotspots": [
-        { "id": "continue", "label": "Open Lalka", "rect": [71, 187, 930, 294], "to": "page-12", "kind": "flash" },
-        { "id": "settings", "label": "Settings", "rect": [880, 50, 136, 136], "to": "settings", "kind": "flash" }
+        { "id": "continue", "label": "Open Nicomachean Ethics", "rect": [60, 215, 950, 250], "to": "greek-page", "kind": "flash" },
+        { "id": "settings", "label": "Settings", "rect": [880, 60, 136, 120], "to": "settings", "kind": "flash" }
+      ]
+    },
+    "greek-page": {
+      "image": "demo/frames/greek-page.png",
+      "alt": "The first page of Book I in Bywater's Greek text, Βιβλίον Α, justified, with the chapter and progress in the footer.",
+      "hotspots": [
+        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "english-page", "kind": "turn", "key": "ArrowRight" },
+        { "id": "word", "label": "Hold the word ἀγαθοῦ", "rect": [352, 318, 172, 80], "to": "greek-popup", "kind": "turn" }
+      ]
+    },
+    "greek-popup": {
+      "image": "demo/frames/greek-popup.png",
+      "alt": "The dictionary popup for ἀγαθοῦ: its base form ἀγαθός, an adjective, good; brave; noble; moral; gentle, from the grc-en dictionary, with a tab for grc-pl and the buttons Highlight, More and Close.",
+      "hotspots": [
+        { "id": "page", "label": "Close the popup", "rect": [0, 0, 1072, 760], "to": "greek-page", "kind": "turn" },
+        { "id": "close", "label": "Close", "rect": [458, 1318, 140, 112], "to": "greek-page", "kind": "turn", "key": "Escape" }
+      ]
+    },
+    "english-page": {
+      "image": "demo/frames/english-page.png",
+      "alt": "Book I, Chapter I in Chase's English translation, justified and hyphenated: Every art, and every science reduced to a teachable form, and in like manner every action and moral choice, aims, it is thought, at some good.",
+      "hotspots": [
+        { "id": "menu", "label": "Open the menu", "rect": [0, 0, 1072, 173], "to": "menu", "kind": "overlay" },
+        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "greek-page", "kind": "turn", "key": "ArrowLeft" }
+      ]
+    },
+    "menu": {
+      "image": "demo/frames/menu.png",
+      "alt": "The reader menu over the English page: a top bar with Library, the title, Contents, Highlights and Go to, and a bottom sheet with the chapter and page, size, spacing, margins, light and a Night switch.",
+      "hotspots": [
+        { "id": "library", "label": "Back to the library", "rect": [30, 10, 280, 110], "to": "library", "kind": "flash" },
+        { "id": "close", "label": "Close the menu", "rect": [0, 240, 1072, 420], "to": "english-page", "kind": "turn", "key": "Escape" }
+      ]
+    },
+    "settings": {
+      "image": "demo/frames/settings.png",
+      "alt": "Settings: the frontlight at 2 of 24 with presets, a Night mode switch, covers in the library, battery and the screensaver delay.",
+      "hotspots": [
+        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library", "kind": "flash", "key": "Escape" },
+        { "id": "night", "label": "Night mode", "rect": [40, 545, 992, 120], "to": "settings-night", "kind": "flash" }
+      ]
+    },
+    "settings-night": {
+      "image": "demo/frames/settings-night.png",
+      "alt": "Settings in night mode, white on black, with the Night mode switch on.",
+      "hotspots": [
+        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library-night", "kind": "flash", "key": "Escape" },
+        { "id": "night", "label": "Day mode", "rect": [40, 545, 992, 120], "to": "settings", "kind": "flash" }
       ]
     },
     "library-night": {
       "image": "demo/frames/library-night.png",
       "alt": "The library in night mode, white on black.",
       "hotspots": [
-        { "id": "continue", "label": "Open Lalka", "rect": [71, 187, 930, 294], "to": "page-12-night", "kind": "flash" },
-        { "id": "settings", "label": "Settings", "rect": [880, 50, 136, 136], "to": "settings-night", "kind": "flash" }
+        { "id": "continue", "label": "Open Nicomachean Ethics", "rect": [60, 215, 950, 250], "to": "greek-page-night", "kind": "flash" },
+        { "id": "settings", "label": "Settings", "rect": [880, 60, 136, 120], "to": "settings-night", "kind": "flash" }
       ]
     },
-    "settings": {
-      "image": "demo/frames/settings.png",
-      "alt": "Settings: frontlight in 24 steps with presets, night mode, covers in the library, battery and screensaver delay.",
-      "hotspots": [
-        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library", "kind": "flash", "key": "Escape" }
-      ]
-    },
-    "settings-night": {
-      "image": "demo/frames/settings-night.png",
-      "alt": "Settings in night mode.",
-      "hotspots": [
-        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library-night", "kind": "flash", "key": "Escape" }
-      ]
-    },
-    "page-12": {
-      "image": "demo/frames/page-12.png",
-      "alt": "Page 12 of 684 of Lalka: the opening of chapter one, justified and hyphenated, with the chapter and minutes left in the footer.",
-      "hotspots": [
-        { "id": "menu", "label": "Open the menu", "rect": [0, 0, 1072, 173], "to": "menu", "kind": "overlay" },
-        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "page-13", "kind": "turn", "key": "ArrowRight" }
-      ]
-    },
-    "page-13": {
-      "image": "demo/frames/page-13.png",
-      "alt": "Page 13 of 684 of Lalka, full of text.",
-      "hotspots": [
-        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "page-12", "kind": "turn", "key": "ArrowLeft" }
-      ]
-    },
-    "page-12-night": {
-      "image": "demo/frames/page-12-night.png",
-      "alt": "Page 12 of Lalka in night mode, white text on black.",
+    "greek-page-night": {
+      "image": "demo/frames/greek-page-night.png",
+      "alt": "The first page of Book I in Greek, in night mode.",
       "hotspots": [
         { "id": "menu", "label": "Open the menu", "rect": [0, 0, 1072, 173], "to": "menu-night", "kind": "overlay" },
-        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "page-13-night", "kind": "turn", "key": "ArrowRight" }
+        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "english-page-night", "kind": "turn", "key": "ArrowRight" },
+        { "id": "word", "label": "Hold the word ἀγαθοῦ", "rect": [352, 318, 172, 80], "to": "greek-popup-night", "kind": "turn" }
       ]
     },
-    "page-13-night": {
-      "image": "demo/frames/page-13-night.png",
-      "alt": "Page 13 of Lalka in night mode.",
+    "greek-popup-night": {
+      "image": "demo/frames/greek-popup-night.png",
+      "alt": "The dictionary popup for ἀγαθοῦ in night mode.",
       "hotspots": [
-        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "page-12-night", "kind": "turn", "key": "ArrowLeft" }
+        { "id": "page", "label": "Close the popup", "rect": [0, 0, 1072, 760], "to": "greek-page-night", "kind": "turn" },
+        { "id": "close", "label": "Close", "rect": [458, 1318, 140, 112], "to": "greek-page-night", "kind": "turn", "key": "Escape" }
       ]
     },
-    "menu": {
-      "image": "demo/frames/menu.png",
-      "alt": "The reader menu over the page: a top bar with Biblioteka (library) and the title, and a bottom sheet with chapter and page, font, size, spacing, margins, light and Noc (night).",
+    "english-page-night": {
+      "image": "demo/frames/english-page-night.png",
+      "alt": "Book I, Chapter I in English, in night mode.",
       "hotspots": [
-        { "id": "library", "label": "Back to the library", "rect": [30, 10, 300, 110], "to": "library", "kind": "flash" },
-        { "id": "close", "label": "Close the menu", "rect": [0, 130, 1072, 410], "to": "page-12", "kind": "turn", "key": "Escape" },
-        { "id": "night", "label": "Night mode", "rect": [40, 1305, 992, 110], "to": "menu-night", "kind": "flash" }
+        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "greek-page-night", "kind": "turn", "key": "ArrowLeft" }
       ]
     },
     "menu-night": {
       "image": "demo/frames/menu-night.png",
-      "alt": "The reader menu in night mode, with the Noc switch on.",
+      "alt": "The reader menu over the Greek page in night mode, with the Night switch on.",
       "hotspots": [
-        { "id": "library", "label": "Back to the library", "rect": [30, 10, 300, 110], "to": "library-night", "kind": "flash" },
-        { "id": "close", "label": "Close the menu", "rect": [0, 130, 1072, 410], "to": "page-12-night", "kind": "turn", "key": "Escape" },
-        { "id": "night", "label": "Day mode", "rect": [40, 1305, 992, 110], "to": "menu", "kind": "flash" }
-      ]
-    },
-    "test-page-night": {
-      "image": "demo/frames/test-page-night.png",
-      "alt": "A test text in night mode: Rozdział pierwszy. O duszy, with Polish, Greek and Latin words and a footnote marker.",
-      "hotspots": [
-        { "id": "word", "label": "Hold the word dusza", "rect": [480, 270, 150, 70], "to": "test-dict-night", "kind": "turn" }
-      ]
-    },
-    "test-dict-night": {
-      "image": "demo/frames/test-dict-night.png",
-      "alt": "The dictionary popup for dusza (soul) from a Polish Wiktionary dictionary, with tabs for pl-pl, la-pl and en-pl, six senses, and Zakreśl (highlight), Więcej (more) and Zamknij (close).",
-      "hotspots": [
-        { "id": "page", "label": "Close the popup", "rect": [0, 0, 1072, 380], "to": "test-page-night", "kind": "turn" },
-        { "id": "close", "label": "Close", "rect": [450, 1320, 205, 110], "to": "test-page-night", "kind": "turn", "key": "Escape" }
+        { "id": "library", "label": "Back to the library", "rect": [30, 10, 280, 110], "to": "library-night", "kind": "flash" },
+        { "id": "close", "label": "Close the menu", "rect": [0, 240, 1072, 420], "to": "greek-page-night", "kind": "turn", "key": "Escape" }
       ]
     }
   },
   "tour": [
-    { "frame": "library", "target": "continue", "hint": "This is the library. Tap Lalka, the book to continue, to open it where you left off." },
-    { "frame": "page-12", "target": "next", "hint": "Tap the right of the page, or press <kbd>→</kbd>, to turn it. The page flashes once, as on the panel." },
-    { "frame": "page-13", "target": "prev", "hint": "Tap the left third, or press <kbd>←</kbd>, to go back a page." },
-    { "frame": "page-12", "target": "menu", "hint": "Tap the top of the page to open the menu. It appears without a flash." },
-    { "frame": "menu", "target": "night", "hint": "Turn on Noc, night mode." },
-    { "frame": "menu-night", "target": "close", "hint": "Tap the page to close the menu." },
-    { "frame": "page-12-night", "hint": "Night mode stays on for every screen. Next, the dictionary, on a test text with Polish, Greek and Latin words.", "action": { "label": "Open the test text", "to": "test-page-night", "kind": "flash" } },
-    { "frame": "test-page-night", "target": "word", "hint": "Hold a word to look it up. Tap the marked word, dusza." },
-    { "frame": "test-dict-night", "target": "close", "hint": "The definition comes from an offline dictionary. Tap Zamknij to go back to the page." },
-    { "frame": "test-page-night", "hint": "That is the tour. Everything else in the demo still responds to taps.", "action": { "label": "Start again", "to": "library", "kind": "flash" } }
+    { "frame": "library", "target": "continue", "hint": "This is the library. Tap the book to continue, Nicomachean Ethics, Book I, to open it where you left off." },
+    { "frame": "greek-page", "target": "word", "hint": "The book opens in one flash, on Bywater's Greek text. Hold a word to look it up: tap ἀγαθοῦ." },
+    { "frame": "greek-popup", "target": "close", "hint": "The definition comes from an offline Wiktionary dictionary. ἀγαθοῦ is an inflected form; the popup shows its dictionary form, ἀγαθός. Tap Close." },
+    { "frame": "greek-page", "target": "next", "hint": "Tap the right of the page, or press <kbd>→</kbd>, to turn it. The page changes in one update, as on the panel." },
+    { "frame": "english-page", "target": "menu", "hint": "Chase's English translation, justified and hyphenated. Tap the top of the page to open the menu. It appears without a flash." },
+    { "frame": "menu", "target": "library", "hint": "The menu sets the size, spacing, margins and light. Tap Library to go back." },
+    { "frame": "library", "target": "settings", "hint": "Tap the gear to open the settings." },
+    { "frame": "settings", "target": "night", "hint": "Turn on Night mode." },
+    { "frame": "settings-night", "target": "back", "hint": "Night mode is white on black on every screen, switched with one flash. Tap the arrow to go back." },
+    { "frame": "library-night", "target": "continue", "hint": "Open the book again." },
+    { "frame": "greek-page-night", "hint": "That is the tour. Everything else in the demo still responds to taps: the word, the menu, the next page.", "action": { "label": "Start again", "to": "library", "kind": "flash" } }
   ]
 };
