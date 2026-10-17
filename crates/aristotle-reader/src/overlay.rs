@@ -459,8 +459,18 @@ pub fn percent_label(value: f32, detail: &str) -> String {
     }
 }
 
-/// The reading actions shown under the menu's top bar.
-pub fn nav_bar(t: &mut Tree, st: &Styles) -> NodeId {
+/// Height of the row of reading actions under the menu's top bar (the row
+/// and its rule).
+pub const NAV_H: i32 = 114;
+
+/// The first action id of the reading interactions; the reader menu's are
+/// below.
+pub const FIRST_ACTION: ActionId = 1000;
+
+/// The reading actions shown under the menu's top bar, which is 122 px
+/// plus `top_extra` (the white the menu adds so its edge misses the text;
+/// [`NAV_H`] is counted in that).
+pub fn nav_bar(t: &mut Tree, st: &Styles, top_extra: i32) -> NodeId {
     let m = margin();
     let mut cells = Vec::new();
     for (label, id) in [
@@ -474,12 +484,16 @@ pub fn nav_bar(t: &mut Tree, st: &Styles) -> NodeId {
         cells.push(b);
     }
     let row = t.add(Node::row(0).cross(Cross::Stretch), cells);
-    let row = t.fixed(None, Some(112), Some(row));
+    let row = t.fixed(None, Some(NAV_H - 2), Some(row));
     let row = t.pad(Insets::vh(0, m - 16), row);
     let line = t.rule(2, INK);
     let bar = t.add(Node::column(0).bg(255), [row, line]);
-    // Below the menu's top bar (120 px and a 2 px rule).
-    let above = t.gap(1, 122);
+    let above = t.gap(1, 122 + top_extra.max(0));
     let fill = t.spacer(1);
     t.add(Node::column(0).hidden(true), [above, bar, fill])
+}
+
+/// The opaque row inside [`nav_bar`]'s layer.
+pub fn nav_row(t: &Tree, nav: NodeId) -> NodeId {
+    t.node(nav).children[1]
 }

@@ -13,10 +13,13 @@
 //!   the page-turn update, one full-screen mode-9 update
 //!   ([`App::close_overlay`]), so nothing is left behind.
 //!
-//! A long press arrives after the touch-down has already turned the page
-//! (the owner's touch-down turns); the turn is undone and the original
-//! page comes back together with the selection and the popup, in one
-//! full update.
+//! Pages turn on release ([`crate::turns`]), so a long press finds the
+//! page it started on: the selection and the popup come in one update.
+//!
+//! Night mode needs nothing here: the UI inverts its pixels (or the EPDC
+//! does), so popups, selections and lists follow the night palette.
+//! While a book still opens from its snapshot these gestures do nothing
+//! (`App::opening_intent`).
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -37,7 +40,7 @@ use crate::marks;
 use crate::overlay::{self, act, ListRow, Place, PopupSpec, SelectionMarks};
 use crate::panel::Content;
 use crate::selection::{self, Selection};
-use crate::turns::{bookmark_corner, Turn};
+use crate::turns::bookmark_corner;
 use crate::{perf, App, Screen};
 
 /// How long a long press waits for the dictionary before it shows the
@@ -331,8 +334,14 @@ impl App {
             }
             layers
         };
-        let (tree, menu, page_node, nav) =
-            crate::reader_tree(&styles, &r.session.title, &r.settings, page, &mut extra);
+        let (tree, menu, page_node, nav) = crate::reader_tree_with(
+            &styles,
+            &r.session.title,
+            &r.settings,
+            page,
+            (0, 0),
+            &mut extra,
+        );
         r.menu = menu;
         r.page_node = page_node;
         r.nav = nav;
@@ -455,8 +464,8 @@ impl App {
 
     // ---------------------------------------------------------- gestures
 
-    /// A long press at `at`; `undo` is the turn the touch-down made.
-    pub(crate) fn hold(&mut self, at: Point, undo: Option<Turn>) -> Result<(), Error> {
+    /// A long press at `at`.
+    pub(crate) fn hold(&mut self, at: Point) -> Result<(), Error> {
         let t0 = Instant::now();
         let Some(r) = self.reading() else {
             return Ok(());
@@ -464,18 +473,9 @@ impl App {
         if !r.overlay.is_none() || r.menu_open {
             return Ok(());
         }
-        if let Some(dir) = undo {
-            if let Some(back) = r.session.neighbor(r.session.current, dir.opposite()) {
-                r.session.current = back;
-            }
-        }
         let loc = r.session.current;
         let words = r.session.words(loc);
         let Some(i) = selection::hit(&words, at.x, at.y) else {
-            if undo.is_some() {
-                // Nothing to select: still take the turn back.
-                self.close_overlay()?;
-            }
             return Ok(());
         };
         let sel = Selection::word(&words, i);
@@ -523,14 +523,10 @@ impl App {
                 // the answer comes (see `background`).
                 perf!("hold: \"{word}\" selected, dictionary still looking");
                 self.rebuild_reader(Refresh::Auto)?;
-                if undo.is_some() {
-                    self.present_full()?;
-                } else {
-                    if let Some(n) = self.reading().and_then(|r| r.nodes.selection) {
-                        self.ui.tree.invalidate(n, Refresh::Transient);
-                    }
-                    self.present_fast()?;
+                if let Some(n) = self.reading().and_then(|r| r.nodes.selection) {
+                    self.ui.tree.invalidate(n, Refresh::Transient);
                 }
+                self.present_fast()?;
             }
         }
         perf!(
@@ -780,7 +776,10 @@ impl App {
             marks::export(&self.exports, rec);
         }
         self.reload_marks();
-        self.close_overlay()
+        self.close_overlay()?;
+        // The page now shows the change: the next open's snapshot too.
+        self.save_snapshot();
+        Ok(())
     }
 
     fn remove_highlight(&mut self, index: usize) -> Result<(), Error> {
@@ -806,7 +805,10 @@ impl App {
             }
         }
         self.reload_marks();
-        self.close_overlay()
+        self.close_overlay()?;
+        // The page now shows the change: the next open's snapshot too.
+        self.save_snapshot();
+        Ok(())
     }
 
     /// The top right corner: add or remove a bookmark on this page. The
@@ -853,7 +855,10 @@ impl App {
             w.page = page;
         }
         self.ui.tree.invalidate(r.page_node, Refresh::Auto);
-        self.present_fast()
+        self.present_fast()?;
+        // The page now shows the change: the next open's snapshot too.
+        self.save_snapshot();
+        Ok(())
     }
 
     // ------------------------------------------------------ lists

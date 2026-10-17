@@ -62,9 +62,14 @@ pub fn locator(position: &Position) -> Locator {
 
 /// The progress record for a page at `position`, `fraction` of the way in.
 pub fn progress_at(position: &Position, fraction: f32, now: i64) -> Progress {
+    progress_for(locator(position), fraction, now)
+}
+
+/// [`progress_at`] for a locator already made (a snapshot's page).
+pub fn progress_for(locator: Locator, fraction: f32, now: i64) -> Progress {
     Progress {
         fraction: fraction.clamp(0.0, 1.0),
-        locator: locator(position),
+        locator,
         updated: now,
         source: Some("aristotle".into()),
         page: None,

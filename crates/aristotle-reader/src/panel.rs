@@ -14,6 +14,11 @@
 //!   page itself changed behind the open menu (new font size, chapter jump),
 //!   the frame goes out as a full mode-9 update of the whole screen like a
 //!   page turn ([`Content::Page`]).
+//! - **Night mode** keeps all of the above, so page turns stay one full
+//!   mode-9 update and flashes full mode 8 (the waveforms FBInk names
+//!   night waveforms). Gray chrome updates switch from GL16 to GLKW16
+//!   (mode 9, partial). Pages are inverted in the copy to the framebuffer
+//!   (software night) or by the EPDC (hardware night, [`Panel::set_night`]).
 //!
 //! The driver runs one update at a time and reads the framebuffer when it
 //! processes an update, so a new page is only blitted once the previous
@@ -22,7 +27,9 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -31,6 +38,8 @@ use aristotle_hal::framebuffer::{Framebuffer, Rect as FbRect, Waveform as FbWave
 use aristotle_render::page::Page;
 use aristotle_ui::ui::{Damage, Ui};
 use aristotle_ui::{Rect, Waveform};
+
+use crate::prefs::NightMethod;
 
 /// The stock UI's full flashing refresh (GC16 equivalent on the PW4).
 pub const FLASH: FbWaveform = FbWaveform::GCK16;
@@ -43,6 +52,36 @@ pub enum Content {
     /// a full mode-9 update of the whole screen, like a page turn, so the
     /// old page leaves no ghost.
     Page,
+}
+
+/// What one UI damage rectangle becomes on the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Request {
+    /// A full-mode update of the whole screen.
+    FullScreen(FbWaveform),
+    /// A partial update of the damaged rectangle, through the display
+    /// thread.
+    Partial(FbWaveform),
+}
+
+/// The transition policy at the panel (`docs/ui-framework.md`,
+/// "Transitions"):
+///
+/// - GC16 (a screen switch, the night switch, a cleanup) is one full
+///   update of the whole screen with mode 8, the stock flash;
+/// - a gray change of the book page behind the menu is one full update of
+///   the whole screen with the turn waveform (mode 9), like a page turn;
+/// - A2 (touch-down feedback) and DU (black-and-white changes) are partial;
+/// - GL16 (gray chrome) is partial, and becomes GLKW16 (mode 9) at night:
+///   the gray waveform Lab126 made for dark pages (FBInk; KOReader's
+///   `waveform_night` on Rex and Zelda).
+pub fn plan(hint: Waveform, content: Content, night: bool, turn: FbWaveform) -> Request {
+    match hint {
+        Waveform::GC16 => Request::FullScreen(FLASH),
+        Waveform::GL16 if content == Content::Page => Request::FullScreen(turn),
+        Waveform::GL16 if night => Request::Partial(FbWaveform::GLKW16),
+        other => Request::Partial(FbWaveform(other.mode())),
+    }
 }
 
 /// Waits for page-update markers on a thread of its own, so the input loop
@@ -107,14 +146,69 @@ struct InFlight {
     label: String,
 }
 
+/// Submits short fixed sequences of updates, in order, on a thread of its
+/// own: the driver blocks a submit while the previous update is on the
+/// panel, and the input loop must never wait for that.
+struct Sequencer {
+    jobs: Sender<Vec<(FbRect, FbWaveform, bool)>>,
+    pending: Arc<AtomicUsize>,
+}
+
+impl Sequencer {
+    fn new(fb: &Framebuffer) -> io::Result<Sequencer> {
+        // Markers apart from the display thread's (which count from
+        // 0x8000_0000) and the page path's (from 1).
+        let mut updater = fb.updater()?.with_marker_base(0xc000_0000);
+        let waiter = fb.waiter()?;
+        let (jobs, rx) = mpsc::channel::<Vec<(FbRect, FbWaveform, bool)>>();
+        let pending = Arc::new(AtomicUsize::new(0));
+        let left = pending.clone();
+        thread::Builder::new()
+            .name("panel-sequence".into())
+            .spawn(move || {
+                for job in rx {
+                    let mut last = None;
+                    for (rect, wf, full) in job {
+                        match updater.update(rect, wf, full) {
+                            Ok(Some(m)) => last = Some(m),
+                            Ok(None) => {}
+                            Err(e) => eprintln!("aristotle: panel sequence: {e}"),
+                        }
+                    }
+                    if let Some(m) = last {
+                        let _ = waiter.wait(m);
+                    }
+                    left.fetch_sub(1, Ordering::SeqCst);
+                }
+            })?;
+        Ok(Sequencer { jobs, pending })
+    }
+
+    fn submit(&self, job: Vec<(FbRect, FbWaveform, bool)>) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self.jobs.send(job).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    fn busy(&self) -> bool {
+        self.pending.load(Ordering::SeqCst) > 0
+    }
+}
+
 /// The real panel.
 pub struct Device {
     fb: Framebuffer,
     display: Display,
     completions: Completions,
+    sequencer: Sequencer,
     page: Option<InFlight>,
     /// Waveform for page turns.
     pub turn: FbWaveform,
+    /// Night mode and how it inverts, `None` by day.
+    night: Option<NightMethod>,
+    /// Full-screen full-mode updates submitted so far (pages and flashes).
+    full_updates: u64,
 }
 
 fn fb_rect(r: Rect) -> FbRect {
@@ -131,13 +225,33 @@ impl Device {
         let fb = Framebuffer::open("/dev/fb0")?;
         let display = Display::new(&fb)?;
         let completions = Completions::new(&fb)?;
+        let sequencer = Sequencer::new(&fb)?;
         Ok(Device {
             fb,
             display,
             completions,
+            sequencer,
             page: None,
             turn: FbWaveform(turn_mode),
+            night: None,
+            full_updates: 0,
         })
+    }
+
+    /// Switch night mode. With [`NightMethod::Software`] the caller inverts
+    /// the UI (`Ui::set_night`) and book pages are inverted here on their way
+    /// to the framebuffer; with [`NightMethod::Hardware`] every update from
+    /// now on carries the EPDC inversion flag and nothing is inverted in
+    /// memory. Either way the caller follows with a full refresh.
+    pub fn set_night(&mut self, night: Option<NightMethod>) {
+        self.wait_idle();
+        self.fb.set_hw_invert(night == Some(NightMethod::Hardware));
+        self.night = night;
+    }
+
+    /// Whether our pixels must be inverted in memory (software night).
+    pub fn inverts_pixels(&self) -> bool {
+        self.night == Some(NightMethod::Software)
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -148,23 +262,64 @@ impl Device {
     /// Send a UI frame's damage (see the module documentation).
     pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
         for d in damage {
-            let page = content == Content::Page && d.waveform == Waveform::GL16;
-            if page || d.waveform == Waveform::GC16 {
-                // Full-screen, full-mode: clears ghosting.
-                let wf = if page { self.turn } else { FLASH };
-                self.blit_ui_wait(ui, Rect::screen())?;
-                let all = self.fb.full_screen();
-                let m = self.fb.update(all, wf, true)?;
-                self.track(m, if page { "page (menu open)" } else { "flash" });
-            } else {
-                // No wait: the driver latched the last page when it started
-                // it, and the display thread queues behind it by itself.
-                self.blit_ui(ui, d.rect);
-                self.display
-                    .damage(fb_rect(d.rect), FbWaveform(d.waveform.mode()), &[]);
+            match plan(d.waveform, content, self.night.is_some(), self.turn) {
+                Request::FullScreen(wf) => {
+                    // Full-screen, full-mode: clears ghosting.
+                    self.blit_ui_wait(ui, Rect::screen())?;
+                    let all = self.fb.full_screen();
+                    let m = self.fb.update(all, wf, true)?;
+                    self.full_updates += 1;
+                    self.track(
+                        m,
+                        if wf == FLASH {
+                            "flash"
+                        } else {
+                            "page (menu open)"
+                        },
+                    );
+                }
+                Request::Partial(wf) => {
+                    // No wait: the driver latched the last page when it
+                    // started it, and the display thread queues behind it.
+                    self.blit_ui(ui, d.rect);
+                    self.display.damage(fb_rect(d.rect), wf, &[]);
+                }
             }
         }
         Ok(())
+    }
+
+    /// Show an overlay that just appeared over the page, such as the reader
+    /// menu's top bar and bottom sheet (`parts`), in two steps that never
+    /// touch the page between the parts:
+    ///
+    /// 1. one A2 update over the parts, partial, so only pixels that
+    ///    changed move: the menu is there in about 150 ms, in black and
+    ///    white;
+    /// 2. one full-mode gray update of each part alone (GL16, GLKW16 at
+    ///    night), which brings the grays and clears what A2 left; full
+    ///    mode because a partial update would skip the pixels A2 already
+    ///    moved.
+    ///
+    /// A single gray update over the bounding box of both parts would cover
+    /// almost the whole page and show nothing for a full waveform.
+    pub fn present_overlay(&mut self, ui: &Ui, parts: &[Rect]) {
+        let parts: Vec<Rect> = parts.iter().copied().filter(|r| !r.is_empty()).collect();
+        let Some(union) = parts.iter().copied().reduce(|a, b| a.union(&b)) else {
+            return;
+        };
+        self.wait_idle();
+        for p in &parts {
+            self.blit_ui(ui, *p);
+        }
+        let gray = if self.night.is_some() {
+            FbWaveform::GLKW16
+        } else {
+            FbWaveform::GL16
+        };
+        let mut job = vec![(fb_rect(union), FbWaveform::A2, false)];
+        job.extend(parts.iter().map(|p| (fb_rect(*p), gray, true)));
+        self.sequencer.submit(job);
     }
 
     /// Show a book page: one full update of the whole screen with the turn
@@ -173,11 +328,22 @@ impl Device {
     pub fn show_page(&mut self, page: &Page, flash: bool, label: &str) -> io::Result<Duration> {
         let waited = self.wait_idle();
         let rect = self.fb.full_screen();
-        self.fb.blit(&page.data, page.stride, rect);
+        if self.inverts_pixels() {
+            self.fb.blit_inverted(&page.data, page.stride, rect);
+        } else {
+            self.fb.blit(&page.data, page.stride, rect);
+        }
         let wf = if flash { FLASH } else { self.turn };
         let m = self.fb.update(rect, wf, true)?;
+        self.full_updates += 1;
         self.track(m, label);
         Ok(waited)
+    }
+
+    /// How many full-screen full-mode updates went out so far, so a caller
+    /// can tell whether an action redrew the whole screen.
+    pub fn full_updates(&self) -> u64 {
+        self.full_updates
     }
 
     fn track(&mut self, marker: Option<u32>, label: &str) {
@@ -198,7 +364,7 @@ impl Device {
         self.finish_page();
         self.display.sync();
         let deadline = t + Duration::from_secs(3);
-        while self.display.busy() && Instant::now() < deadline {
+        while (self.display.busy() || self.sequencer.busy()) && Instant::now() < deadline {
             self.display.drain_shown();
             thread::sleep(Duration::from_millis(2));
         }
@@ -240,9 +406,12 @@ impl Device {
         Ok(())
     }
 
-    /// Leave a clean white screen behind for the stock UI.
+    /// Leave a clean white screen behind for the stock UI, in day mode
+    /// whatever ours was.
     pub fn clear(&mut self) -> io::Result<()> {
         self.wait_idle();
+        self.fb.set_hw_invert(false);
+        self.night = None;
         let all = self.fb.full_screen();
         self.fb.fill(all, 0xff);
         let m = self.fb.update(all, FLASH, true)?;
@@ -269,16 +438,18 @@ pub struct Update {
 }
 
 /// A panel in memory for the host: the same calls as the device, applied
-/// to a pixel buffer, with every update recorded. The preview drives the
-/// real app through it (`aristotle --preview`), so what it shows is what
-/// the device code does.
+/// to a pixel buffer, with every update recorded under the same
+/// [`plan`]. The preview drives the real app through it
+/// (`aristotle --preview`), so what it shows is what the device code does.
 pub struct Memory {
     pub width: u32,
     pub height: u32,
     pub stride: usize,
+    /// What the framebuffer holds (inverted already in software night).
     pub pixels: Vec<u8>,
     pub updates: Vec<Update>,
     turn: FbWaveform,
+    night: Option<NightMethod>,
 }
 
 impl Memory {
@@ -291,7 +462,18 @@ impl Memory {
             pixels: vec![0xff; stride * height as usize],
             updates: Vec::new(),
             turn: FbWaveform(turn_mode),
+            night: None,
         }
+    }
+
+    /// Whether the EPDC would invert what it shows (hardware night): the
+    /// pixels here are then the day pixels.
+    pub fn hw_inverted(&self) -> bool {
+        self.night == Some(NightMethod::Hardware)
+    }
+
+    fn all(&self) -> Rect {
+        Rect::new(0, 0, self.width as i32, self.height as i32)
     }
 
     fn copy_ui(&mut self, ui: &Ui, rect: Rect) {
@@ -308,13 +490,45 @@ impl Memory {
     }
 
     fn record(&mut self, rect: Rect, mode: u32, label: &str) {
-        let full_screen = rect == Rect::new(0, 0, self.width as i32, self.height as i32);
+        let full_screen = rect == self.all();
         self.updates.push(Update {
             rect,
             mode,
             full_screen,
             label: label.to_string(),
         });
+    }
+
+    fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) {
+        for d in damage {
+            match plan(d.waveform, content, self.night.is_some(), self.turn) {
+                Request::FullScreen(wf) => {
+                    let all = self.all();
+                    self.copy_ui(ui, all);
+                    let label = if wf == FLASH { "flash" } else { "page (ui)" };
+                    self.record(all, wf.0, label);
+                }
+                Request::Partial(wf) => {
+                    self.copy_ui(ui, d.rect);
+                    self.record(d.rect, wf.0, "ui");
+                }
+            }
+        }
+    }
+
+    fn show_page(&mut self, page: &Page, flash: bool, label: &str) {
+        let invert = self.night == Some(NightMethod::Software);
+        for y in 0..self.height as usize {
+            let src = y * page.stride;
+            let dst = y * self.stride;
+            let w = (page.width as usize).min(self.width as usize);
+            let row = &page.data[src..src + w];
+            for (d, s) in self.pixels[dst..dst + w].iter_mut().zip(row) {
+                *d = if invert { 255 - *s } else { *s };
+            }
+        }
+        let mode = if flash { FLASH.0 } else { self.turn.0 };
+        self.record(self.all(), mode, label);
     }
 }
 
@@ -333,6 +547,22 @@ impl Panel {
         Panel::Memory(Memory::new(width, height, turn_mode))
     }
 
+    /// See [`Device::set_night`].
+    pub fn set_night(&mut self, night: Option<NightMethod>) {
+        match self {
+            Panel::Device(d) => d.set_night(night),
+            Panel::Memory(m) => m.night = night,
+        }
+    }
+
+    /// Whether our pixels must be inverted in memory (software night).
+    pub fn inverts_pixels(&self) -> bool {
+        match self {
+            Panel::Device(d) => d.inverts_pixels(),
+            Panel::Memory(m) => m.night == Some(NightMethod::Software),
+        }
+    }
+
     pub fn size(&self) -> (u32, u32) {
         match self {
             Panel::Device(d) => d.size(),
@@ -340,44 +570,53 @@ impl Panel {
         }
     }
 
-    /// Send a UI frame's damage (see the module documentation).
+    /// See [`Device::present`].
     pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
         match self {
             Panel::Device(d) => d.present(ui, damage, content),
             Panel::Memory(m) => {
-                for d in damage {
-                    let page = content == Content::Page && d.waveform == Waveform::GL16;
-                    if page || d.waveform == Waveform::GC16 {
-                        let all = Rect::new(0, 0, m.width as i32, m.height as i32);
-                        m.copy_ui(ui, all);
-                        let mode = if page { m.turn.0 } else { FLASH.0 };
-                        m.record(all, mode, if page { "page (ui)" } else { "flash" });
-                    } else {
-                        m.copy_ui(ui, d.rect);
-                        m.record(d.rect, d.waveform.mode(), "ui");
-                    }
-                }
+                m.present(ui, damage, content);
                 Ok(())
             }
         }
     }
 
-    /// Show a book page with one full update of the whole screen.
+    /// See [`Device::present_overlay`].
+    pub fn present_overlay(&mut self, ui: &Ui, parts: &[Rect]) {
+        match self {
+            Panel::Device(d) => d.present_overlay(ui, parts),
+            Panel::Memory(m) => {
+                let gray = if m.night.is_some() {
+                    FbWaveform::GLKW16
+                } else {
+                    FbWaveform::GL16
+                };
+                if let Some(u) = parts.iter().copied().reduce(|a, b| a.union(&b)) {
+                    m.copy_ui(ui, u);
+                    m.record(u, FbWaveform::A2.0, "overlay");
+                }
+                for p in parts {
+                    m.record(*p, gray.0, "overlay");
+                }
+            }
+        }
+    }
+
+    /// See [`Device::show_page`].
     pub fn show_page(&mut self, page: &Page, flash: bool, label: &str) -> io::Result<Duration> {
         match self {
             Panel::Device(d) => d.show_page(page, flash, label),
             Panel::Memory(m) => {
-                for y in 0..m.height as usize {
-                    let src = y * page.stride;
-                    let dst = y * m.stride;
-                    let w = (page.width as usize).min(m.width as usize);
-                    m.pixels[dst..dst + w].copy_from_slice(&page.data[src..src + w]);
-                }
-                let all = Rect::new(0, 0, m.width as i32, m.height as i32);
-                let mode = if flash { FLASH.0 } else { m.turn.0 };
-                m.record(all, mode, label);
+                m.show_page(page, flash, label);
                 Ok(Duration::ZERO)
             }
+        }
+    }
+
+    pub fn full_updates(&self) -> u64 {
+        match self {
+            Panel::Device(d) => d.full_updates(),
+            Panel::Memory(m) => m.updates.iter().filter(|u| u.full_screen).count() as u64,
         }
     }
 
@@ -391,11 +630,57 @@ impl Panel {
         match self {
             Panel::Device(d) => d.clear(),
             Panel::Memory(m) => {
+                m.night = None;
                 m.pixels.fill(0xff);
-                let all = Rect::new(0, 0, m.width as i32, m.height as i32);
+                let all = m.all();
                 m.record(all, FLASH.0, "clear");
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TURN: FbWaveform = FbWaveform::GLKW16;
+
+    #[test]
+    fn screen_switches_and_night_switch_are_one_mode_8_flash() {
+        for night in [false, true] {
+            for content in [Content::Chrome, Content::Page] {
+                assert_eq!(
+                    plan(Waveform::GC16, content, night, TURN),
+                    Request::FullScreen(FbWaveform::GCK16)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn page_behind_the_menu_goes_out_like_a_turn() {
+        assert_eq!(
+            plan(Waveform::GL16, Content::Page, false, TURN),
+            Request::FullScreen(FbWaveform(9))
+        );
+        assert_eq!(
+            plan(Waveform::GL16, Content::Page, true, FbWaveform(7)),
+            Request::FullScreen(FbWaveform(7)),
+            "the chosen turn waveform, day or night"
+        );
+    }
+
+    #[test]
+    fn chrome_is_partial_and_night_grays_use_glkw16() {
+        let p = |w, night| plan(w, Content::Chrome, night, TURN);
+        assert_eq!(p(Waveform::A2, false), Request::Partial(FbWaveform::A2));
+        assert_eq!(p(Waveform::A2, true), Request::Partial(FbWaveform::A2));
+        assert_eq!(p(Waveform::DU, true), Request::Partial(FbWaveform::DU));
+        assert_eq!(p(Waveform::GL16, false), Request::Partial(FbWaveform::GL16));
+        assert_eq!(
+            p(Waveform::GL16, true),
+            Request::Partial(FbWaveform::GLKW16)
+        );
     }
 }

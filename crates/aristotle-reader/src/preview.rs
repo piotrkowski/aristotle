@@ -286,7 +286,7 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     a.dicts = dirs;
     let panel = Panel::memory(1072, 1448, crate::prefs::STOCK_TURN);
     let service = crate::start_dictionaries(&a);
-    let mut app = crate::build_app(&a, panel, Prefs::default(), service)?;
+    let mut app = crate::build_app(&a, panel, Prefs::default(), service, None)?;
     let export_root = out.join(format!("export-{stamp}/documents"));
     fs::create_dir_all(&export_root)?;
     app.exports = ExportPaths::for_root(&export_root);
