@@ -407,8 +407,7 @@ mod tests {
     #[test]
     #[ignore]
     fn clippings_script() {
-        let Some(script) = std::env::var_os("ARISTOTLE_CLIPPINGS_SCRIPT").map(PathBuf::from)
-        else {
+        let Some(script) = std::env::var_os("ARISTOTLE_CLIPPINGS_SCRIPT").map(PathBuf::from) else {
             return;
         };
         let mut b = book();
