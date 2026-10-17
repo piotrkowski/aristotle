@@ -1,7 +1,15 @@
 #!/bin/sh
 # Aristotle agent, started by /etc/upstart/aristotle-agent.conf on every boot.
 #
-# Keeps the device reachable and healthy without anyone touching it:
+# Kill switch: a file named aristotle-disable at the root of the USB drive
+# (/mnt/us/aristotle-disable) stops the agent before it does anything on this
+# boot: no USB network, no SSH, no watchdog, no Wi-Fi policy. USB stays with
+# volumd and the stock system. It is the way out without SSH: connect the
+# Kindle as a USB drive, create the file, eject and reboot. Delete it and
+# reboot to have the agent back.
+#
+# Otherwise it keeps the device reachable and healthy without anyone touching
+# it:
 # - USB network (g_ether, usb0 at 192.168.15.244) and key-only SSH (KOReader's
 #   dropbear) whenever the USB mode is "net", the default;
 # - "storage" mode for a limited time on request (aristotlectl mode storage N),
@@ -18,10 +26,17 @@
 set -u
 umask 022
 
-S=/var/local/aristotle
+# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# is empty on the device.
+R=${AGENT_TEST_ROOT:-}
+S=$R/var/local/aristotle
 LOG=$S/log
-KO=/mnt/us/koreader
-PIDFILE=/var/run/aristotle-dropbear.pid
+KO=$R/mnt/us/koreader
+PIDFILE=$R/var/run/aristotle-dropbear.pid
+DISABLE=$R/mnt/us/aristotle-disable
+# How long to wait for the userstore (/mnt/us) before giving up on the kill
+# switch check.
+MOUNT_WAIT=${MOUNT_WAIT:-60}
 DEV_IP=192.168.15.244
 # Fixed MACs for both ends of the USB link, so the host's NetworkManager
 # profile (devloop/host/setup-host-net.sh) can match the interface. The bytes
@@ -133,7 +148,7 @@ gui_check() {
         gui_good=$((gui_good + TICK))
         return
     fi
-    up=$(cut -d. -f1 /proc/uptime)
+    up=$(cut -d. -f1 "$R/proc/uptime")
     [ "$up" -lt "$GUI_GRACE" ] && return
     gui_bad=$((gui_bad + TICK))
     [ "$gui_bad" -lt "$GUI_GRACE" ] && return
@@ -155,7 +170,27 @@ gui_check() {
     fi
 }
 
-log "agent: boot (uptime $(cut -d' ' -f1 /proc/uptime) s)"
+log "agent: boot (uptime $(cut -d' ' -f1 "$R/proc/uptime") s)"
+
+# The kill switch, before anything else. The userstore may be mounted a
+# moment after the agent starts.
+i=0
+until grep -q ' /mnt/us ' "$R/proc/mounts" 2> /dev/null; do
+    if [ $i -ge "$MOUNT_WAIT" ]; then
+        log "agent: /mnt/us not mounted after ${MOUNT_WAIT}s; kill switch not checked"
+        break
+    fi
+    sleep 1
+    i=$((i + 1))
+done
+if [ -e "$DISABLE" ]; then
+    log "agent: /mnt/us/aristotle-disable exists; not starting (no USB network, SSH, watchdog or Wi-Fi policy). Delete it and reboot to enable the agent."
+    # A network setting the agent left must not keep volumd from drive mode.
+    lipc-set-prop com.lab126.volumd useUsbForNetwork 0 2> /dev/null
+    # Idle instead of exiting: upstart respawns a job whose process ends.
+    exec sleep 2147483647
+fi
+
 # iptables rules do not survive a reboot; make the first tick apply the
 # Wi-Fi policy again.
 rm -f "$S/net-sig"

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Host-side test of the device scripts other than the migration: the device
 # guard (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and
-# takeover.sh, and uninstall.sh.
+# takeover.sh, uninstall.sh, and the kill switch in boot.sh.
 #
 #   sh devloop/kindle/tests/agent.sh
 #
@@ -244,6 +244,67 @@ FAKE_MNTROOT_FAIL=rw run "$r" agent/uninstall.sh
 check "exit status 1" "[ $? = 1 ]"
 check "says the job file stayed" "grep -q 'mntroot failed' $r.out"
 check "state still removed, so the job cannot run" "[ ! -e $r/var/local/aristotle ]"
+
+# boot ROOT [MOUNT_WAIT]: start the installed agent's boot.sh in the
+# background, as upstart would; its pid goes where cleanup finds it.
+boot() {
+    MOUNT_WAIT=${2:-60} AGENT_TEST_ROOT=$1 PATH="$WORK/bin:$PATH" sh "$1/var/local/aristotle/boot.sh" > "$1.boot.out" 2>&1 &
+    echo $! > "$1/jobs/boot.pid"
+}
+
+# wait_for FILE PATTERN: up to 10 s for PATTERN to show up in FILE.
+wait_for() {
+    i=0
+    until grep -q "$2" "$1" 2> /dev/null; do
+        [ $i -ge 50 ] && return 1
+        sleep 0.2
+        i=$((i + 1))
+    done
+}
+
+# A booted device: the agent installed, the userstore mounted.
+booted() {
+    r=$(device "$1" "$PW4_SN" 5.13.6)
+    run "$r" agent/install.sh
+    # Only the upstart stub's stand-in ran; boot() runs the real script.
+    kill "$(cat "$r/jobs/aristotle-agent.pid")" 2> /dev/null
+    printf 'fsp /mnt/us fuse.fsp rw,nosuid,nodev,noatime 0 0\n' > "$r/proc/mounts"
+    : > "$r/calls"
+    echo "$r"
+}
+
+echo "boot: no kill switch, the agent starts"
+r=$(booted boot)
+boot "$r"
+check "USB network and SSH come up" "wait_for $r/calls '^dropbear ' && called $r 'modprobe g_ether'"
+check "mode logged" "grep -q 'mode: net' $r/var/local/aristotle/log"
+kill "$(cat "$r/jobs/boot.pid")" 2> /dev/null
+
+echo "boot: kill switch on the USB drive"
+r=$(booted kill)
+: > "$r/mnt/us/aristotle-disable"
+boot "$r"
+check "says why in the log" "wait_for $r/var/local/aristotle/log 'aristotle-disable exists; not starting'"
+check "USB left to volumd" "called $r 'lipc-set-prop com.lab126.volumd useUsbForNetwork 0'"
+sleep 1
+check "no g_ether, dropbear, firewall or Wi-Fi policy" "! grep -q -e '^modprobe' -e '^rmmod' -e '^dropbear' -e '^iptables' $r/calls"
+check "stays up idle, so upstart does not respawn it" "kill -0 \$(cat $r/jobs/boot.pid)"
+
+echo "boot: the userstore comes late"
+r=$(booted late)
+: > "$r/mnt/us/aristotle-disable"
+: > "$r/proc/mounts"
+boot "$r"
+sleep 1
+check "waits for it" "! grep -q -e '^modprobe' -e '^dropbear' $r/calls"
+printf 'fsp /mnt/us fuse.fsp rw 0 0\n' > "$r/proc/mounts"
+check "then honours the kill switch" "wait_for $r/var/local/aristotle/log 'aristotle-disable exists' && ! called $r 'modprobe'"
+
+echo "boot: the userstore never comes"
+r=$(booted nomount)
+: > "$r/proc/mounts"
+boot "$r" 1
+check "gives up on the check and starts" "wait_for $r/calls '^dropbear ' && grep -q 'kill switch not checked' $r/var/local/aristotle/log"
 
 if [ $failures = 0 ]; then
     echo "agent: all checks passed"
