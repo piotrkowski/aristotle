@@ -21,6 +21,7 @@ pub mod cover;
 pub mod encoding;
 pub mod epub;
 pub mod error;
+pub mod export;
 pub mod format;
 pub mod id;
 pub mod index;
