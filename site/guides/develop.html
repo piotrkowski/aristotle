@@ -69,7 +69,7 @@ wait 2000</code></pre>
     <p>A scenario starts from a known state (<code>go-home</code>) and checks its steps with <code>snap</code> screenshots: numbers without a look at the screen were wrong more than once. A change to what reaches the panel should keep the same updates and waveforms and stay within 10 % on latency.</p>
 
     <h2 id="screenshots">Screenshots</h2>
-    <p><code>tools/screenshots/compose.sh</code> frames raw 1072 × 1448 captures, from the preview or from the device, for the README and docs. Its <code>manifest.toml</code> lists every output and its inputs; <code>SCREENSHOTS_BASE</code> points it at device captures instead.</p>
+    <p><code>tools/screenshots/compose.sh</code> makes every screenshot of the README, the docs and this site from 1072 × 1448 captures of the device's framebuffer (<code>devloop/host/screenshot.sh</code>), kept in <code>$ARISTOTLE_CACHE/captures/readme/</code>. Its <code>manifest.toml</code> lists every output and its inputs: framed shots, and the demo's frames in the panel's 16 grays.</p>
     <p>The demo on this site reads its frames from one file, <code>site/demo/frames.js</code>: each frame's image, alt text and tap targets in panel pixels. New captures or another language replace the images and that file.</p>
 
     <h2 id="rules">Before you send a change</h2>
