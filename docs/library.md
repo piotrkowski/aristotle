@@ -48,7 +48,7 @@ Every book gets a title. Precedence, highest first:
    - its words are exactly the embedded words, ignoring case, diacritics and punctuation;
    - it either splits one embedded field into several authors ("Żółkiewska Jadwiga Łęcki Tomasz" becomes "Jadwiga Żółkiewska" and "Tomasz Łęcki") or reveals an inverted name ("Schopenhauer Arthur" becomes "Arthur Schopenhauer", sort "Schopenhauer, Arthur").
 
-   A short list of common Polish and foreign given names decides which end of a name is the given name. When neither end is a known given name, a comma-separated list of several authors is read as surname-first; a single ambiguous name is left alone. Spelling with diacritics always comes from the book. EPUB is not touched, because its `file-as` is authoritative.
+   Commas are ambiguous. If one side of a comma is a single word, the folder is "Last, First" for one person ("Mickiewicz, Adam"): the surname is known, so an already correct "Adam Mickiewicz" stays as it is. Otherwise commas separate people, and a short list of common Polish and foreign given names decides which end of each name is the given name. When neither end is a known given name, a comma-separated list of several authors is read as surname-first; a single ambiguous name is left alone. Spelling with diacritics always comes from the book. EPUB is not touched, because its `file-as` is authoritative.
 3. The file name, for the title, with `_` turned into spaces and a trailing shop product code after `__` dropped (`Obrona_Sokratesa__p1234567890.epub` → "Obrona Sokratesa"). `title_source: "filename"` marks such guesses.
 
 Per format:
