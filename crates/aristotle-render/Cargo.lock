@@ -80,9 +80,12 @@ dependencies = [
  "aristotle-library",
  "aristotle-render",
  "aristotle-ui",
+ "flate2",
  "libc",
+ "regex",
  "serde",
  "serde_json",
+ "unicode-normalization",
  "zstd",
 ]
 

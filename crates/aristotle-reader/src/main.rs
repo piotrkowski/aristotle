@@ -25,6 +25,7 @@
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
+mod dict;
 mod open;
 mod pagecache;
 mod panel;
