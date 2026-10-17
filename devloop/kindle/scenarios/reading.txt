@@ -7,8 +7,8 @@
 # Coordinates come from `aristotle --preview` on the same book with the
 # default typography and the English UI (10 pt, normal spacing and margins,
 # language "en": reader.json absent or at its defaults); regenerate this
-# file with it after layout changes (docs/reader.md, "Reading
-# interactions"). Button positions depend on the UI language: for another
+# file with it after layout changes (docs/reader.md, "Preview and
+# device scenario"). Button positions depend on the UI language: for another
 # one, regenerate with `--lang CODE` and run the app with the same.
 #
 # Setup, once:
