@@ -1,5 +1,6 @@
-//! Settings: light, night mode, covers, sleep, the UI language, and what
-//! the device knows about itself. Offline only: there is no Wi-Fi, account or
+//! Settings: light, night mode, covers, sleep, the UI language, whether
+//! highlights go to `My Clippings.txt`, and what the device knows about
+//! itself. Offline only: there is no Wi-Fi, account or
 //! store section, because Aristotle has none of those.
 //!
 //! Sections are whole blocks in a paged list, so the screen turns pages like
@@ -36,6 +37,8 @@ pub mod action {
     pub const USB: ActionId = 60;
     /// `LANGUAGE + i` picks `aristotle_i18n::locales()[i]`.
     pub const LANGUAGE: ActionId = 70;
+    /// Toggles "Save highlights to My Clippings.txt".
+    pub const CLIPPINGS: ActionId = 80;
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
@@ -80,6 +83,8 @@ pub struct SystemView<'a> {
     pub night: bool,
     pub covers: CoverMode,
     pub sleep_minutes: Option<u32>,
+    /// Whether new highlights are appended to `My Clippings.txt`.
+    pub clippings: bool,
     pub battery: Option<BatteryInfo<'a>>,
     /// Free and total bytes of the userstore.
     pub storage: Option<(u64, u64)>,
@@ -386,6 +391,31 @@ impl Settings {
         rows.push(t.add(Node::column(0), [head, c]));
         sections.extend(section(&mut t, s, tr(Msg::SettingsSectionDevice), rows));
 
+        // Reading. After the device section, so the rows before it keep
+        // their places on the first two pages (the device scenarios tap
+        // them by coordinates).
+        let toggle = t.custom(Toggle { on: v.clippings });
+        let clippings = row(
+            &mut t,
+            s,
+            Icon::Bookmark,
+            tr(Msg::SettingsClippings),
+            Some(tr(Msg::SettingsClippingsHint)),
+            Some(toggle),
+        );
+        let clippings = t.add(
+            Node::new(Kind::Padding(Insets::all(0)))
+                .action(action::CLIPPINGS)
+                .feedback(Feedback::Outline),
+            [clippings],
+        );
+        sections.extend(section(
+            &mut t,
+            s,
+            tr(Msg::SettingsSectionReading),
+            vec![clippings],
+        ));
+
         // About.
         let mut lines = Vec::new();
         for (label, value) in v.about {
@@ -499,6 +529,7 @@ mod tests {
             night: false,
             covers: CoverMode::None,
             sleep_minutes: Some(15),
+            clippings: true,
             battery: Some(BatteryInfo {
                 level: 0.82,
                 charging: false,
@@ -578,5 +609,39 @@ mod tests {
         }
         let night = night.expect("night row on the first page");
         assert!(ui.tree.rect(night).h >= MIN_TARGET);
+    }
+
+    /// The page on which `action` is a target, and its rectangle.
+    fn find(ui: &mut Ui, ids: &Settings, action: ActionId) -> Option<(usize, crate::geom::Rect)> {
+        let (_, count) = ui.tree.page(ids.list);
+        for page in 0..count {
+            ui.tree.set_page(ids.list, page);
+            ui.layout();
+            for y in (0..SCREEN_HEIGHT).step_by(10) {
+                if let crate::tree::Hit::Target(n) = ui.tree.hit(crate::geom::Point { x: 300, y }) {
+                    if ui.tree.node(n).action == Some(action) {
+                        return Some((page, ui.tree.rect(n)));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn clippings_row_follows_the_device_section() {
+        let about = sample_about();
+        let mut text = TextEngine::new(Fonts::embedded());
+        let (tree, ids) = Settings::build(&mut text, &Styles::new(FamilyId(0)), &view(&about));
+        let mut ui = Ui::new(tree, text, SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32);
+        ui.layout();
+        let (clip_page, clip) = find(&mut ui, &ids, action::CLIPPINGS).expect("clippings row");
+        assert!(clip.h >= MIN_TARGET);
+        // The rows before it keep their pages: night on the first, the
+        // language on the second (device scenarios tap them).
+        assert_eq!(find(&mut ui, &ids, action::NIGHT).map(|f| f.0), Some(0));
+        let (lang_page, lang) = find(&mut ui, &ids, action::LANGUAGE).expect("language chips");
+        assert_eq!(lang_page, 1);
+        assert!(clip_page > lang_page || clip.y > lang.y);
     }
 }
