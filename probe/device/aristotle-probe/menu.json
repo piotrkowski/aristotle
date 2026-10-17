@@ -4,8 +4,15 @@
       "name": "Aristotle",
       "items": [
         {
-          "name": "Run read-only probe (about 30 s)",
+          "name": "Run read-only probe (output identifies this Kindle; review before sharing)",
           "action": "sh ./bin/probe.sh",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Probe running; result shown at top of screen"
+        },
+        {
+          "name": "Run probe + copy e-ink waveforms (Amazon's files; never share)",
+          "action": "sh ./bin/probe.sh wfm",
           "exitmenu": false,
           "status": false,
           "internal": "status Probe running; result shown at top of screen"

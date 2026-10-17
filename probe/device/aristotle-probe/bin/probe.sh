@@ -2,8 +2,20 @@
 # Read-only runtime probe for the Kindle PW4. Collects kernel, hardware,
 # process, upstart and lipc state into /mnt/us/aristotle-probe/<UTC stamp>/.
 # Writes nothing outside that directory and changes no system state.
+#
+#   probe.sh        the snapshot; the e-ink waveforms are listed, not copied
+#   probe.sh wfm    also copy the waveform files from /mnt/wfm
+#
+# The output identifies the device and its owner: the logs, dmesg and every
+# lipc property (lipc-probe -a -v) can hold the serial number, MAC addresses,
+# Wi-Fi network names and registration details. A README.txt beside it says
+# so. Review it before sharing any of it; never attach it as is to a public
+# issue. The waveforms are Amazon's proprietary data and stay private.
 set -u
 umask 022
+
+COPY_WFM=0
+[ "${1:-}" = wfm ] && COPY_WFM=1
 
 OUT_ROOT=${ARISTOTLE_PROBE_OUT:-/mnt/us/aristotle-probe}
 STAMP=$(date -u '+%Y%m%dT%H%M%SZ')
@@ -38,6 +50,29 @@ sysdump() {
 
 eips 0 0 "aristotle probe running..." > /dev/null 2>&1
 
+cat > "$OUT/README.txt" << EOF
+Aristotle probe output, $STAMP
+
+This is a read-only snapshot of one Kindle: kernel and system logs (dmesg,
+/var/log/messages), every lipc property (lipc-probe -a -v), processes,
+network state, upstart jobs, the app registry and more.
+
+IT IDENTIFIES THE DEVICE AND ITS OWNER. The files can contain the serial
+number, MAC addresses, Wi-Fi network names and addresses, and account or
+registration details.
+
+- Review every file before you share any of it, and share only the files
+  that are needed, with the identifiers removed.
+- Never attach this directory, or files from it as they are, to a public
+  issue, pull request, forum post or chat.
+EOF
+if [ $COPY_WFM = 1 ]; then
+    cat >> "$OUT/README.txt" << EOF
+- files/mnt/wfm/ holds the e-ink waveforms copied from this device. They
+  are Amazon's proprietary data: keep them to yourself, never share them.
+EOF
+fi
+
 # Kernel and boot
 run uname uname -a
 run uptime cat /proc/uptime
@@ -70,9 +105,12 @@ run i2c ls -l /sys/bus/i2c/devices/
 run i2c-names sh -c 'for d in /sys/bus/i2c/devices/*; do printf "%s %s\n" "$d" "$(cat "$d/name" 2>/dev/null)"; done'
 run platform-devices ls /sys/bus/platform/devices/
 
-# E-ink waveform partition (list + checksums; the file itself is copied for offline study)
+# E-ink waveform partition: list and checksums; the files themselves only
+# with "wfm", for offline study.
 run wfm sh -c 'ls -lR /mnt/wfm; find /mnt/wfm -type f -exec md5sum {} \;'
-find /mnt/wfm -type f -size -8192k 2> /dev/null | while read -r f; do grab "$f"; done
+if [ $COPY_WFM = 1 ]; then
+    find /mnt/wfm -type f -size -8192k 2> /dev/null | while read -r f; do grab "$f"; done
+fi
 
 # Storage layout
 run mmc sh -c 'ls -l /dev/mmcblk* /dev/block 2>/dev/null; for b in /sys/block/mmcblk*; do printf "%s size=%s\n" "$b" "$(cat "$b/size")"; ls "$b"; done'

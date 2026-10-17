@@ -37,6 +37,13 @@ body:
       description: |
         The lines around the problem from `/var/tmp/aristotle.log` on the device
         (`run-aristotle.sh` prints it when the app exits). For the SSH agent,
-        `/var/local/aristotle/log`. Remove anything private, such as book titles you
+        `/var/local/aristotle/log` (after Remove agent, `aristotle-agent.log` on the
+        Kindle's USB drive). Remove anything private, such as book titles you
         would rather not share.
+
+        Never attach the output of the Aristotle probe (`aristotle-probe/` on the
+        USB drive) as it is: it identifies your device and you (serial number, MAC
+        addresses, Wi-Fi networks). If a maintainer asks for something from it,
+        review it first and paste only the lines asked for, with identifiers
+        removed. Never share the e-ink waveform files.
       render: text
