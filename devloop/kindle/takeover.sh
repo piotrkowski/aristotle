@@ -44,11 +44,6 @@ GUI=lab126_gui
 # Same list KOReader stops to reclaim RAM, plus telemetry.
 EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
 TAKEOVER=$R/var/run/aristotle-takeover
-# An agent installed before the project's rename (until the device has run
-# agent/migrate.sh) looks for the flag in its persistent state directory
-# instead, where a reboot does not clear it; its watchdog then stays off
-# until the next stop. Drop this once no device runs it.
-LEGACY=$R/var/local/aristotle
 # The device guard: beside this script in the app bundle and the KUAL
 # extension, one level down in the repository, or in the installed extension
 # when the script comes on stdin (sh -s).
@@ -87,7 +82,6 @@ start)
     mem
     # Tell the agent's watchdog that the stock GUI is down on purpose.
     touch "$TAKEOVER"
-    [ -x "$LEGACY/boot.sh" ] && touch "$LEGACY/takeover"
     stop "$GUI" > /dev/null 2>&1
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
@@ -105,7 +99,8 @@ start)
     mem
     ;;
 stop)
-    rm -f "$TAKEOVER" "$LEGACY/takeover" "$R/var/local/aristotle/takeover"
+    # Earlier versions kept the flag in the agent's persistent state.
+    rm -f "$TAKEOVER" "$R/var/local/aristotle/takeover"
     for job in $EXTRA; do
         start "$job" > /dev/null 2>&1
     done

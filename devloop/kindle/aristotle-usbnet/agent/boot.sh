@@ -47,9 +47,7 @@ DEV_IP=192.168.15.244
 # profile (devloop/host/setup-host-net.sh) can match the interface: 02, the
 # locally administered unicast prefix, then "aris" in ASCII and the end of
 # the link. Any locally administered unicast address would do. bin/start.sh
-# and setup-host-net.sh repeat them; change all three together. Earlier
-# versions used 02:61:72:69:73:01 and :02; a g_ether loaded with those keeps
-# them until it is loaded again (a reboot).
+# and setup-host-net.sh repeat them; change all three together.
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
 TICK=15

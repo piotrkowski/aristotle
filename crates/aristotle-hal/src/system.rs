@@ -124,21 +124,11 @@ pub enum UsbMode {
 /// The agent's state directory.
 pub const AGENT_DIR: &str = "/var/local/aristotle";
 
-/// Where to look for the agent, current layout first. Agents installed before
-/// the project's rename keep the old layout until the device has run
-/// `agent/migrate.sh`; drop the second entry once no device needs it.
-const AGENT_LAYOUTS: [(&str, &str); 2] = [
-    (AGENT_DIR, "aristotlectl"),
-    ("/var/local/aristotle", "aristotlectl"),
-];
-
 /// The installed agent's state directory and control script.
 fn agent() -> Option<(&'static Path, PathBuf)> {
-    AGENT_LAYOUTS.iter().find_map(|&(dir, ctl)| {
-        let dir = Path::new(dir);
-        let ctl = dir.join(ctl);
-        ctl.exists().then_some((dir, ctl))
-    })
+    let dir = Path::new(AGENT_DIR);
+    let ctl = dir.join("aristotlectl");
+    ctl.exists().then_some((dir, ctl))
 }
 
 /// The mode the agent applies, from its `usb-mode` file. `None` when the

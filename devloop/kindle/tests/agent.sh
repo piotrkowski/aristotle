@@ -337,17 +337,18 @@ r=$(booted oldflag)
 : > "$r/var/local/aristotle/takeover"
 boot "$r"
 check "boot removes it" "wait_for $r/var/local/aristotle/log 'removed a takeover flag' && [ ! -e $r/var/local/aristotle/takeover ]"
-
-echo "takeover: with the agent from before the rename"
-r=$(device legacy "$PW4_SN" 5.13.6)
-mkdir -p "$r/var/local/aristotle"
-printf 'old boot\n' > "$r/var/local/aristotle/boot.sh"
-chmod 755 "$r/var/local/aristotle/boot.sh"
-run "$r" takeover.sh start
-check "its flag is set too" "[ -e $r/var/local/aristotle/takeover ] && [ -e $r/var/run/aristotle-takeover ]"
-check "no new agent directory created" "[ ! -e $r/var/local/aristotle ]"
+kill "$(cat "$r/jobs/boot.pid")" 2> /dev/null
+: > "$r/var/local/aristotle/takeover"
 run "$r" takeover.sh stop
-check "stop clears both" "[ ! -e $r/var/local/aristotle/takeover ] && [ ! -e $r/var/run/aristotle-takeover ]"
+check "takeover.sh stop removes it too" "[ ! -e $r/var/local/aristotle/takeover ]"
+
+echo "takeover: without the agent"
+r=$(device noagent "$PW4_SN" 5.13.6)
+run "$r" takeover.sh start
+check "flag on the tmpfs" "[ -e $r/var/run/aristotle-takeover ]"
+check "no agent directory created" "[ ! -e $r/var/local/aristotle ]"
+run "$r" takeover.sh stop
+check "stop clears it" "[ ! -e $r/var/run/aristotle-takeover ]"
 
 if [ $failures = 0 ]; then
     echo "agent: all checks passed"
