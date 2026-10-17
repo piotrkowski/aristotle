@@ -680,7 +680,10 @@ impl Library {
         let mut ap = Paragraph::plain(&b.author, s.small().line_height(1.2), Align::Left);
         ap.style.max_lines = Some(1);
         let author = t.text(ap);
-        let series = b.series.as_ref().and_then(|(name, i)| series_label(name, *i, in_series));
+        let series = b
+            .series
+            .as_ref()
+            .and_then(|(name, i)| series_label(name, *i, in_series));
         let status = match b.status {
             Status::Reading => {
                 let bar = t.add(progress(b.progress, 12), []);
@@ -847,9 +850,15 @@ mod tests {
 
     #[test]
     fn series_index_zero_is_never_shown() {
-        assert_eq!(series_label("Gazeta", 0.0, false).as_deref(), Some("Gazeta"));
+        assert_eq!(
+            series_label("Gazeta", 0.0, false).as_deref(),
+            Some("Gazeta")
+        );
         assert_eq!(series_label("Gazeta", 0.0, true), None);
-        assert_eq!(series_label("Dialogi", 3.0, false).as_deref(), Some("Dialogi · tom 3"));
+        assert_eq!(
+            series_label("Dialogi", 3.0, false).as_deref(),
+            Some("Dialogi · tom 3")
+        );
         assert_eq!(series_label("Dialogi", 3.0, true).as_deref(), Some("Tom 3"));
     }
     use crate::geom::{SCREEN_HEIGHT, SCREEN_WIDTH};
