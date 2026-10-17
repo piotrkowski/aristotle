@@ -73,6 +73,28 @@ def git(*args: str) -> str:
     return r.stdout.strip()
 
 
+def revision() -> dict[str, str]:
+    """Version, tag and commits of this tree: from its git checkout, or from
+    the REVISION file of a release's source tarball (tools/package.sh)."""
+    import tomllib
+
+    cargo = tomllib.loads((REPO / "Cargo.toml").read_text())
+    rev = {"version": cargo["workspace"]["package"]["version"]}
+    top = git("rev-parse", "--show-toplevel")
+    if top and Path(top).resolve() == REPO.resolve():
+        rev["aristotle"] = git("rev-parse", "HEAD")
+        rev["tag"] = git("describe", "--tags", "--exact-match", "HEAD")
+        if git("status", "--porcelain", "--untracked-files=no"):
+            rev["dirty"] = "1"
+        rev["plato"] = git("rev-parse", "HEAD:third_party/plato")
+    elif (REPO / "REVISION").is_file():
+        for line in (REPO / "REVISION").read_text().splitlines():
+            key, _, value = line.partition(" ")
+            if key in ("tag", "aristotle", "plato"):
+                rev[key] = value.strip()
+    return rev
+
+
 def rust_crates() -> list[dict]:
     """Packages the two binaries depend on for TARGET (normal and build)."""
     manifest = REPO / "Cargo.toml"
@@ -205,9 +227,11 @@ def main() -> None:
     )
 
     # SOURCE.txt (AGPL-3.0 section 6).
-    commit = git("rev-parse", "HEAD") or "unknown"
-    dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
-    plato_rev = git("rev-parse", "HEAD:third_party/plato") or "unknown"
+    rev = revision()
+    commit = rev.get("aristotle") or "unknown"
+    tag = f", tag {rev['tag']}" if rev.get("tag") else ""
+    dirty = " (with uncommitted changes)" if rev.get("dirty") else ""
+    plato_rev = rev.get("plato") or "unknown"
     patches = sorted((REPO / "tools/mupdf-patches").glob("*.patch"))
     c_sources = []
     in_list = False
@@ -224,8 +248,10 @@ def main() -> None:
         "Aristotle is free software under the GNU Affero General Public License,\n"
         "version 3 or later (licenses/Aristotle-LICENSE.txt). The corresponding\n"
         "source of this build:\n\n"
-        f"Aristotle: {REPO_URL}\n"
-        f"  commit {commit}{dirty}\n\n"
+        f"Aristotle {rev['version']}: {REPO_URL}\n"
+        f"  commit {commit}{tag}{dirty}\n"
+        f"  Each release at {REPO_URL}/releases\n"
+        "  also has a source tarball with Aristotle and Plato at these commits.\n\n"
         "Plato (document engine), Aristotle's fork of\n"
         "https://github.com/baskerville/plato:\n"
         "  https://github.com/piotrkowski/plato, branch aristotle\n"
@@ -237,7 +263,8 @@ def main() -> None:
         + "\n".join(c_sources)
         + "\n\nHyphenation patterns: https://github.com/baskerville/plato/releases/tag/0.9.45\n"
         "Rust crates: crates.io, versions in Cargo.lock\n"
-        "Build: tools/build-plato.sh, then tools/build-render.sh device\n"
+        "Build: tools/build-plato.sh, then tools/build-render.sh device and\n"
+        "tools/package.sh (.github/CONTRIBUTING.md)\n"
     )
 
 

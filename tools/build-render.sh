@@ -77,10 +77,18 @@ T_=$(printf %s "$TARGET" | tr - _)
 export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar" "CFLAGS_$T_=-O2"
 
 # CARGO_CMD=clippy or CARGO_CMD=test runs that instead, in the same
-# environment, and skips the bundle (tests need the host target).
+# environment, and skips the bundle (tests need the host target). Clippy
+# checks every target and fails on warnings, as for the other members.
+# CARGO_FLAGS adds options, such as --locked in CI.
 CARGO_CMD=${CARGO_CMD:-build}
-cargo "$CARGO_CMD" --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
+set -- --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
     --manifest-path "$REPO/Cargo.toml" -p aristotle-render -p aristotle
+# shellcheck disable=SC2086 # CARGO_FLAGS is a list of options
+if [ "$CARGO_CMD" = clippy ]; then
+    cargo clippy "$@" --all-targets ${CARGO_FLAGS:-} -- -D warnings
+else
+    cargo "$CARGO_CMD" "$@" ${CARGO_FLAGS:-}
+fi
 [ "$CARGO_CMD" = build ] || exit 0
 
 DL="$TOOLS/downloads"

@@ -1,6 +1,6 @@
 # Benchmarks: stock Kindle vs Aristotle
 
-This document records the stock UI's baseline, how both UIs are measured, Aristotle's targets and its results so far. It is the source of every number in the README and on the [benchmarks page](https://piotrkowski.github.io/aristotle/benchmarks.html). Device numbers come from `aristotle-observe` on the test PW4 (firmware 5.13.6) unless marked otherwise. Host numbers are in [Host measurements](#host-measurements). The panel's own timings, per waveform, are in [UI framework](ui-framework.md#e-ink-rendering).
+This document records the stock UI's baseline, how both UIs are measured, Aristotle's targets and its results so far. It is the source of every number in the README. Device numbers come from `aristotle-observe` on the test PW4 (firmware 5.13.6) unless marked otherwise. Host numbers are in [Host measurements](#host-measurements). The panel's own timings, per waveform, are in [UI framework](ui-framework.md#e-ink-rendering).
 
 ## Method
 

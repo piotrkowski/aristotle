@@ -2278,6 +2278,24 @@ fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {
     }
 }
 
+/// A fresh, empty directory for one test, under `$TMPDIR` (the build
+/// script points it at `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
+#[cfg(test)]
+pub(crate) fn testdir(name: &str) -> PathBuf {
+    use std::sync::atomic::AtomicUsize;
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .subsec_nanos();
+    let dir = std::env::temp_dir()
+        .join("aristotle-tests")
+        .join(format!("{name}-{}-{n}-{nanos}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2490,22 +2508,4 @@ mod tests {
         assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
         app.leave().unwrap();
     }
-}
-
-/// A fresh, empty directory for one test, under `$TMPDIR` (the build
-/// script points it at `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
-#[cfg(test)]
-pub(crate) fn testdir(name: &str) -> PathBuf {
-    use std::sync::atomic::AtomicUsize;
-    static N: AtomicUsize = AtomicUsize::new(0);
-    let n = N.fetch_add(1, Ordering::Relaxed);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .subsec_nanos();
-    let dir = std::env::temp_dir()
-        .join("aristotle-tests")
-        .join(format!("{name}-{}-{n}-{nanos}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
 }
