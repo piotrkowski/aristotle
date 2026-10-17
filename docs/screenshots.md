@@ -4,7 +4,7 @@ Screens from a Kindle Paperwhite 4 running Aristotle, with a library of public-d
 
 ## Library
 
-The book list, the same books by folder, and one folder.
+The library shows the book list, the same books by folder, and one folder.
 
 <p align="center">
   <img src="images/gallery/library-light.png#gh-light-mode-only" alt="The library: the book to continue, the book list with shelves, the folders view, and the Aristotle folder">
@@ -22,7 +22,7 @@ A page of the Nicomachean Ethics in English and the same passage in Greek.
 
 ## Night mode
 
-Light text on black, in the library and the reader.
+Night mode shows light text on black in the library and the reader.
 
 <p align="center">
   <img src="images/gallery/night-light.png#gh-light-mode-only" alt="The library and an English page in night mode">
@@ -31,7 +31,7 @@ Light text on black, in the library and the reader.
 
 ## Dictionary
 
-Hold a word to look it up. On the left, an inflected Greek word leads to its base form. On the right, an English word in an English–Polish dictionary.
+Holding a word opens its definition. On the left, an inflected Greek word leads to its base form. On the right, an English-Polish dictionary defines an English word.
 
 <p align="center">
   <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek–English dictionary, and science in an English–Polish dictionary">
@@ -40,7 +40,7 @@ Hold a word to look it up. On the left, an inflected Greek word leads to its bas
 
 ## Footnotes
 
-Tap a note number to read the note without leaving the page.
+Tapping a note number opens the note without leaving the page.
 
 <p align="center">
   <img src="images/gallery/footnotes-light.png#gh-light-mode-only" alt="A page with note numbers, and the popup for note 3">
@@ -49,7 +49,7 @@ Tap a note number to read the note without leaving the page.
 
 ## Highlights
 
-A highlighted word and a highlighted passage. Highlights also go to `My Clippings.txt` and a Markdown file.
+A highlighted word and a highlighted passage. Highlights also go to [`My Clippings.txt`](glossary.md#my-clippingstxt) and a Markdown file.
 
 <p align="center">
   <img src="images/gallery/highlights-light.png#gh-light-mode-only" alt="A Greek page with the word ἀγαθοῦ highlighted, and an English page with two lines highlighted">
@@ -58,7 +58,7 @@ A highlighted word and a highlighted passage. Highlights also go to `My Clipping
 
 ## Reader menu
 
-Tap the top of the page for the menu. On the right, the text is two steps larger.
+Tapping the top of the page opens the menu, shown on the right with text two steps larger.
 
 <p align="center">
   <img src="images/gallery/menu-light.png#gh-light-mode-only" alt="The reader menu with contents, highlights, chapter progress, text size, spacing, margins, light and night mode, at the default text size and two steps larger">
@@ -67,7 +67,7 @@ Tap the top of the page for the menu. On the right, the text is two steps larger
 
 ## Settings
 
-Light, night mode, covers, battery and screensaver; the date, storage, USB, language and highlights export; the same page in Polish.
+Settings cover light, night mode, covers, battery, and screensaver, then date, storage, USB, language, and highlight export. The last view shows the same page in Polish.
 
 <p align="center">
   <img src="images/gallery/settings-light.png#gh-light-mode-only" alt="Settings pages 1 and 2 in English, and page 2 in Polish">

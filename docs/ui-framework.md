@@ -1,8 +1,8 @@
 # UI framework: aristotle-ui
 
-`crates/aristotle-ui` stores screens as a tree, draws them into an 8-bit gray canvas, and reports changed rectangles with waveform hints. A waveform controls how the e-ink panel updates. The crate also recognizes touch gestures.
+`crates/aristotle-ui` stores screens as a tree and draws them into an 8-bit gray canvas. It reports changed rectangles with [waveform](glossary.md#waveform) hints that describe how the e-ink panel should update, and recognizes touch gestures.
 
-It has no HAL dependency. The host preview draws the same screens as the app, without a device.
+It has no [HAL](glossary.md#hal) dependency, so the host preview draws the same screens as the app without a device.
 
 ## Model
 
@@ -32,16 +32,16 @@ flowchart TD
     Sequence --> EPDC
 ```
 
-`Ui::render` produces pixels and hints, not hardware requests. `crates/aristotle/src/panel.rs` maps those hints to requests for the EPDC display controller. `crates/aristotle-hal/src/display.rs` owns the partial-update worker.
+`Ui::render` produces pixels and hints, not hardware requests. `crates/aristotle/src/panel.rs` maps those hints to requests for the [EPDC](glossary.md#epdc) display controller. `crates/aristotle-hal/src/display.rs` owns the partial-update worker.
 
 | Module | Contents |
 | --- | --- |
 | `canvas` | Gray pixels, clipping, pixel differences, and 16-level quantization |
 | `geom` | `Rect`, `Size`, `Insets`, and units at 300 DPI |
-| `waveform` | `A2`, `DU`, `GL16`, `GLKW16`, `GC16`, with Zelda mode numbers 6, 1, 3, 9, 2 |
-| `text` | Fonts, shaping, rasterization, and line breaks |
+| `waveform` | [`A2`](glossary.md#a2), [`DU`](glossary.md#du), [`GL16`](glossary.md#gl16), `GLKW16`, [`GC16`](glossary.md#gc16), with Zelda mode numbers 6, 1, 3, 9, 2 |
+| `text` | Fonts, [shaping](glossary.md#shaping), [rasterization](glossary.md#rasterization), and line breaks |
 | `tree` | Nodes, layout, painting, hit tests, and changes |
-| `ui` | Tree, canvas, previous pixels, damage, and gesture dispatch |
+| `ui` | Tree, canvas, previous pixels, [damage](glossary.md#damage), and gesture dispatch |
 | `icons`, `widgets`, `theme` | Icons, controls, and style constants |
 | `screens` | Library, settings, network, sleep, and reader menu |
 
@@ -49,20 +49,17 @@ flowchart TD
 
 A `NodeId` addresses a node in a `Vec<Node>`. Containers include `Column`, `Row`, `Stack`, `Padding`, `Align`, `Fixed`, and `MinSize`. Leaves include text, icons, rules, progress, spacers, and custom widgets.
 
-Parents pass minimum and maximum sizes. Children choose their sizes, then parents place them. Paragraph layouts are cached by width.
+Parents pass size limits to their children, then place them at the sizes the children choose. Paragraph layouts are cached by width.
 
-`Pages` shows the children that fit on one page. `set_page` changes the visible page. There is no scrolling container.
+`Pages` shows the children that fit on one page, and `set_page` changes the visible page. There is no scrolling container.
 
-Use tree setters such as `set_text`, `set_hidden`, and `set_progress`. They record damage with a `Refresh` class. After `widget_mut`, call `invalidate`. Direct field changes record no damage.
+Tree setters such as `set_text`, `set_hidden`, and `set_progress` record damage, the changed rectangles, with a `Refresh` class. After `widget_mut`, call `invalidate`, because direct field changes record no damage.
 
 ### Damage and waveforms
 
-`Ui::render()` returns `Vec<Damage>`:
+`Ui::render()` collects rectangles for changed nodes and the old and new positions of moved nodes, then repaints those areas into the canvas.
 
-1. Collect rectangles for changed nodes and the old and new positions of moved nodes.
-2. Repaint those rectangles into the canvas.
-3. Compare the canvas with `front`, the previous pixels. Keep only the changed pixels' bounding boxes.
-4. Choose a waveform hint for each rectangle.
+It compares the canvas with `front`, the previous pixels, to keep only the changed pixels' bounding boxes. The result is a `Vec<Damage>` with a waveform hint for each rectangle.
 
 An identical automatic repaint produces no damage. Explicit full refreshes bypass the pixel comparison. Press feedback uses A2. Black-and-white changes use DU, gray changes use GL16, and full refreshes use GC16 hints.
 
@@ -76,7 +73,7 @@ The app maps GC16 to a full-screen mode-8 flash. GLKW16 becomes mode 9 in full m
 
 `GestureRecognizer` accepts `(phase, id, x, y, time_us)`. Defaults in `GestureConfig` are 4 mm tap slop, a 500 ms hold, and an 8 mm swipe. A swipe axis must dominate the other by 1.5 times. A second finger cancels a press.
 
-Touch-down starts A2 feedback. Movement cancels it. Hit tests expand small targets to `MIN_TARGET`, 9 mm or 106 px.
+A2 feedback starts on touch-down and stops if the finger moves. Hit tests expand small targets to `MIN_TARGET`, 9 mm or 106 px.
 
 The book page uses `crates/aristotle/src/turns.rs`. Taps turn on release. The top 12 % opens the menu, the left 30 % goes back, and the remaining area goes forward. A hold selects text without turning.
 
@@ -106,21 +103,21 @@ The app draws a complete frame before it submits an update.
 
 ## Night mode
 
-`App::set_night` updates both `Panel` and `Ui`. Software inversion is the default: `Ui::set_night` inverts UI pixels, and `Framebuffer::blit_inverted` inverts book pages. `--night-method hardware` uses `EPDC_FLAG_ENABLE_INVERSION` instead. Software inversion keeps screenshots consistent with the panel.
+`App::set_night` updates both `Panel` and `Ui`. Software inversion is the default: `Ui::set_night` inverts UI pixels, and `Framebuffer::blit_inverted` inverts book pages in the [framebuffer](glossary.md#framebuffer). `--night-method hardware` uses `EPDC_FLAG_ENABLE_INVERSION` instead. Software inversion keeps screenshots consistent with the panel.
 
-Snapshots and page caches store day pixels. EPUB images keep their day colors through `Page::images` and `panel::night_page`. MuPDF pages, including PDF, invert as a whole.
+[Snapshots](glossary.md#snapshot) and page caches store day pixels. [EPUB](glossary.md#epub) images keep their day colors through `Page::images` and `panel::night_page`. [MuPDF](glossary.md#mupdf) pages, including PDF, invert as a whole.
 
-Turns stay full mode 9 and flashes full mode 8. Partial gray UI updates use GLKW16 instead of GL16 at night.
+Turns stay full mode 9 and flashes full mode 8, while partial gray UI updates use [GLKW16](glossary.md#glkw16) instead of GL16 at night.
 
 ## Text
 
-Swash shapes and rasterizes text. Hinting aligns text to the pixel grid. `TextEngine::set_darkening` applies `coverage^0.8` by default to make thin strokes darker.
+[Swash](https://github.com/dfrg/swash) shapes text into glyphs and rasterizes them into pixels. Hinting aligns text to the pixel grid. `TextEngine::set_darkening` applies `coverage^0.8` by default to make thin strokes darker.
 
 Literata is the default font. The `embedded-fonts` feature compiles it into the UI. The app disables that feature and loads Literata from `data/serif/`.
 
-`text::layout_paragraph` uses Unicode line-break rules. Justified text uses Knuth-Plass, which chooses breaks across a paragraph, with simpler fallbacks. Ragged text uses first fit. Soft hyphens mark possible breaks. A one-letter word or initial does not end a line. `max_lines` truncates with an ellipsis.
+`text::layout_paragraph` uses Unicode line-break rules. Justified text uses [Knuth-Plass](glossary.md#knuth-plass), which chooses breaks across a paragraph, with simpler fallbacks. Ragged text uses first fit. Soft hyphens mark possible breaks. A one-letter word or initial does not end a line. `max_lines` truncates with an ellipsis.
 
-The UI's `Hyphenator` supports Polish syllable rules. Book pages use Plato's language patterns ([Hyphenation](reader.md#hyphenation)). There is no bidirectional text support, and shaping uses the Latin script.
+The UI's `Hyphenator` supports Polish syllable rules. Book pages use [Plato](glossary.md#plato)'s [Liang hyphenation patterns](glossary.md#liang-hyphenation-patterns) ([Hyphenation](reader.md#hyphenation)). There is no bidirectional text support, and shaping uses the Latin script.
 
 ## Design system
 
@@ -172,7 +169,7 @@ Add it with `tree.custom(w)`. Change it through `tree.widget_mut::<T>(id)`, then
 
 English is the default. `crates/aristotle-i18n/locales/en.json` defines the message keys. The build checks each locale's keys, placeholders, and plural forms. Debug builds also check arguments to `tf!`.
 
-`set_language` changes the process-wide language. `with_language` overrides it on one thread for tests. Book text and metadata are not translated. `My Clippings.txt` keeps en_GB labels in every language.
+`set_language` changes the process-wide language. `with_language` overrides it on one thread for tests. Book text and metadata are not translated. [`My Clippings.txt`](glossary.md#my-clippingstxt) keeps en_GB labels in every language.
 
 ### Adding a language
 
@@ -197,11 +194,11 @@ Previews include day and night PNGs, `*-damage.png` overlays, and `targets.txt` 
 
 ## E-ink rendering
 
-The EPDC, the display controller, reads pixels from the framebuffer only when asked to update. `MXCFB_SEND_UPDATE` submits a rectangle and waveform. `MXCFB_WAIT_FOR_UPDATE_COMPLETE` waits for a marker to finish.
+The EPDC reads pixels from the framebuffer only when asked to update. `MXCFB_SEND_UPDATE` submits a rectangle and waveform. `MXCFB_WAIT_FOR_UPDATE_COMPLETE` waits for a marker to finish.
 
 ### Waveforms
 
-The PW4 uses Zelda mode numbers from FBInk's `mxcfb-kindle.h`, not PW2 numbers. The [device reference](pw4-reference.md#waveform-modes-and-timings) lists every measured mode. These timings come from `aristotle-observe bench latency` on our device [dev]:
+The PW4 uses Zelda mode numbers from [FBInk](glossary.md#fbink)'s `mxcfb-kindle.h`, not PW2 numbers. The [device reference](pw4-reference.md#waveform-modes-and-timings) lists every measured mode. These timings come from `aristotle-observe bench latency` on our device [dev]:
 
 | Waveform | Mode | Time for a 120 × 120 region |
 | --- | --- | --- |
@@ -211,7 +208,7 @@ The PW4 uses Zelda mode numbers from FBInk's `mxcfb-kindle.h`, not PW2 numbers. 
 | GC16 | 2 | 544 ms |
 | GLKW16 | 9 | 544 ms |
 
-A2 is fast but leaves residue. DU handles black and white. Gray updates take longer. Real reading uses full mode 9 to avoid ghosting ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)). The stock UI sends its controls as mode 257, AUTO, and flashes with mode 8 [dev]. Aristotle uses mode 9 in full mode where it cleans; that mode 9 clears A2 residue on a region is an inference from the page-turn results.
+A2 is fast but leaves residue, while DU handles black and white. Gray updates take longer, and book pages use full mode 9 to avoid [ghosting](glossary.md#ghosting) ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)). The stock UI sends its controls as mode 257 (AUTO) and flashes with mode 8 [dev]. Aristotle cleans with mode 9 in full mode; that this clears A2 residue on a region is an inference from the page-turn results.
 
 ### Display thread
 

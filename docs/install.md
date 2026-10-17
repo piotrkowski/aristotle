@@ -2,12 +2,14 @@
 
 Aristotle is experimental. A mistake can brick the Kindle, and no recovery method is verified for the Paperwhite 4. Use only a device you can afford to lose.
 
+The [glossary](glossary.md) explains device and book-format terms.
+
 ## What you need
 
 - A jailbroken Kindle Paperwhite 4, 2018 model PQ94WIF, on firmware 5.13.x. Other models and firmware are unsupported.
-- KUAL and MRPI. [kindlemodding.org](https://kindlemodding.org) explains their setup.
+- [KUAL](glossary.md#kual), the launcher, and [MRPI](glossary.md#mrpi), the package installer. [kindlemodding.org](https://kindlemodding.org) explains their setup.
 - A computer and USB cable.
-- For the optional agent, KOReader and your SSH public key.
+- For the optional agent, [KOReader](glossary.md#koreader) and your SSH public key.
 
 Aristotle contains no exploit or DRM-removal code. It opens only DRM-free books. It uses the Kindle's existing waveforms and firmware, never ships them, and never copies them off the device.
 
@@ -29,14 +31,12 @@ Hold **Library** for one second to quit. The stock interface returns after 30 to
 
 ## The agent (optional)
 
-Yes, you can use SSH over USB, without an internet connection. It is quite useful.
-
-The agent provides USB SSH at `192.168.15.244`, drive-mode switching from settings, and an update block. See [Host setup](../device/README.md).
+The agent provides SSH over USB at `192.168.15.244` without an internet connection. It also provides [drive-mode](glossary.md#drive-mode) switching from settings and an update block. See [Host setup](../device/README.md).
 
 1. Copy your SSH public key to `extensions/aristotle/authorized_keys` on the Kindle drive.
 2. Open **KUAL > Aristotle > Install agent**.
 
-The agent adds three root-filesystem jobs: `/etc/upstart/aristotle-agent.conf`, `/etc/upstart/aristotle-ui.conf`, and `/etc/upstart/aristotle-ota.conf`. It changes no stock file. Other files go to the drive and `/var/local`.
+The agent adds three [Upstart](glossary.md#upstart) service jobs on the [root filesystem](glossary.md#rootfs): `/etc/upstart/aristotle-agent.conf`, `/etc/upstart/aristotle-ui.conf`, and `/etc/upstart/aristotle-ota.conf`. It changes no stock file. Other files go to the drive and `/var/local`.
 
 Before a deliberate firmware update, remove the agent. Keep the `update.bin.tmp.partial` folder on the drive.
 
@@ -44,7 +44,7 @@ Before a deliberate firmware update, remove the agent. Keep the `update.bin.tmp.
 
 With the agent installed, select **Start Aristotle at boot: on**. This copies the app to internal storage and starts it about 41 seconds after power-on [dev]. Select it again after updating the app. **Start Aristotle at boot: off** disables it.
 
-The stock interface starts instead if `aristotle-disable` exists on the drive or after three failed launches. Quitting Aristotle keeps the stock interface for the rest of that boot.
+The stock interface starts instead if the [`aristotle-disable` kill switch](glossary.md#kill-switch) exists on the drive or after three failed launches. Quitting Aristotle keeps the stock interface for the rest of that boot.
 
 ## Your own fonts
 
@@ -56,7 +56,7 @@ Copy TTF or OTF files into a folder named `fonts` at the root of the Kindle's dr
 2. Delete `aristotle/`, `.aristotle/`, and `extensions/aristotle/` from the drive.
 3. If present, delete `extensions/aristotle-probe/` or the older `extensions/aristotle-usbnet/`.
 
-Books, `My Clippings.txt`, and exported notes remain.
+Books, [`My Clippings.txt`](glossary.md#my-clippingstxt), and exported notes remain.
 
 ## If something goes wrong
 

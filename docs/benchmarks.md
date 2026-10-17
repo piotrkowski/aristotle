@@ -4,13 +4,15 @@ Device results use a PW4 on firmware 5.13.6 unless marked otherwise. These numbe
 
 ## Method
 
-`aristotle-observe` measures both interfaces the same way:
+`aristotle-observe` measures both interfaces with the same method:
 
-- Enable EPDC debug logging through `mxc_epdc_debug` in sysfs. The log records update regions, waveforms, and completion times.
-- Read `/dev/kmsg` and touch events. Pair touches with updates until none arrive for 1.5 s.
-- Inject evdev touches into the real touchscreen node.
+- It enables [EPDC](glossary.md#epdc) debug logging through `mxc_epdc_debug` in [sysfs](glossary.md#sysfs). The log records update regions, [waveforms](glossary.md#waveform), and completion times.
+- It reads `/dev/kmsg` and touch events, pairing touches with updates until none arrive for 1.5 s.
+- It injects [evdev](glossary.md#evdev) touches into the real touchscreen node.
 
 `tools/scenarios/` contains `tap`, `hold`, `swipe`, `wait`, `label`, `go-home`, and `snap` commands. Start from `go-home` and verify steps with screenshots.
+
+Full flashes use [GC16](glossary.md#gc16) or [GCK16](glossary.md#gck16) waveforms, while stock page turns use [GLKW16](glossary.md#glkw16).
 
 | Metric | Meaning |
 | --- | --- |
@@ -34,13 +36,15 @@ The Goodix touchscreen accepts multi-touch axes only. Inject a slot, tracking ID
 | Reader: toolbar | 239 to 264 ms | 748 to 780 ms | 2 | |
 
 - After 8 forward turns, some back turns, and toolbar use, `pmond` reported `processTooLarge` at the 49 MB heap cap (`alloc=51642368` of `max=51642368`). The framework restarted and lost some turns.
-- The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS.
+- The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB [RSS](glossary.md#rss).
 - Stock has no Polish hyphenation, page header, or progress display.
 - Home includes store and reading-list promotions.
 
 ## Page-turn strategy experiment
 
-With the stock GUI stopped, `aristotle-observe bench pageturn` alternates a stock-rendered Polish page and a copy shifted by 37 rows. Results are medians of 6 turns. Two runs agreed within 5 ms.
+With the stock GUI stopped, `aristotle-observe bench pageturn` alternates a stock-rendered Polish page and a copy shifted by 37 rows. Results are medians of 6 turns, and two runs agreed within 5 ms.
+
+The alternatives were [GL16](glossary.md#gl16), [REAGL](glossary.md#reagl), [DU](glossary.md#du), and [A2](glossary.md#a2), alone or in sequence.
 
 | Strategy | Visible | Settled |
 | --- | --- | --- |
@@ -55,9 +59,9 @@ With the stock GUI stopped, `aristotle-observe bench pageturn` alternates a stoc
 
 ### What real reading showed
 
-A2 then GL16 ghosted heavily over a whole novel. Partial updates skipped pixels already white after A2. Full GL16 did not clear all A2 residue either.
+A2 then GL16 left heavy [ghosting](glossary.md#ghosting) over a whole novel because partial updates skipped pixels already white after A2. Full GL16 did not clear all A2 residue either.
 
-The driver log showed that the stock reader turns a page with one full-mode update of the whole screen in mode 9 (`glkw16`), and flashes with mode 8 (`gck16`). FBInk calls mode 9 a night-mode waveform, and stock uses it in day mode. Both modes trigger the driver's "Algorithm processing" and "ACD data" steps, Lab126's ghost reduction. Our code now sends the identical request, and the ghosting is gone. The next page renders while the panel refreshes (`Screen::submit`/`finish`). Same novel, median of 6 turns:
+The driver log showed that the stock reader turns a page with one full-mode update of the whole screen in mode 9 (`glkw16`), and flashes with mode 8 (`gck16`). [FBInk](glossary.md#fbink) calls mode 9 (GLKW16) a night-mode waveform, though stock uses it in day mode. Both modes trigger the driver's "Algorithm processing" and "ACD data" steps, [Lab126](glossary.md#lab126)'s ghost reduction. Our code now sends the identical request, which removed ghosting in this experiment. The next page renders while the panel refreshes (`Screen::submit`/`finish`). The comparison also includes the four-gray-level [DU4](glossary.md#du4) mode. Same novel, median of 6 turns:
 
 | Single-step turn | Tap to page shown | Settled |
 | --- | --- | --- |
@@ -67,9 +71,9 @@ The driver log showed that the stock reader turns a page with one full-mode upda
 
 Rendering the next page takes about 106 ms on the device, inside the panel time.
 
-Page turns use the mode-9 update with a prerendered page. That is 11 % faster than stock to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 remains a setting. It is about 1.8 times faster than stock and has fewer gray levels. A2 previews are off.
+Page turns use the mode-9 update with a prerendered page. That is 11 % faster than stock to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 remains a setting, about 1.8 times faster than stock but with fewer gray levels. A2 previews are off.
 
-A long MOBI took 2.9 s to open before snapshots [dev]. A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
+A long [MOBI](glossary.md#mobi) took 2.9 s to open before [snapshots](glossary.md#snapshot) [dev]. A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
 
 ## Transitions in the Aristotle app
 
@@ -112,7 +116,7 @@ Device, 2026-10-17, from the app's `[perf]` lines in `/var/tmp/aristotle.log` an
 | Peak memory (`VmHWM`) | 66 MB, during the one-time indexing of five dictionaries | |
 | One-time dictionary indexing | pl-pl 22.9 s, grc-en 37.2 s, the others under 3.1 s each | |
 
-`takeover.sh start` alone, before the app starts, takes available RAM from 236 MB to 392 MB [dev] (`docs/pw4-reference.md`, "Taking over the screen").
+[`takeover.sh start`](glossary.md#takeover) alone, before the app starts, takes available RAM from 236 MB to 392 MB [dev] (`docs/pw4-reference.md`, "Taking over the screen").
 
 ## Binary size
 
@@ -131,7 +135,7 @@ On a PC (x86_64, release build) with the same code and library versions as the d
 
 ### Opening a book from a snapshot
 
-`aristotle --bench-open`, 6 runs on one CPU, with a 379-page stand-in novel in a single spine item and page numbers cached.
+`aristotle --bench-open`, 6 runs on one CPU, with a 379-page stand-in novel in a single [spine](glossary.md#spine) item and page numbers cached.
 
 | Step | Old path | New path |
 | --- | --- | --- |
@@ -141,7 +145,7 @@ On a PC (x86_64, release build) with the same code and library versions as the d
 
 ### Typesetting
 
-`aristotle-render bench` with Literata at 10 pt.
+`aristotle-render bench` with [Plato](glossary.md#plato) rendering [EPUB](glossary.md#epub) books in Literata at 10 pt.
 
 | Book | Open | First page | Render per page, median / p90 | Paginate all | Max RSS |
 | --- | --- | --- | --- | --- | --- |

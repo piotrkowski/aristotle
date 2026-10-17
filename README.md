@@ -35,15 +35,15 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
 ## Features
 
-- Pages turn with one full-screen update and the stock reader's waveform, so they don't ghost.
-- The library shows `documents/` with shelves, folders, series and the current book. It opens EPUB, DRM-free MOBI, PDF and TXT.
-- Text is set in Literata with Knuth–Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
+- Pages turn with one full-screen update and the stock reader's [waveform](docs/glossary.md#waveform), so they don't ghost.
+- The library shows `documents/` with shelves, folders, series and the current book. It opens [EPUB](docs/glossary.md#epub), DRM-free [MOBI](docs/glossary.md#mobi), PDF and TXT.
+- Text is set in Literata with [Knuth-Plass](docs/glossary.md#knuth-plass) justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
 - Add your own fonts: copy TTF or OTF files into `fonts/` on the Kindle and pick one in the reader's menu ([how](docs/install.md#your-own-fonts)).
-- Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
-- It continues where the stock reader left off ([without changing its files](docs/library.md#stock-files-sidecars-and-my-clippingstxt)) and adds highlights to `My Clippings.txt` and Markdown. Footnotes open in a popup.
+- Hold a word to look it up in offline [StarDict](docs/glossary.md#stardict) dictionaries. Inflected forms work too.
+- It continues where the stock reader left off ([without changing its files](docs/library.md#stock-files-sidecars-and-my-clippingstxt)) and adds highlights to [`My Clippings.txt`](docs/glossary.md#my-clippingstxt) and Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
-- Reading positions sync with KOReader through a KOSync server (EPUB chapters, PDF pages).
-- Books download from OPDS catalogs, such as calibre's content server, into the library.
+- Reading positions sync with [KOReader](docs/glossary.md#koreader) through a [KOSync](docs/glossary.md#kosync) server (EPUB chapters, PDF pages).
+- Books download from [OPDS](docs/glossary.md#opds) catalogs, such as calibre's content server, into the library.
 
 | Speed | Stock | Aristotle |
 |---|--:|--:|
@@ -62,7 +62,7 @@ I'd recommend installing it with an AI agent like Claude Code or Codex. Just poi
 You need:
 
 - a Kindle Paperwhite 4 (2018) on firmware 5.13.x, jailbroken;
-- KUAL, the launcher that holds Aristotle's menu;
+- [KUAL](docs/glossary.md#kual), the launcher that holds Aristotle's menu;
 - a computer and a USB cable.
 
 Then:
@@ -75,12 +75,13 @@ Then:
 
 ## Documentation
 
+- [Glossary](docs/glossary.md) of technical terms
 - [Project post and interactive demo](https://piotrkowski.github.io/aristotle/)
 - [Screenshots](docs/screenshots.md) of the main screens, in day and night mode
 - Design notes on the [architecture](docs/architecture.md), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
 - [Benchmarks](docs/benchmarks.md), the source of every number in this README
 - [Installing](docs/install.md)
-- [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
+- [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the [kill switch](docs/glossary.md#kill-switch) and uninstalling
 - [Paperwhite 4 reference](docs/pw4-reference.md)
 
 ## Contributing
@@ -96,8 +97,8 @@ GNU AGPL 3.0 or later, like Plato. See [LICENSE](LICENSE). [THIRD_PARTY.md](THIR
 - [Plato](https://github.com/baskerville/plato) by Bastien Dejean, with [MuPDF](https://mupdf.com), [FreeType](https://freetype.org) and [HarfBuzz](https://harfbuzz.github.io)
 - [KOReader](https://github.com/koreader/koreader), for Kindle know-how and the SSH server
 - [FBInk](https://github.com/NiLuJe/FBInk), for the e-ink display interface
-- katadelos' [eink-emulator](https://github.com/katadelos/eink-emulator), the Paperwhite 4 in QEMU
-- [KindleModding](https://kindlemodding.org) and [MobileRead](https://www.mobileread.com), for KUAL, MRPI and the Kindle guides
+- katadelos' [eink-emulator](https://github.com/katadelos/eink-emulator), the Paperwhite 4 in [QEMU](docs/glossary.md#qemu)
+- [KindleModding](https://kindlemodding.org) and [MobileRead](https://www.mobileread.com), for KUAL, [MRPI](docs/glossary.md#mrpi) and the Kindle guides
 - [Literata](https://www.type-together.com/literata-font) by TypeTogether
 - [hyph-utf8](https://github.com/hyphenation/tex-hyphen) hyphenation patterns
 - Wiktionary dictionaries via [wiktionary_stardict](https://github.com/xxyzz/wiktionary_stardict) ([CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/))
