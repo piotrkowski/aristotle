@@ -28,10 +28,7 @@ Aristotle replaces the Kindle's stock Java interface. While it runs, the store, 
 
 The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
-| Memory | Stock | Aristotle |
-|---|--:|--:|
-| RAM used by the interface | about 200 MB | **14.5 MB** |
-| RAM free while reading | about 240 MB | **about 380 MB** |
+The stock interface uses about 200 MB of RAM, and Aristotle uses 14.5 MB. While reading, stock leaves about 240 MB free, and Aristotle leaves about 380 MB.
 
 ## Features
 
@@ -45,16 +42,13 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - Reading positions sync with [KOReader](docs/glossary.md#koreader) through a [KOSync](docs/glossary.md#kosync) server (EPUB chapters, PDF pages).
 - Books download from [OPDS](docs/glossary.md#opds) catalogs, such as calibre's content server, into the library.
 
-| Speed | Stock | Aristotle |
-|---|--:|--:|
-| Page turn, from release | 0.57 s | 0.44 s |
-| Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
+A page turn takes 0.57 s from release in stock and 0.44 s in Aristotle. Opening a book takes 0.8 s in stock and 0.56 s in Aristotle, from its saved page.
 
-The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method.
+The speed, size and memory numbers here come from [`docs/benchmarks.md`](docs/benchmarks.md), which describes the method.
 
 ## Install
 
-I'd recommend installing it with an AI agent like Claude Code or Codex. Just point it at [AGENTS.md](AGENTS.md). And if you run into bugs, ghosting or flickering along the way, I'm happy to get an issue or a PR ;)
+I'd recommend installing it with an AI agent like Claude Code or Codex. Just point it at [`AGENTS.md`](AGENTS.md). And if you run into bugs, ghosting or flickering along the way, I'm happy to get an issue or a PR ;)
 
 > [!WARNING]
 > Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4. Aristotle is alpha software.
@@ -69,9 +63,9 @@ Then:
 
 1. Download `aristotle-X.Y.Z.zip` from the latest [release](https://github.com/piotrkowski/aristotle/releases).
 2. Unzip it to the root of the Kindle's USB drive and eject the Kindle.
-3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
+3. On the Kindle, open *KUAL › Aristotle › Start Aristotle*.
 
-**[docs/install.md](docs/install.md)** covers starting at boot, the optional agent, updates, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
+[`docs/install.md`](docs/install.md) covers starting at boot, the optional agent, updates, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [`CONTRIBUTING.md`](.github/CONTRIBUTING.md#building).
 
 ## Documentation
 
@@ -86,7 +80,7 @@ Then:
 
 ## Contributing
 
-Report bugs as [issues](https://github.com/piotrkowski/aristotle/issues) with the device, firmware version and app log. [CONTRIBUTING.md](.github/CONTRIBUTING.md) explains the build and the checks. Report vulnerabilities privately through the [security policy](.github/SECURITY.md).
+Report bugs as [issues](https://github.com/piotrkowski/aristotle/issues) with the device, firmware version and app log. [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) explains the build and the checks. Report vulnerabilities privately through the [security policy](.github/SECURITY.md).
 
 ## Licence
 

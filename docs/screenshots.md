@@ -67,7 +67,12 @@ Tapping the top of the page opens the menu, shown on the right with text two ste
 
 ## Settings
 
-Settings cover light, night mode, covers, battery, and screensaver, then date, storage, USB, language, and highlight export. The last view shows the same page in Polish.
+*Settings* cover these controls in order:
+
+- Light, night mode, covers, battery, and screensaver.
+- Date, storage, USB, language, and highlight export.
+
+The last view shows the same page in Polish.
 
 <p align="center">
   <img src="images/gallery/settings-light.png#gh-light-mode-only" alt="Settings pages 1 and 2 in English, and page 2 in Polish">
