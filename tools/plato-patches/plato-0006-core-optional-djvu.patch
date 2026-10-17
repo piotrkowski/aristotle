@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Make DjVu optional. Without libdjvulibre.a next to the other archives
 (tools/build-plato.sh with PLATO_DJVU=0), build.rs sets cfg(plato_no_djvu),
 the djvu module is left out, and DjVu files are not opened.

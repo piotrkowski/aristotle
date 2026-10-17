@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Let other workspaces (aristotle-render) link the static archives of a
 tools/build-plato.sh run through PLATO_LIB_DIRS, and accept the x86_64 musl
 host target, for which build-plato.sh builds the same archives.
