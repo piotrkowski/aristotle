@@ -15,7 +15,7 @@ KINDLE=${KINDLE_MOUNT:-/run/media/$USER/Kindle}
 # or point ARISTOTLE_PUBKEY at another public key.
 PUBKEY=${ARISTOTLE_PUBKEY:-$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub}
 # The reader app's bundle, as tools/build-render.sh device writes it.
-APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz}
+APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-device.tar.gz}
 
 [ -s "$PUBKEY" ] || {
     echo "no public key at $PUBKEY" >&2

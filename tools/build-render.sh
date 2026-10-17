@@ -25,7 +25,7 @@
 # OUT defaults to $ARISTOTLE_CACHE/render/<device|host> (ARISTOTLE_CACHE comes
 # from tools/env.sh); the device tarball goes to BUNDLE (default
 # $ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz)
-# and the reader app's to APP_BUNDLE (.../aristotle-app-device.tar.gz).
+# and the reader app's to APP_BUNDLE (.../aristotle-device.tar.gz).
 # CARGO_CMD=clippy|test runs that cargo command instead of building.
 set -eu
 
@@ -224,13 +224,13 @@ du -sh "$OUT/data"
 #   ssh kindle 'tar -xzf - -C /var/tmp' < "$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz"
 # The reader app's bundle (aristotle/ with the app, data/ and
 # run-aristotle.sh) is meant for the userstore; see docs/reader.md:
-#   ssh kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
+#   ssh kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-device.tar.gz"
 if [ "$WHAT" = device ]; then
     BUNDLE=${BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz}
     tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data \
         ./licenses ./SOURCE.txt
     mv -f "$BUNDLE.part" "$BUNDLE"
-    APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz}
+    APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-device.tar.gz}
     cp "$REPO/device/app/run-aristotle.sh" "$REPO/device/app/takeover.sh" \
         "$REPO/device/extension/guard.sh" "$OUT/"
     tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \

@@ -152,7 +152,7 @@ The test book is a short Polish text written for it, with Greek and Latin words 
 . tools/env.sh
 PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
 tools/build-render.sh device
-ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
+ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-device.tar.gz"
 ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh [--turn-mode 7]
 ```
 
