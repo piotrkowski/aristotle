@@ -24,8 +24,13 @@ pub mod book;
 pub mod lang;
 pub mod mobi;
 pub mod page;
+pub mod position;
 pub mod screen;
 pub mod style;
+
+/// Plato's core, for callers that need its types (errors, locations)
+/// without depending on the patched source tree themselves.
+pub use plato_core;
 
 use std::io;
 use std::path::Path;

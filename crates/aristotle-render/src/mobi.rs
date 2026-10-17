@@ -28,12 +28,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use crate::position::PosMap;
 use plato_core::anyhow::{bail, format_err, Context, Error};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 /// Bump when the conversion output changes, to invalidate cached EPUBs.
-const CONVERTER_VERSION: u32 = 1;
+const CONVERTER_VERSION: u32 = 2;
 
 const COMPRESSION_NONE: u16 = 1;
 const COMPRESSION_PALMDOC: u16 = 2;
@@ -202,6 +203,12 @@ fn image_extension(data: &[u8]) -> Option<&'static str> {
 
 /// Parse and decode a MOBI file.
 pub fn parse(data: &[u8]) -> Result<Mobi, Error> {
+    parse_with(data, true)
+}
+
+/// Parse a MOBI file; without `text`, only the headers (the returned book
+/// has no text and no images).
+pub fn parse_with(data: &[u8], text: bool) -> Result<Mobi, Error> {
     if data.get(60..68) != Some(b"BOOKMOBI".as_slice()) {
         bail!("not a Mobipocket book");
     }
@@ -241,6 +248,13 @@ pub fn parse(data: &[u8]) -> Result<Mobi, Error> {
     }
     if info.version >= 8 {
         bail!("KF8-only book (AZW3), not MOBI 7");
+    }
+    if !text {
+        return Ok(Mobi {
+            info,
+            html: String::new(),
+            images: Vec::new(),
+        });
     }
 
     let mut raw = Vec::with_capacity(text_length);
@@ -408,6 +422,20 @@ fn mobi_style(attrs: &mut Vec<(String, String)>) {
 /// Turn MOBI 7 HTML into well-formed XHTML body fragments, one per chapter
 /// (split at `<mbp:pagebreak/>`).
 pub fn chapters(html: &str, images: &[(u32, &'static str, Vec<u8>)]) -> Vec<String> {
+    chapters_mapped(html, images).0
+}
+
+/// Minimum distance in source bytes between two anchors of the position
+/// map: about three lines of text, plenty to land on the right page.
+const ANCHOR_STEP: usize = 200;
+
+/// Chapter bodies as in [`chapters`], plus for each chapter the anchors
+/// `(offset in html, offset in the chapter body)` where a run of text was
+/// copied, so that positions in the MOBI text can be found in the EPUB.
+pub fn chapters_mapped(
+    html: &str,
+    images: &[(u32, &'static str, Vec<u8>)],
+) -> (Vec<String>, Vec<Vec<(usize, usize)>>) {
     let body = html
         .find("<body")
         .and_then(|i| html[i..].find('>').map(|j| i + j + 1))
@@ -420,14 +448,28 @@ pub fn chapters(html: &str, images: &[(u32, &'static str, Vec<u8>)]) -> Vec<Stri
 
     let mut out = Vec::new();
     let mut cur = String::new();
+    let mut maps = Vec::new();
+    let mut map: Vec<(usize, usize)> = Vec::new();
+    let anchor = |map: &mut Vec<(usize, usize)>, src_off: usize, out_off: usize| {
+        if map
+            .last()
+            .is_none_or(|&(s, _)| body + src_off >= s + ANCHOR_STEP)
+        {
+            map.push((body + src_off, out_off));
+        }
+    };
     // Open elements: (name, start tag as emitted).
     let mut stack: Vec<(String, String)> = Vec::new();
     let mut i = 0;
     while i < src.len() {
         let Some(lt) = src[i..].find('<').map(|k| i + k) else {
+            anchor(&mut map, i, cur.len());
             cur.push_str(&src[i..]);
             break;
         };
+        if lt > i {
+            anchor(&mut map, i, cur.len());
+        }
         cur.push_str(&src[i..lt]);
         if src[lt..].starts_with("<!--") {
             i = src[lt..].find("-->").map_or(src.len(), |k| lt + k + 3);
@@ -457,6 +499,7 @@ pub fn chapters(html: &str, images: &[(u32, &'static str, Vec<u8>)]) -> Vec<Stri
                 cur.push_str(&format!("</{n}>"));
             }
             out.push(std::mem::take(&mut cur));
+            maps.push(std::mem::take(&mut map));
             for (_, open) in &stack {
                 cur.push_str(open);
             }
@@ -502,23 +545,31 @@ pub fn chapters(html: &str, images: &[(u32, &'static str, Vec<u8>)]) -> Vec<Stri
         cur.push_str(&format!("</{n}>"));
     }
     out.push(cur);
-    out.retain(|c| {
-        // Keep chapters with text or images.
-        let mut in_tag = false;
-        let text = c.chars().any(|ch| match ch {
-            '<' => {
-                in_tag = true;
-                false
-            }
-            '>' => {
-                in_tag = false;
-                false
-            }
-            _ => !in_tag && !ch.is_whitespace(),
-        });
-        text || c.contains("<img")
-    });
-    out
+    maps.push(map);
+    let keep: Vec<bool> = out
+        .iter()
+        .map(|c| {
+            // Keep chapters with text or images.
+            let mut in_tag = false;
+            let text = c.chars().any(|ch| match ch {
+                '<' => {
+                    in_tag = true;
+                    false
+                }
+                '>' => {
+                    in_tag = false;
+                    false
+                }
+                _ => !in_tag && !ch.is_whitespace(),
+            });
+            text || c.contains("<img")
+        })
+        .collect();
+    let mut k = keep.iter();
+    out.retain(|_| *k.next().expect("one flag per chapter"));
+    let mut k = keep.iter();
+    maps.retain(|_| *k.next().expect("one flag per chapter"));
+    (out, maps)
 }
 
 fn xml_text(s: &str) -> String {
@@ -531,11 +582,29 @@ fn xml_text(s: &str) -> String {
 const MOBI_CSS: &str = "p { margin: 0; text-indent: 1.5em; }\n\
                         img { display: block; margin: 0 auto; }\n";
 
-/// Write `mobi` as an EPUB at `path`.
-pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<(), Error> {
+/// Write `mobi` as an EPUB at `path`. Returns the map from MOBI positions
+/// (byte offsets into the uncompressed text, the stock reader's unit) to
+/// Plato locations in the EPUB.
+pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<PosMap, Error> {
     let lang = mobi.info.language.clone().unwrap_or_else(|| "en".into());
     let title = mobi.info.title.clone().unwrap_or_else(|| "Untitled".into());
-    let chapters = chapters(&mobi.html, &mobi.images);
+    let (chapters, maps) = chapters_mapped(&mobi.html, &mobi.images);
+    // The html is the MOBI text decoded: UTF-8 books keep their byte
+    // offsets, CP1252 books turned every byte into one char.
+    let utf8 = mobi.info.encoding == 65001;
+    let (mut seen_bytes, mut seen_chars) = (0usize, 0usize);
+    let mut raw_offset = |html_offset: usize| -> u64 {
+        if utf8 {
+            return html_offset as u64;
+        }
+        seen_chars += mobi.html[seen_bytes..html_offset].chars().count();
+        seen_bytes = html_offset;
+        seen_chars as u64
+    };
+    let mut posmap = PosMap::default();
+    // Plato's location of a byte in spine item n is the sum of the sizes of
+    // items 0..n plus its offset in item n.
+    let mut location = 0u64;
 
     let mut zip = ZipWriter::new(File::create(path)?);
     // Stored, not deflated: faster to open on the device, and the text was
@@ -556,18 +625,25 @@ pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<(), Error> {
     let mut manifest =
         String::from("<item id=\"css\" href=\"mobi.css\" media-type=\"text/css\"/>\n");
     let mut spine = String::new();
-    for (n, body) in chapters.iter().enumerate() {
+    for (n, (body, map)) in chapters.iter().zip(&maps).enumerate() {
         let name = format!("ch{n:04}.xhtml");
         zip.start_file(&name, opts)?;
-        write!(
-            zip,
+        let head = format!(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
              <html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"{l}\" lang=\"{l}\"><head>\
              <title>{t}</title><link rel=\"stylesheet\" type=\"text/css\" href=\"mobi.css\"/>\
-             </head><body>{body}</body></html>\n",
+             </head><body>",
             l = escape_attr(&lang),
             t = xml_text(&title),
-        )?;
+        );
+        const TAIL: &str = "</body></html>\n";
+        zip.write_all(head.as_bytes())?;
+        zip.write_all(body.as_bytes())?;
+        zip.write_all(TAIL.as_bytes())?;
+        for &(src, out) in map {
+            posmap.push(raw_offset(src), location + (head.len() + out) as u64);
+        }
+        location += (head.len() + body.len() + TAIL.len()) as u64;
         manifest.push_str(&format!(
             "<item id=\"c{n}\" href=\"{name}\" media-type=\"application/xhtml+xml\"/>\n"
         ));
@@ -601,7 +677,19 @@ pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<(), Error> {
         l = xml_text(&lang),
     )?;
     zip.finish()?;
-    Ok(())
+    Ok(posmap)
+}
+
+/// Where the position map of a cached EPUB is kept.
+pub fn posmap_path(epub: &Path) -> PathBuf {
+    epub.with_extension("posmap")
+}
+
+/// The position map written next to a cached EPUB, if any.
+pub fn load_posmap(epub: &Path) -> Option<PosMap> {
+    fs::read_to_string(posmap_path(epub))
+        .ok()
+        .and_then(|t| PosMap::from_text(&t).ok())
 }
 
 /// The cached EPUB for the MOBI at `src`, converting it if the cache has
@@ -629,14 +717,19 @@ pub fn cached_epub(src: &Path, cache_dir: &Path) -> Result<(PathBuf, MobiInfo, b
         .take(40)
         .collect();
     let out = cache_dir.join(format!("{}-{:016x}.epub", stem.trim(), h.finish()));
-    let mobi = parse(&data)?;
-    if out.exists() {
-        return Ok((out, mobi.info, false));
+    if out.exists() && posmap_path(&out).exists() {
+        // Only the headers: decompressing the text again would cost a
+        // noticeable part of opening the book on the device.
+        return Ok((out, parse_with(&data, false)?.info, false));
     }
+    let mobi = parse(&data)?;
     fs::create_dir_all(cache_dir)
         .with_context(|| format!("can't create {}", cache_dir.display()))?;
     let tmp = out.with_extension("epub.part");
-    write_epub(&mobi, &tmp)?;
+    let posmap = write_epub(&mobi, &tmp)?;
+    let map_tmp = out.with_extension("posmap.part");
+    fs::write(&map_tmp, posmap.to_text())?;
+    fs::rename(&map_tmp, posmap_path(&out))?;
     fs::rename(&tmp, &out)?;
     Ok((out, mobi.info, true))
 }
@@ -685,5 +778,84 @@ mod tests {
             ch[1],
             "<div><p>cztery <img src=\"images/00001.jpg\"/></p></div>"
         );
+    }
+
+    /// A fresh directory under `$TMPDIR` (the build script points it at
+    /// `~/.cache/aristotle/tmp`, not the RAM-backed /tmp).
+    pub(crate) fn testdir(name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        let dir = std::env::temp_dir()
+            .join("aristotle-render-tests")
+            .join(format!("{name}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn book(encoding: u32) -> Mobi {
+        let mut html = String::from("<html><head><guide></guide></head><body>");
+        for ch in 0..3 {
+            for p in 0..40 {
+                html.push_str(&format!(
+                    "<p width=\"2em\">Akapit {ch}-{p}: café, tekst do wypełnienia strony.<br>"
+                ));
+            }
+            html.push_str("<mbp:pagebreak/>");
+        }
+        html.push_str("</body></html>");
+        Mobi {
+            info: MobiInfo {
+                encoding,
+                language: Some("pl".into()),
+                ..Default::default()
+            },
+            html,
+            images: Vec::new(),
+        }
+    }
+
+    /// Stock Kindle positions (bytes of MOBI text) must land on the same
+    /// words in the converted EPUB, and the spine must match Plato's.
+    #[test]
+    fn positions_land_on_the_same_text() {
+        use crate::position::Spine;
+        use plato_core::document::epub::EpubDocument;
+        use plato_core::document::Document;
+        use std::io::Read;
+
+        for encoding in [65001, 1252] {
+            let mobi = book(encoding);
+            let path = testdir("posmap").join("book.epub");
+            let map = write_epub(&mobi, &path).unwrap();
+            let spine = Spine::read(&path).unwrap();
+            let doc = EpubDocument::new(&path).unwrap();
+            assert_eq!(doc.pages_count(), spine.total());
+            assert_eq!(spine.sizes.len(), 3);
+
+            let mut zip = zip::ZipArchive::new(File::open(&path).unwrap()).unwrap();
+            for marker in ["Akapit 0-0:", "Akapit 0-7:", "Akapit 1-17:", "Akapit 2-39:"] {
+                let byte = mobi.html.find(marker).unwrap();
+                let position = if encoding == 65001 {
+                    byte
+                } else {
+                    mobi.html[..byte].chars().count()
+                };
+                let (item, offset) = spine.coordinates(map.location(position as u64) as usize);
+                let mut text = String::new();
+                zip.by_name(&format!("ch{item:04}.xhtml"))
+                    .unwrap()
+                    .read_to_string(&mut text)
+                    .unwrap();
+                let near = &text[offset.min(text.len())..(offset + 80).min(text.len())];
+                assert!(
+                    near.contains(marker),
+                    "{encoding}: {marker} -> {item}:{offset} {near:?}"
+                );
+                let back = map.position(map.location(position as u64)) as usize;
+                assert!(back.abs_diff(position) < 8, "{position} -> {back}");
+            }
+        }
     }
 }

@@ -248,6 +248,179 @@ impl Widget for TextPage {
     }
 }
 
+/// What the reader menu offers. The prototype offers everything; the
+/// device reader leaves out what its page renderer cannot do yet.
+pub struct MenuSpec<'a> {
+    /// Book title, centred in the top bar.
+    pub title: &'a str,
+    /// Reading faces for the font row, each label set in its own face;
+    /// `None` hides the row.
+    pub families: Option<[FamilyId; 3]>,
+    /// Offer night mode.
+    pub night: bool,
+}
+
+/// Nodes of the reader menu that change while it is open.
+pub struct Menu {
+    /// The whole overlay; hidden while reading.
+    pub root: NodeId,
+    pub progress: NodeId,
+    pub page_label: NodeId,
+    pub chapter_label: NodeId,
+    /// The frontlight [`Slider`].
+    pub light: NodeId,
+    /// The size [`Steps`].
+    pub size_steps: NodeId,
+    /// The night [`Toggle`], if offered.
+    pub night_toggle: Option<NodeId>,
+}
+
+/// Builds the reader menu: a top bar (back to the library, the title) and a
+/// bottom sheet (position with chapter skips, then the typography and light
+/// settings). It starts hidden. The labels are Polish, like all text the
+/// owner reads on the device.
+pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> Menu {
+    let m = margin();
+    // Top bar: back to the library and the title.
+    let back_icon = t.icon(Icon::ArrowLeft, 44, INK);
+    let back_label = t.label("Biblioteka", st.ui());
+    let g = t.gap(12, 1);
+    let back = t.add(Node::row(0), [back_icon, g, back_label]);
+    let back = t.pad(Insets::vh(0, 16), back);
+    let back = t.button(Node::plain(), back, action::BACK);
+    let fill = t.spacer(1);
+    let bar = t.add(Node::row(0), [back, fill]);
+    // The title sits in the middle and must clear the back button.
+    let mut title = Paragraph::plain(spec.title, st.ui_bold(), Align::Center);
+    title.style.max_lines = Some(1);
+    let title = t.text(title);
+    let title = t.pad(Insets::vh(0, 300), title);
+    let title = t.align(0.5, 0.5, title);
+    let top = t.add(Node::new(Kind::Stack), [title, bar]);
+    let top = t.fixed(None, Some(120), Some(top));
+    let top = t.pad(Insets::vh(0, m - 16), top);
+    let line = t.rule(2, INK);
+    let top = t.add(Node::column(0).bg(255), [top, line]);
+
+    // Bottom sheet.
+    let label = |t: &mut Tree, s: &str| {
+        let l = t.label(s, st.ui().gray(INK_2));
+        let l = t.align(0.0, 0.5, l);
+        t.fixed(Some(196), None, Some(l))
+    };
+    let row = |t: &mut Tree, name: &str, control: NodeId| {
+        let l = label(t, name);
+        let c = t.add(Node::column(0).flex(1), [control]);
+        let r = t.add(Node::row(0).cross(Cross::Stretch), [l, c]);
+        t.fixed(None, Some(crate::geom::MIN_TARGET), Some(r))
+    };
+
+    // Position, with chapter skips.
+    let prev = icon_button(t, Icon::ChevronLeft, 44, action::PREV_CHAPTER);
+    let next = icon_button(t, Icon::ChevronRight, 44, action::NEXT_CHAPTER);
+    let mut chapter = Paragraph::plain("", st.small(), Align::Left);
+    chapter.style.max_lines = Some(1);
+    let chapter = t.text(chapter);
+    let chapter = t.add(Node::column(0).flex(1), [chapter]);
+    let chapter_label = t.node(chapter).children[0];
+    let g = t.gap(16, 1);
+    let page_label = t.label("", st.small());
+    let labels = t.add(Node::row(0), [chapter, g, page_label]);
+    let bar = t.add(progress(0.0, 12), []);
+    let pos = t.add(Node::column(12).flex(1), [labels, bar]);
+    let pos = t.pad(Insets::vh(0, 12), pos);
+    let pos = t.add(Node::column(0).flex(1), [pos]);
+    let nav = t.add(Node::row(0), [prev, pos, next]);
+    let hair = t.rule(1, RULE);
+    let mut rows = vec![nav, hair];
+
+    if let Some(families) = spec.families {
+        let fonts: Vec<NodeId> = FAMILY_NAMES
+            .iter()
+            .zip(families)
+            .map(|(name, fam)| t.label(name, TextStyle::new(fam, crate::geom::pt(9.0))))
+            .collect();
+        let fonts = segmented(t, fonts, s.family, action::FONT);
+        rows.push(row(t, "Krój", fonts));
+    }
+
+    let small = t.label("A", st.ui().size(30.0));
+    let small = t.button(Node::plain(), small, action::SIZE_DOWN);
+    let size_steps = t.custom(Steps {
+        count: SIZES.len(),
+        value: s.size,
+    });
+    let steps = t.add(Node::column(0).flex(1), [size_steps]);
+    let large = t.label("A", st.ui().size(54.0));
+    let large = t.button(Node::plain(), large, action::SIZE_UP);
+    let size = t.add(Node::row(8), [small, steps, large]);
+    rows.push(row(t, "Rozmiar", size));
+
+    let spacing: Vec<NodeId> = [Icon::SpacingTight, Icon::SpacingNormal, Icon::SpacingLoose]
+        .iter()
+        .map(|i| t.icon(*i, 46, INK))
+        .collect();
+    let spacing = segmented(t, spacing, s.spacing, action::SPACING);
+    rows.push(row(t, "Odstępy", spacing));
+
+    let margins: Vec<NodeId> = [Icon::MarginsNarrow, Icon::MarginsNormal, Icon::MarginsWide]
+        .iter()
+        .map(|i| t.icon(*i, 46, INK))
+        .collect();
+    let margins = segmented(t, margins, s.margins, action::MARGINS);
+    rows.push(row(t, "Marginesy", margins));
+
+    let dim = icon_button(t, Icon::SunSmall, 54, action::LIGHT_DOWN);
+    let light = t.add(
+        Node::new(Kind::Custom(Box::new(Slider { value: s.light })))
+            .action(action::LIGHT_SET)
+            .feedback(Feedback::None),
+        [],
+    );
+    let slider = t.add(Node::column(0).flex(1).cross(Cross::Stretch), [light]);
+    let slider = t.align(0.0, 0.5, slider);
+    let slider = t.add(Node::column(0).flex(1), [slider]);
+    let bright = icon_button(t, Icon::Sun, 54, action::LIGHT_UP);
+    let light_row = t.add(Node::row(0), [dim, slider, bright]);
+    rows.push(row(t, "Światło", light_row));
+
+    let mut night_toggle = None;
+    if spec.night {
+        let toggle = t.custom(Toggle { on: s.night });
+        night_toggle = Some(toggle);
+        let moon = t.icon(Icon::Moon, 40, INK);
+        let hint = t.label("Ciemna strona, jasny tekst", st.small());
+        let g = t.gap(14, 1);
+        let fill = t.spacer(1);
+        let night = t.add(Node::row(0), [moon, g, hint, fill, toggle]);
+        let night = t.add(
+            Node::new(Kind::Padding(Insets::vh(0, 0)))
+                .action(action::NIGHT)
+                .feedback(Feedback::None),
+            [night],
+        );
+        let night = t.align(0.0, 0.5, night);
+        rows.push(row(t, "Noc", night));
+    }
+
+    let rows = t.add(Node::column(14), rows);
+    let rows = t.pad(Insets::new(20, m, 34, m), rows);
+    let line = t.rule(2, INK);
+    let sheet = t.add(Node::column(0).bg(255), [line, rows]);
+
+    let fill = t.spacer(1);
+    let root = t.add(Node::column(0).hidden(true), [top, fill, sheet]);
+    Menu {
+        root,
+        progress: bar,
+        page_label,
+        chapter_label,
+        light,
+        size_steps,
+        night_toggle,
+    }
+}
+
 /// Handles to the reader's nodes and its pagination.
 pub struct Reader {
     pub settings: Settings,
@@ -260,6 +433,7 @@ pub struct Reader {
     pub menu_page_label: NodeId,
     pub light: NodeId,
     pub night_toggle: NodeId,
+    pub size_steps: NodeId,
     blocks: Rc<Vec<Block>>,
     pages: Vec<Vec<Slice>>,
     pub current: usize,
@@ -385,7 +559,14 @@ impl Reader {
         let reading = t.add(Node::column(0), [head, page, foot]);
 
         // Menu overlay.
-        let (menu, ids) = Self::menu(&mut t, st, &families, &settings);
+        let spec = MenuSpec {
+            title: "Lalka",
+            families: Some(families),
+            night: true,
+        };
+        let ids = build_menu(&mut t, st, &spec, &settings);
+        let menu = ids.root;
+        t.set_text(ids.chapter_label, "Rozdział I");
         let root = t.add(Node::new(Kind::Stack), [reading, menu]);
         t.set_root(root);
 
@@ -396,10 +577,11 @@ impl Reader {
             footer_left,
             footer_right,
             menu,
-            menu_progress: ids.0,
-            menu_page_label: ids.1,
-            light: ids.2,
-            night_toggle: ids.3,
+            menu_progress: ids.progress,
+            menu_page_label: ids.page_label,
+            light: ids.light,
+            night_toggle: ids.night_toggle.expect("the prototype offers night mode"),
+            size_steps: ids.size_steps,
             blocks,
             pages,
             current: 0,
@@ -407,137 +589,6 @@ impl Reader {
         };
         r.update_position(&mut t);
         (t, r)
-    }
-
-    fn menu(
-        t: &mut Tree,
-        st: &Styles,
-        families: &[FamilyId; 3],
-        s: &Settings,
-    ) -> (NodeId, (NodeId, NodeId, NodeId, NodeId)) {
-        let m = margin();
-        // Top bar: back to the library, the title, contents and bookmark.
-        let back_icon = t.icon(Icon::ArrowLeft, 44, INK);
-        let back_label = t.label("Library", st.ui());
-        let g = t.gap(12, 1);
-        let back = t.add(Node::row(0), [back_icon, g, back_label]);
-        let back = t.pad(Insets::vh(0, 16), back);
-        let back = t.button(Node::plain(), back, action::BACK);
-        let fill = t.spacer(1);
-        let toc = icon_button(t, Icon::Contents, 50, action::CONTENTS);
-        let mark = icon_button(t, Icon::Bookmark, 50, action::BOOKMARK);
-        let bar = t.add(Node::row(0), [back, fill, toc, mark]);
-        let title = t.label("Lalka", st.ui_bold());
-        let title = t.align(0.5, 0.5, title);
-        let top = t.add(Node::new(Kind::Stack), [title, bar]);
-        let top = t.fixed(None, Some(120), Some(top));
-        let top = t.pad(Insets::vh(0, m - 16), top);
-        let line = t.rule(2, INK);
-        let top = t.add(Node::column(0).bg(255), [top, line]);
-
-        // Bottom sheet.
-        let label = |t: &mut Tree, s: &str| {
-            let l = t.label(s, st.ui().gray(INK_2));
-            let l = t.align(0.0, 0.5, l);
-            t.fixed(Some(196), None, Some(l))
-        };
-        let row = |t: &mut Tree, name: &str, control: NodeId| {
-            let l = label(t, name);
-            let c = t.add(Node::column(0).flex(1), [control]);
-            let r = t.add(Node::row(0).cross(Cross::Stretch), [l, c]);
-            t.fixed(None, Some(crate::geom::MIN_TARGET), Some(r))
-        };
-
-        // Position in the chapter, with chapter skips.
-        let prev = icon_button(t, Icon::ChevronLeft, 44, action::PREV_CHAPTER);
-        let next = icon_button(t, Icon::ChevronRight, 44, action::NEXT_CHAPTER);
-        let chapter = t.label("Chapter I", st.small());
-        let fill = t.spacer(1);
-        let page_label = t.label("", st.small());
-        let labels = t.add(Node::row(0), [chapter, fill, page_label]);
-        let bar = t.add(progress(0.0, 12), []);
-        let pos = t.add(Node::column(12).flex(1), [labels, bar]);
-        let pos = t.pad(Insets::vh(0, 12), pos);
-        let pos = t.add(Node::column(0).flex(1), [pos]);
-        let nav = t.add(Node::row(0), [prev, pos, next]);
-
-        let fonts: Vec<NodeId> = FAMILY_NAMES
-            .iter()
-            .zip(families)
-            .map(|(name, fam)| t.label(name, TextStyle::new(*fam, crate::geom::pt(9.0))))
-            .collect();
-        let fonts = segmented(t, fonts, s.family, action::FONT);
-        let fonts = row(t, "Font", fonts);
-
-        let small = t.label("A", st.ui().size(30.0));
-        let small = t.button(Node::plain(), small, action::SIZE_DOWN);
-        let steps = t.custom(Steps {
-            count: SIZES.len(),
-            value: s.size,
-        });
-        let steps = t.add(Node::column(0).flex(1), [steps]);
-        let large = t.label("A", st.ui().size(54.0));
-        let large = t.button(Node::plain(), large, action::SIZE_UP);
-        let size = t.add(Node::row(8), [small, steps, large]);
-        let size = row(t, "Size", size);
-
-        let spacing: Vec<NodeId> = [Icon::SpacingTight, Icon::SpacingNormal, Icon::SpacingLoose]
-            .iter()
-            .map(|i| t.icon(*i, 46, INK))
-            .collect();
-        let spacing = segmented(t, spacing, s.spacing, action::SPACING);
-        let spacing = row(t, "Spacing", spacing);
-
-        let margins: Vec<NodeId> = [Icon::MarginsNarrow, Icon::MarginsNormal, Icon::MarginsWide]
-            .iter()
-            .map(|i| t.icon(*i, 46, INK))
-            .collect();
-        let margins = segmented(t, margins, s.margins, action::MARGINS);
-        let margins = row(t, "Margins", margins);
-
-        let dim = icon_button(t, Icon::SunSmall, 54, action::LIGHT_DOWN);
-        let slider = t.add(
-            Node::new(Kind::Custom(Box::new(Slider { value: s.light })))
-                .action(action::LIGHT_SET)
-                .feedback(Feedback::None),
-            [],
-        );
-        let light_node = slider;
-        let slider = t.add(Node::column(0).flex(1).cross(Cross::Stretch), [slider]);
-        let slider = t.align(0.0, 0.5, slider);
-        let slider = t.add(Node::column(0).flex(1), [slider]);
-        let bright = icon_button(t, Icon::Sun, 54, action::LIGHT_UP);
-        let light = t.add(Node::row(0), [dim, slider, bright]);
-        let light = row(t, "Light", light);
-
-        let toggle = t.custom(Toggle { on: s.night });
-        let toggle_node = toggle;
-        let moon = t.icon(Icon::Moon, 40, INK);
-        let hint = t.label("Dark page, light text", st.small());
-        let g = t.gap(14, 1);
-        let fill = t.spacer(1);
-        let night = t.add(Node::row(0), [moon, g, hint, fill, toggle]);
-        let night = t.add(
-            Node::new(Kind::Padding(Insets::vh(0, 0)))
-                .action(action::NIGHT)
-                .feedback(Feedback::None),
-            [night],
-        );
-        let night = t.align(0.0, 0.5, night);
-        let night = row(t, "Night", night);
-
-        let hair = t.rule(1, RULE);
-        let rows = t.add(
-            Node::column(14),
-            [nav, hair, fonts, size, spacing, margins, light, night],
-        );
-        let rows = t.pad(Insets::new(20, m, 34, m), rows);
-        let line = t.rule(2, INK);
-        let sheet = t.add(Node::column(0).bg(255), [line, rows]);
-
-        let fill = t.spacer(1);
-        let menu = t.add(Node::column(0).hidden(true), [top, fill, sheet]);
-        (menu, (bar, page_label, light_node, toggle_node))
     }
 
     pub fn page_count(&self) -> usize {
@@ -571,16 +622,16 @@ impl Reader {
     fn update_position(&mut self, t: &mut Tree) {
         let minutes = (self.words_left() as f32 / WORDS_PER_MINUTE).ceil() as usize;
         let left = if self.current + 1 == self.pages.len() {
-            "Chapter I · last page".to_string()
+            "Rozdział I · ostatnia strona".to_string()
         } else {
-            format!("Chapter I · {minutes} min left")
+            format!("Rozdział I · zostało {minutes} min")
         };
         t.set_text(self.footer_left, &left);
         let book_page = BOOK_PAGE_OFFSET + self.current + 1;
         t.set_text(self.footer_right, &format!("{book_page} / {BOOK_PAGES}"));
         t.set_text(
             self.menu_page_label,
-            &format!("Page {book_page} of {BOOK_PAGES}"),
+            &super::library::page_of(book_page, BOOK_PAGES),
         );
         t.set_progress(
             self.menu_progress,

@@ -10,11 +10,18 @@ description = "E-book page renderer for Aristotle on the PW4, built on Plato's d
 # (tools/build-plato.sh), which a fresh checkout does not have. Keeping this
 # crate out of the root workspace lets `cargo build` there work everywhere.
 # Build with tools/build-render.sh; see README.md and docs/reader.md.
+#
+# The reader app (crates/aristotle-reader, binary `aristotle`) links Plato
+# too, so it is a member of this workspace: one lock file and one build of
+# the C-backed dependencies for both.
 [workspace]
+members = [".", "../aristotle-reader"]
 
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
 libc = "0.2"
+# Same version as plato-core, to decode spine hrefs exactly as it does.
+percent-encoding = "2.3.2"
 plato-core = { path = "../../third_party/plato-patched/crates/core" }
 # Same version as plato-core uses, to read EPUB metadata it does not expose.
 zip = "7.0.0"

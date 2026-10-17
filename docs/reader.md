@@ -2,7 +2,7 @@
 
 `crates/aristotle-render` is Aristotle's first e-book renderer. It uses the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and none of Plato's Kobo UI, and turns books into full-screen 8-bit pages for the PW4 panel. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device with the page-turn strategy from [`native-vs-aristotle.md`](native-vs-aristotle.md), and measures CPU and panel time.
 
-Status: renders EPUB, MOBI (DRM-free MOBI 7) and PDF on the host; the ARM build is waiting for its first run on the device. Numbers below are host numbers unless marked [dev].
+Status: renders EPUB, MOBI (DRM-free MOBI 7) and PDF; the CLI runs on the device. The reader app (`aristotle`, see [The reader app](#the-reader-app)) passed a smoke test in the emulator and awaits its first run on the panel. Numbers below are host numbers unless marked [dev].
 
 ## Architecture
 
@@ -13,7 +13,7 @@ aristotle-render (CLI: info, render, show, bench, turn)
   │    MOBI ────────── mobi.rs → cached EPUB → Plato's HTML engine (MuPDF as fallback)
   │    PDF, CBZ, ... ─ MuPDF through Plato's PdfOpener, scaled to fit
   ├─ Page, Chrome ─── 1072 × 1448 buffer, stride 1088; header and footer drawn in the same frame
-  └─ Screen ───────── aristotle-hal Framebuffer: blit black and white, A2, wait; blit gray, GL16, wait
+  └─ Screen ───────── aristotle-hal Framebuffer: blit the page, one full mode-9 update of the whole screen
 ```
 
 | Module | Role |
@@ -24,6 +24,7 @@ aristotle-render (CLI: info, render, show, bench, turn)
 | `mobi.rs` | MOBI 7 decoder and EPUB writer |
 | `page.rs` | Page buffers, the black and white frame, header and footer |
 | `screen.rs` | The page turn on the panel |
+| `position.rs` | Saved positions: EPUB spine coordinates, MOBI position maps |
 
 ## How Plato is consumed
 
@@ -97,9 +98,72 @@ The host has no MOBI files; `devloop/host/make-test-mobi.py` makes a MOBI 7 test
 
 For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out one spine item (chapter file) at a time and caches its pages. `x / y` needs the whole book laid out: `render`, `show` and `turn` paginate first unless `--percent` is given. Progress is `x / y` once paginated, else the byte offset over the book's size. For MuPDF documents locations are page indices and the count is known.
 
+A reader cannot afford to lay out the whole book before showing a page, so `Book` also navigates by location: `page_start` (the page containing a location), `next_page`, `previous_page`, `chapter_page`, and `render_location`, whose footer leaves out the page number until one is known. `set_pagination` adopts page starts computed elsewhere; a test (`tests/navigation.rs`) checks that walking from page to page, forwards and backwards across chapters, finds exactly the pages of a full pagination.
+
+Saved positions (`position.rs`) outlive a layout:
+
+- **EPUB:** spine item and byte offset inside it. Plato keeps its spine private, so `Spine::read` repeats how `EpubDocument::new` builds it, and `Book` uses it only when the total agrees with Plato's.
+- **MOBI:** the stock Kindle position, a byte offset into the uncompressed MOBI text (what `.mbs` sidecars store, see `docs/library.md`). The converted EPUB has different markup, so the converter records an anchor (MOBI offset, EPUB location) at every run of text it copies, at least 200 bytes apart, and stores them as `<book>.posmap` next to the cached EPUB (converter version 2). Positions in between are interpolated. A test converts a generated book in UTF-8 and CP1252 and checks that marked words land on themselves. With a cached conversion only the MOBI headers are parsed on open.
+- **Anything else** (KOReader XPointers, plain-text offsets): the stored fraction.
+
 ## Page turn on the device
 
-`show` and `turn` use the decided strategy: blit the page thresholded at gray 160 to pure black and white, A2, wait (visible); blit the anti-aliased page, GL16, wait (settled). `turn` starts from a clean GC16 page, then for each page reports render time (CPU), visible and settled (panel, from the blit), and their sums. Both refuse to run while the stock framework (`cvm`) is up.
+`show` and `turn` turn pages like the stock reader: one full-mode update of the whole screen with waveform mode 9 (`--turn-mode 7` for DU4, `--a2-preview` for the old two-step turn, which left ghosting the owner rejected). `turn` starts from a clean mode-8 page, renders the next page while the panel refreshes, and reports tap to shown and prerender times. Both refuse to run while the stock framework (`cvm`) is up.
+
+## The reader app
+
+`crates/aristotle-reader` (binary `aristotle`) is the first real reader: the library from `aristotle-library`, pages from this crate, the menu from `aristotle-ui`, on the panel through `aristotle-hal`. It links Plato, so it is a member of the `aristotle-render` workspace (`members = [".", "../aristotle-reader"]`, `package.workspace` pointing back), with one lock file and one build of the C-backed dependencies; the root workspace excludes both. The renderer itself does not depend on the UI or the library.
+
+| Module | Role |
+| --- | --- |
+| `main.rs` | Arguments, startup, the event loop, library and reader screens, menu actions |
+| `panel.rs` | Pages and UI damage onto the panel, completion tracking |
+| `session.rs` | One open book: current page start, rendered pages around it, restyle, labels |
+| `turns.rs` | Touch-down turns, swipes, menu gesture (host-tested) |
+| `shelf.rs` | Library index to the library screen: book to continue, sort, covers |
+| `progress.rs` | Locator mapping, write debouncing, the index writer thread (host-tested) |
+| `pagecache.rs` | Page numbers on disk and the background pagination (host-tested) |
+| `prefs.rs` | Font size, spacing, margins and turn waveform, `reader.json` (host-tested) |
+
+### Behaviour
+
+- **Library.** On start the index (`/mnt/us/.aristotle/library.json`) is shown at once, then `/mnt/us/documents` is scanned incrementally (an unchanged library costs a `stat` per file); if anything changed, the screen is rebuilt with only the changed pixels sent. "Czytaj dalej" shows the most recently opened book, or before any book was opened here, the one whose progress (stock-imported included) changed last. Filters by status (Wszystkie, Czytane, Nieprzeczytane, Przeczytane), the sort button cycles Ostatnie, Tytuł, Autor, and the shelf pages ("Strona x z y"). Covers come from the thumbnail cache. **Holding the "Biblioteka" title for a second quits.**
+- **Reader.** A book opens at its saved position with a mode-8 flash (a screen switch). A touch-down in the left 30 % turns back, anywhere else below the top 12 % forward, without waiting for the release. A horizontal swipe ends one page from where it started in its direction (a swipe right that started in the forward zone goes two back, undoing the touch-down turn). A tap or a swipe down in the top strip opens the menu.
+- **Page turns.** Exactly the stock reader's: one full-mode update of the whole screen with mode 9 (`--turn-mode 7` for DU4, kept in `reader.json`). The previous page update must have finished before the next page is written to the framebuffer; that is the only place the input loop waits for the panel. After the submit, the pages on both sides are rendered, so the next turn costs a memcpy and a submit.
+- **Menu.** Opening and changing it are chrome: DU and GL16 through the display thread. Size (8 to 15 pt), spacing (1.2, 1.3, 1.5 em) and margins (3, 5, 8 mm) lay the book out again at the same place; the new page goes out as a full mode-9 update. Chapter arrows jump through the table of contents. The light slider drives the frontlight (perceptual: raw = value² × max). "Biblioteka" goes back. Closing the menu (a tap on the page) redraws the page with a full mode-9 update, which also clears what the menu left. The font and night rows of the prototype are left out: the renderer ships Literata only, and night mode would need inverted pages.
+- **Progress.** Every turn updates the record in memory (a spine or Kindle locator plus the fraction; the last page marks the book finished). The index goes to disk 3 s after the last turn, or at the latest 20 s after the first unsaved one, on a writer thread; also when going back to the library and on exit (SIGTERM and SIGINT included).
+- **Page numbers.** `x / y` is cached per book and style in `/mnt/us/.aristotle/pages/`. On a miss a thread opens its own copy of the book and paginates it at `SCHED_IDLE` (musl stubs `sched_setscheduler`, so the system call is made directly), so on the single-core PW4 it only runs while the reader waits for input. When it finishes, the numbers appear from the next page on.
+
+Files in the library data directory besides the index and covers: `reader.json` (preferences), `pages/<book id>-<key>.txt` (page starts, one per line; the key hashes the style, the file's size and mtime and a layout version), `epub-cache/` (converted MOBI books and their position maps).
+
+### Running it on the device
+
+```sh
+OUT=~/.cache/aristotle/render/device PLATO_BUILD=~/.cache/aristotle/plato-build/run2 tools/build-render.sh device
+ssh -F devloop/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < ~/.cache/aristotle/render/aristotle-app-device.tar.gz
+ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh            # mode 9
+ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh --turn-mode 7
+```
+
+The app bundle (`aristotle/` with the binary, `data/`, `run-aristotle.sh` and `takeover.sh`) goes to the userstore: the binary is 29.5 MB, and with the renderer CLI's bundle in `/var/tmp` the 64 MB tmpfs would overflow. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `pause`/`resume` (SIGSTOP) is not used: on our firmware the frozen framework was killed by Amazon's watchdog and the GUI did not come back without a reboot. The script ignores hangups, logs stderr to `/var/tmp/aristotle.log` and prints it on exit. Other options: `--library DIR`, `--root DIR`, `--data DIR`, `--no-scan`.
+
+### Timing log
+
+Every step that matters for speed writes a `[perf <ms since start>]` line to stderr:
+
+| Line | Meaning |
+| --- | --- |
+| `startup: first frame submitted` | Process start to the library's first frame handed to the panel |
+| `scan: ...` | Incremental scan time and what changed |
+| `open: "<title>": book, position, first page, submitted after` | Opening a book: Plato open (MOBI conversion on first open), placing the saved position, rendering the first page, total to submit |
+| `turn <dir>: tap->submit` | Kernel timestamp of the touch-down to the update submitted, whether the page was prerendered, the wait for the previous update, then the prerender times |
+| `panel: <what> on the panel N ms after submit` | When the driver reported the update complete |
+| `paginate: N pages in T ms` | The background pagination |
+| `index: saved` | Index writes (on the writer thread) |
+
+### Smoke test in the emulator
+
+In the PW4 emulator, with the stock GUI left running, three test books (two EPUBs and a MOBI) went through: scan and covers, opening the MOBI and an EPUB, touch-down turns, background pagination (297 and 187 pages, adopted while reading), the menu with a size change at the same place, back to the library, "Czytaj dalej" reopening at the saved page with page numbers from the cache, and quitting by holding the title. Emulator times are not device times and are not reported.
 
 ## Measurements
 
@@ -117,7 +181,8 @@ Device numbers: pending the first `bench` and `turn` runs [dev].
 ## Open issues
 
 - **Device timings unknown.** Glyphs are rasterised by FreeType on every render (Plato has no glyph cache) and blended pixel by pixel; chapter layout runs on the turn that enters the chapter. If either is too slow on the Cortex-A9: render the next page while the current one settles, lay out the next chapter ahead, add a glyph cache.
-- **Pagination cost.** `x / y` lays out the whole book on open. A reader needs a per-book pagination cache keyed by file and style.
+- **Pagination cost.** The CLI still lays out the whole book for `x / y`; the reader app caches it per book and style and computes misses in the background. Until then the footer shows only the percentage.
+- **Reader app on the device.** Not run on the real panel yet: tap-to-submit, prerender and open times, memory with two copies of a book during background pagination, and ghosting after menu use need the device. The library clock relies on musl reading `/etc/localtime` (a link to `/var/local/system/tz` on the Kindle) when `TZ` is unset [inference].
 - **Memory.** Plato keeps the display lists of every laid-out chapter. Host RSS is 26 to 32 MiB after full pagination; check on the device against the 40 MB target.
 - **Polish typographic rules.** Single-letter words (a, i, o, u, w, z) can end a line; Polish typesetting keeps them with the next word. Needs a non-breaking space pass before layout.
 - **MOBI.** No table of contents yet (NCX index records), so the header shows the book title; `filepos` links are dropped; HUFF/CDIC books are not converted.
