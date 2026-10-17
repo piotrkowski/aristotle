@@ -7,6 +7,7 @@ It has no HAL dependency. The host preview draws the same screens as the app, wi
 ## Model
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#1f2328", "primaryBorderColor": "#8c959f", "lineColor": "#8c959f", "secondaryColor": "#ffffff", "tertiaryColor": "#ffffff", "edgeLabelBackground": "#ffffff", "fontFamily": "-apple-system, Segoe UI, Helvetica, Arial, sans-serif"}}}%%
 flowchart TD
     Touch["HAL touch events"] --> Handle["Ui::handle_touch"]
     Handle --> Gesture["aristotle-ui: GestureRecognizer"]

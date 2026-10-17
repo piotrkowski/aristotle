@@ -70,17 +70,3 @@ These are source-code changes, not runtime plugins.
 | Refresh policy | `aristotle_ui::ui` and the app's `panel::plan` ([Transitions](ui-framework.md#transitions)) |
 
 The HAL supports only the PW4.
-
-## Related projects
-
-Check these before adding code. Bundled dependencies and licenses are in [THIRD_PARTY.md](../THIRD_PARTY.md).
-
-| Project | Use in Aristotle |
-| --- | --- |
-| [Plato](https://github.com/baskerville/plato), [our fork](https://github.com/piotrkowski/plato) | Document engine ([Plato fork](reader.md#plato-fork)) |
-| [KOReader](https://github.com/koreader/koreader), [koreader-base](https://github.com/koreader/koreader-base) | Device paths, refresh policy, framework takeover, and the development SSH server |
-| [FBInk](https://github.com/NiLuJe/FBInk) | Kindle display ABI reference, not linked code |
-| [eink-emulator](https://github.com/katadelos/eink-emulator), [QEMU fork](https://github.com/katadelos/qemu/tree/eink-emulator) | Stock PW4 emulator used by `tools/emulator/` |
-| [slint-kindle-backend](https://github.com/sverrejb/slint-kindle-backend) | Reference for Rust Kindle device support |
-| [kindlemodding.org](https://kindlemodding.org) | Device services and installation prerequisites |
-| [KindleTool](https://github.com/NiLuJe/KindleTool) | Unpacks firmware for local inspection |

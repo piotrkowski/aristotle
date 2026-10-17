@@ -4,6 +4,11 @@
 
 `crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens EPUB, DRM-free MOBI 7, PDF, and TXT. Measurements are from the host unless marked [dev]. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
 
+<p align="center">
+  <img src="images/gallery/reading-light.png#gh-light-mode-only" alt="A page of Chase's English translation of the Nicomachean Ethics, and the opening of Book I in Bywater's Greek">
+  <img src="images/gallery/reading-dark.png#gh-dark-mode-only" alt="The same English and Greek pages in night mode">
+</p>
+
 ## Architecture
 
 | Code | Role |
@@ -181,6 +186,11 @@ Night mode keeps page-turn and flash modes. See [Night mode](ui-framework.md#nig
 
 ## The app
 
+<p align="center">
+  <img src="images/gallery/library-light.png#gh-light-mode-only" alt="The library: the book to continue, the book list with shelves, the folders view, and the Aristotle folder">
+  <img src="images/gallery/library-dark.png#gh-dark-mode-only" alt="The library in night mode: the book to continue, the book list with shelves, the folders view, and the Aristotle folder">
+</p>
+
 Startup shows the saved library index, then scans `/mnt/us/documents`. The library has Books, Folders, Series, and a continue-reading card. Settings control the frontlight, night mode, covers, screensaver delay, and USB mode.
 
 The default screensaver saves progress, turns off the light, and shows a book card. A touch wakes it without taking another action. The app holds `powerd`'s `preventScreenSaver`, so the CPU does not suspend and the power button has no effect.
@@ -190,6 +200,11 @@ The default screensaver saves progress, turns off the light, and shows a book ca
 Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including SIGTERM and SIGINT. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
 
 ## Reading interactions
+
+<p align="center">
+  <img src="images/gallery/menu-light.png#gh-light-mode-only" alt="The reader menu with contents, highlights, chapter progress, text size, spacing, margins, light and night mode, at the default text size and two steps larger">
+  <img src="images/gallery/menu-dark.png#gh-dark-mode-only" alt="The same reader menu in night mode">
+</p>
 
 `reading.rs` handles these actions in both the app and host preview.
 
@@ -211,6 +226,11 @@ Transient selection feedback uses A2. Completed popups with grays use a full-scr
 
 ### Dictionary
 
+<p align="center">
+  <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek–English dictionary, and science in an English–Polish dictionary">
+  <img src="images/gallery/dictionary-dark.png#gh-dark-mode-only" alt="The same dictionary popups in night mode">
+</p>
+
 StarDict dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict`, or `--dict DIR`. File names such as `grc-pl.ifo` identify language pairs.
 
 `dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries; other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
@@ -221,9 +241,19 @@ Device index builds reached 66 MB [dev]. Build large indexes on the host with `a
 
 ### Footnotes
 
+<p align="center">
+  <img src="images/gallery/footnotes-light.png#gh-light-mode-only" alt="A page with note numbers, and the popup for note 3">
+  <img src="images/gallery/footnotes-dark.png#gh-dark-mode-only" alt="The same page and footnote popup in night mode">
+</p>
+
 `Book::footnote` recognizes EPUB semantics, common note IDs and classes, and numbered or symbolic markers. It removes back links and limits note text to 2,400 characters.
 
 ### Highlights, bookmarks and export
+
+<p align="center">
+  <img src="images/gallery/highlights-light.png#gh-light-mode-only" alt="A Greek page with the word ἀγαθοῦ highlighted, and an English page with two lines highlighted">
+  <img src="images/gallery/highlights-dark.png#gh-dark-mode-only" alt="The same highlights in night mode">
+</p>
 
 Annotations in `library.json` have source `aristotle`. They store positions that survive font-size changes, plus chapter and time.
 

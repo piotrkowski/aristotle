@@ -74,7 +74,7 @@ Then:
 
 - [Project post and interactive demo](https://piotrkowski.github.io/aristotle/)
 - [Screenshots](docs/screenshots.md) of the main screens, in day and night mode
-- Design notes on the [architecture](docs/architecture.md) (with related projects), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
+- Design notes on the [architecture](docs/architecture.md), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
 - [Benchmarks](docs/benchmarks.md), the source of every number in this README
 - [Installing](docs/install.md)
 - [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
