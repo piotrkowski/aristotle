@@ -4,14 +4,11 @@ Aristotle's e-book page renderer for the Kindle Paperwhite 4, built on the docum
 
 Design, defaults and measurements: [`docs/reader.md`](../../docs/reader.md).
 
-## Why a separate workspace
+## Why not a default member
 
-`plato-core` is not on crates.io and needs two things a fresh checkout lacks:
+`plato-core` is not on crates.io. It comes from our Plato fork in the `third_party/plato` submodule, and it links Plato's C dependencies (MuPDF, FreeType, HarfBuzz, ...) as static archives, which `tools/build-plato.sh` builds with Zig.
 
-1. the Plato source with our patches (`tools/plato-patches/`), which `tools/prepare-plato-src.sh` writes to `third_party/plato-patched/` (gitignored; the submodule stays untouched);
-2. Plato's C dependencies (MuPDF, FreeType, HarfBuzz, ...) as static archives, which `tools/build-plato.sh` builds with Zig.
-
-So this crate has its own `[workspace]` and the root workspace excludes it: `cargo build` at the repo root keeps working on any host, and only this crate needs the Plato build.
+So this crate and the reader app are members of the root workspace but not of its `default-members`: `cargo build`, `cargo test` and `cargo clippy` at the repo root keep working on any host, and only these two need the C build.
 
 ## Build
 

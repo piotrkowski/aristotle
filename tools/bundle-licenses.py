@@ -74,7 +74,7 @@ def git(*args: str) -> str:
 
 def rust_crates() -> list[dict]:
     """Packages the two binaries depend on for TARGET (normal and build)."""
-    manifest = REPO / "crates/aristotle-render/Cargo.toml"
+    manifest = REPO / "Cargo.toml"
     meta = json.loads(
         subprocess.run(
             ["cargo", "metadata", "--format-version", "1", "--locked",
@@ -83,7 +83,11 @@ def rust_crates() -> list[dict]:
         ).stdout
     )
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
-    seen, todo = set(), list(meta["workspace_members"])
+    roots = ("aristotle-render", "aristotle-reader")
+    todo = [p["id"] for p in meta["packages"]
+            if p["name"] in roots and p["id"] in meta["workspace_members"]]
+    assert len(todo) == len(roots), todo
+    seen = set()
     while todo:
         pid = todo.pop()
         if pid in seen:
@@ -203,7 +207,7 @@ def main() -> None:
     commit = git("rev-parse", "HEAD") or "unknown"
     dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
     plato_rev = git("rev-parse", "HEAD:third_party/plato") or "unknown"
-    patches = sorted((REPO / "tools/plato-patches").glob("*.patch"))
+    patches = sorted((REPO / "tools/mupdf-patches").glob("*.patch"))
     c_sources = []
     in_list = False
     for line in (REPO / "tools/build-plato.sh").read_text().splitlines():
@@ -221,13 +225,17 @@ def main() -> None:
         "source of this build:\n\n"
         f"Aristotle: {REPO_URL}\n"
         f"  commit {commit}{dirty}\n\n"
-        f"Plato (document engine): https://github.com/baskerville/plato\n"
-        f"  commit {plato_rev}, with these patches from Aristotle's tools/plato-patches/:\n"
+        "Plato (document engine), Aristotle's fork of\n"
+        "https://github.com/baskerville/plato:\n"
+        "  https://github.com/piotrkowski/plato, branch aristotle\n"
+        f"  commit {plato_rev}\n\n"
+        "C libraries, built by tools/build-plato.sh; MuPDF with these patches\n"
+        "from Aristotle's tools/mupdf-patches/:\n"
         + "".join(f"  {p.name}\n" for p in patches)
-        + "\nC libraries, built by tools/build-plato.sh with the same patches:\n"
+        + "Sources:\n"
         + "\n".join(c_sources)
         + "\n\nHyphenation patterns: https://github.com/baskerville/plato/releases/tag/0.9.45\n"
-        "Rust crates: crates.io, versions in crates/aristotle-render/Cargo.lock\n"
+        "Rust crates: crates.io, versions in Cargo.lock\n"
         "Build: tools/build-plato.sh, then tools/build-render.sh device\n"
     )
 

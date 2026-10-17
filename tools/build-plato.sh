@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build Plato (third_party/plato) as a fully static armv7-unknown-linux-musleabihf
+# Build Plato (third_party/plato, our fork) as a fully static armv7-unknown-linux-musleabihf
 # binary for the Kindle Paperwhite 4, with user-space tools only.
 #
 # Zig is the cross C/C++ compiler (musl, hard float, Cortex-A9 + NEON). Every C
@@ -14,8 +14,11 @@
 # (default PLATO_BUILD: ~/.cache/aristotle/plato-build/host-x86_64), so
 # aristotle-render can render preview pages on the host with exactly the code
 # that runs on the device. PLATO_LIBS_ONLY=1 stops after the C libraries.
-# Patches: tools/plato-patches/plato-*.patch apply to the Plato tree,
-# tools/plato-patches/<lib>-*.patch to thirdparty/<lib>.
+#
+# Source: the commit checked out in the third_party/plato submodule, exported
+# with `git archive` to $PLATO_BUILD/plato. The C sources are unpacked and
+# built there too, so nothing is written into the submodule. MuPDF gets
+# tools/mupdf-patches/*.patch on top of Plato's kobo.patch.
 #
 # Needs on the host: curl, tar, xz, openssl, xxd, make, cmake, bash, a host cc
 # (FreeType's build runs a small host tool), cargo and the rustup target
@@ -27,10 +30,11 @@
 #                        (URW Nimbus, cut to Latin, monotonic Greek and
 #                        Cyrillic), the substitutes for PDFs that do not
 #                        embed theirs, and Noto Serif, its fallback for
-#                        polytonic Greek in TXT and MOBI (patch mupdf-0001).
+#                        polytonic Greek in TXT and MOBI (mupdf-0001).
 #                        No other Noto fonts, no CJK font or CMaps, no
 #                        Charis SIL (MuPDF's HTML layout then uses Times);
-#                        Plato's engine gets no fallback fonts (patch 0005).
+#                        Plato's engine gets no fallback fonts (fork
+#                        commit "core: mupdf tofu fallback").
 #   MUPDF_FONTS=base14   the same without Noto Serif.
 #   MUPDF_FONTS=full     Plato's set: Noto for every script, Droid Sans
 #                        Fallback for CJK, Charis SIL, the CJK CMaps (+17 MB).
@@ -41,7 +45,8 @@
 #                        MuPDF hyphenation (used only with CSS hyphens: auto).
 #   MUPDF_FORMATS=full   everything MuPDF reads.
 #   PLATO_DJVU=0         (default) no DjVuLibre: DjVu files are not opened
-#                        (patch 0006). PLATO_DJVU=1 builds and links it.
+#                        ("core: optional djvu"). PLATO_DJVU=1 builds and
+#                        links it.
 #
 # The script is restartable: finished steps leave a stamp in $PLATO_BUILD/stamps.
 # MuPDF is built once per MUPDF_FONTS/MUPDF_FORMATS pair, so switching back
@@ -50,7 +55,8 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-PATCHES="$REPO/tools/plato-patches"
+SUB="$REPO/third_party/plato"
+MUPDF_PATCHES="$REPO/tools/mupdf-patches"
 TARGET=${PLATO_TARGET:-armv7-unknown-linux-musleabihf}
 case $TARGET in
     armv7-unknown-linux-musleabihf)
@@ -70,7 +76,6 @@ esac
 B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
 TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
 JOBS=${JOBS:-2}
-PLATO_REV=7da89f296e58c7426692abb6fda16431b9631e60
 
 MUPDF_FONTS=${MUPDF_FONTS:-latin-greek}
 MUPDF_FORMATS=${MUPDF_FORMATS:-minimal}
@@ -198,17 +203,23 @@ XAR="$B/bin/$PFX-ar"
 XRANLIB="$B/bin/$PFX-ranlib"
 
 # --- Sources -----------------------------------------------------------------
+PLATO_REV=$(git -C "$SUB" rev-parse HEAD 2>/dev/null) || {
+    echo "third_party/plato is not checked out; run: git submodule update --init" >&2
+    exit 1
+}
 if ! done_ plato-src; then
     log "Plato $PLATO_REV"
     [ ! -e "$B/plato" ] || { echo "$B/plato exists without a stamp; use a fresh PLATO_BUILD" >&2; exit 1; }
     mkdir "$B/plato"
-    git -C "$REPO/third_party/plato" archive --format=tar "$PLATO_REV" | tar -x -C "$B/plato"
-    for p in "$PATCHES"/plato-*.patch; do
-        [ -f "$p" ] || continue
-        echo "applying $(basename "$p")"
-        patch -d "$B/plato" -p1 < "$p"
-    done
-    stamp plato-src
+    git -C "$SUB" archive --format=tar "$PLATO_REV" | tar -x -C "$B/plato"
+    printf '%s\n' "$PLATO_REV" >> "$B/stamps/plato-src"
+fi
+# A build directory belongs to one Plato commit (stamps written before the
+# fork are empty and accepted as they are).
+BUILT_REV=$(cat "$B/stamps/plato-src")
+if [ -n "$BUILT_REV" ] && [ "$BUILT_REV" != "$PLATO_REV" ]; then
+    echo "$B was built from Plato $BUILT_REV, the submodule is at $PLATO_REV; use a fresh PLATO_BUILD" >&2
+    exit 1
 fi
 P="$B/plato"
 T="$P/thirdparty"
@@ -224,11 +235,12 @@ while read -r name file url sha; do
         if [ -f "$T/$name/kobo.patch" ] && [ "$name" != djvulibre ]; then
             patch -d "$T/$name" -p1 < "$T/$name/kobo.patch"
         fi
-        for p in "$PATCHES/$name"-*.patch; do
-            [ -f "$p" ] || continue
-            echo "applying $(basename "$p")"
-            patch -d "$T/$name" -p1 < "$p"
-        done
+        if [ "$name" = mupdf ]; then
+            for p in "$MUPDF_PATCHES"/*.patch; do
+                echo "applying $(basename "$p")"
+                patch -d "$T/$name" -p1 < "$p"
+            done
+        fi
         stamp "src-$name"
     fi
 done <<'EOF'
@@ -406,7 +418,8 @@ for a in "$T/zlib/libz.a" "$T/bzip2/libbz2.a" "$T/libpng/.libs/libpng16.a" \
          "$P/target/mupdf_wrapper/Kindle/libmupdf_wrapper.a"; do
     cp "$a" "$P/libs/"
 done
-# plato-core's build.rs (patches 0005 and 0006) reads the choices from here.
+# plato-core's build.rs (fork commits "core: mupdf tofu fallback" and
+# "core: optional djvu") reads the choices from here.
 if [ "$PLATO_DJVU" = 1 ]; then
     cp "$T/djvulibre/libdjvu/.libs/libdjvulibre.a" "$P/libs/"
 else

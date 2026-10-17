@@ -142,8 +142,8 @@ firmware, for anything that could hang the device. On the device,
 `aristotle-observe` runs touch scenarios from `devloop/kindle/scenarios/` against
 the stock interface or Aristotle and reports each interaction's panel updates,
 waveforms and latency. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the build
-for both workspaces and the checks, and [docs/architecture.md](docs/architecture.md)
-the crates and the plan.
+and the checks, and [docs/architecture.md](docs/architecture.md) the crates and
+the plan.
 
 ## Documentation
 

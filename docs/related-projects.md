@@ -8,7 +8,8 @@ bundle actually ships, with licences, is in [THIRD_PARTY.md](../THIRD_PARTY.md).
 - **[Plato](https://github.com/baskerville/plato)** (Rust, AGPL-3.0): the
   document engine behind every book page: its HTML engine with Knuth–Plass
   justification and Liang hyphenation for EPUB, and MuPDF for PDF and the rest.
-  Aristotle uses `plato-core` with a few patches (`tools/plato-patches/`) and
+  Aristotle uses `plato-core` from a fork with a few small commits
+  ([piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`) and
   none of Plato's Kobo interface. See [reader.md](reader.md).
 - **[KOReader](https://github.com/koreader/koreader)** (AGPL-3.0): its Kindle
   device table (sysfs paths for the battery, frontlight and hall sensor on the
