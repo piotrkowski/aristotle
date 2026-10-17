@@ -1,14 +1,14 @@
 # Device-side code
 
-Everything here but the tests runs on the Kindle, under its busybox shell.
+Everything here but the tests runs on the Kindle, under its BusyBox shell, which provides compact versions of standard Linux commands.
 The host-side tools that install and drive it are in [`tools/`](../tools/), and the app
 itself is the `aristotle` crate.
 
 | Path | What | Installed to |
 |------|------|--------------|
-| `extension/` | The KUAL extension: the menu, the manual USB network, the device guard | `/mnt/us/extensions/aristotle/` |
-| `extension/agent/` | The agent: three upstart jobs (the agent, Aristotle at boot, the OTA block), their scripts, `aristotlectl` and the Wi-Fi policy | `/etc/upstart/aristotle-{agent,ui,ota}.conf` and `/var/local/aristotle/` |
-| `app/` | `run-aristotle.sh` and `takeover.sh`, which launch the app in place of the stock UI | `/mnt/us/aristotle/`, in the app bundle |
+| `extension/` | The [KUAL](../docs/glossary.md#kual) launcher extension: the menu, the manual USB network, the device guard | `/mnt/us/extensions/aristotle/` |
+| `extension/agent/` | The agent: three [Upstart](../docs/glossary.md#upstart) service jobs (the agent, Aristotle at boot, the [OTA](../docs/glossary.md#ota) update block), their scripts, `aristotlectl` and the Wi-Fi policy | `/etc/upstart/aristotle-{agent,ui,ota}.conf` and `/var/local/aristotle/` |
+| `app/` | `run-aristotle.sh` and `takeover.sh`, which launch the app through a [takeover](../docs/glossary.md#takeover) of the stock UI | `/mnt/us/aristotle/`, in the app bundle |
 | `probe/` | A read-only probe, a KUAL extension | `/mnt/us/extensions/aristotle-probe/` |
 | `tests/` | Host-side tests of the scripts above, against a fake device root | stays on the host |
 
@@ -16,14 +16,12 @@ itself is the `aristotle` crate.
 bundle from `tools/build-render.sh device`) and `extensions/aristotle/` (the
 extension with `takeover.sh`). The release zip holds exactly that.
 `tools/host/install-extensions.sh` copies the same tree (the app only if it is
-built), the probe and the dev-loop public key to a Kindle in drive mode, then
+built), the probe and the dev-loop public key to a Kindle in [drive mode](../docs/glossary.md#drive-mode), then
 ejects it. Earlier versions installed the extension
 to `/mnt/us/extensions/aristotle-usbnet/`; the install script removes that
 folder.
 
-No recovery path is verified for the PW4, so these scripts write to the root
-filesystem once, for the upstart job, and keep everything else in
-`/var/local/aristotle`, on `/mnt/us` or in runtime state that a reboot clears.
+No recovery path is verified for the PW4. Writes to the [root filesystem](../docs/glossary.md#rootfs) are limited to installing or removing the Upstart jobs. Everything else lives in `/var/local/aristotle`, on `/mnt/us`, or in runtime state that a reboot clears.
 
 ## The device guard
 
@@ -31,7 +29,7 @@ filesystem once, for the upstart job, and keep everything else in
 outside `/mnt/us`: `agent/install.sh`, `bin/start.sh` and `takeover.sh start`.
 They refuse to run, and change nothing, unless the device is a Kindle
 Paperwhite 4 (2018) on firmware 5.13.x. The model comes from the device code
-in `/proc/usid` (KOReader's list of PW4 codes; `0PP` is verified on ours), the
+in `/proc/usid` ([KOReader](../docs/glossary.md#koreader)'s list of PW4 codes, with `0PP` verified on ours), the
 firmware from `/etc/prettyversion.txt`. On a mismatch the guard says why on
 stderr and on screen. `ARISTOTLE_FORCE=1` skips the check, for developers
 trying another model or firmware on purpose, at their own risk; the emulator
@@ -73,9 +71,8 @@ KUAL's own menu by tapping, it has not been tried yet: taps injected with
 raw` showed them) but KUAL did not react to them. From inside Aristotle,
 holding the "Library" title for a second also returns.
 
-`bin/start.sh` is the dev loop without the agent: it swaps the USB mass
-storage gadget for `g_ether`, gives `usb0` the address `192.168.15.244`, opens
-`usb0` in the stock firewall and starts KOReader's `dropbear`, key-only, on
+`bin/start.sh` is the dev loop without the agent: it swaps the USB mass-storage [gadget](../docs/glossary.md#usb-gadget) for [`g_ether`](../docs/glossary.md#g_ether), gives `usb0` the address `192.168.15.244`, opens
+`usb0` in the stock firewall and starts KOReader's [`dropbear`](../docs/glossary.md#dropbear), key-only, on
 that address. It logs to `usbnet.log` beside itself. `bin/stop.sh`, or a
 reboot, undoes it. On the host, `tools/host/setup-host-net.sh` (once) and
 `ssh -F tools/host/ssh_config kindle` connect.
@@ -84,7 +81,7 @@ reboot, undoes it. On the host, `tools/host/setup-host-net.sh` (once) and
 
 `agent/install.sh` copies the scripts, the key, `takeover.sh` and a copy of
 KOReader's `dropbear` (with its host key) to `/var/local/aristotle` and
-installs three upstart jobs in one `mntroot rw` / `mntroot ro` window:
+installs three Upstart jobs in one read-write window, opened with [`mntroot rw`](../docs/glossary.md#mntroot) and closed with `mntroot ro`:
 `aristotle-agent.conf`, `aristotle-ota.conf` and `aristotle-ui.conf`. That is
 its only root-filesystem write, skipped when the job files are unchanged. No
 stock file is changed. The agent job starts on `started lab126` and runs
@@ -93,10 +90,10 @@ stock file is changed. The agent job starts on `started lab126` and runs
 - brings up the USB network and key-only SSH whenever the USB mode is `net`,
   the default;
 - switches to USB drive mode for a limited time on request, then back to `net`;
-- restarts the stock GUI if it stays dead for 5 minutes, and reboots at most
+- runs a [watchdog](../docs/glossary.md#watchdog) that restarts the stock GUI if it stays dead for 5 minutes, and reboots at most
   once an hour if that does not help. It stays out of the way while
   `/var/run/aristotle-takeover` exists (`takeover.sh start` creates it on the
-  `/var` tmpfs, so a reboot clears it);
+  `/var` [tmpfs](../docs/glossary.md#tmpfs), so a reboot clears it);
 - applies the [Wi-Fi policy](#network).
 
 State and logs live in `/var/local/aristotle` (persistent ext3). Deleting
@@ -134,7 +131,7 @@ Start Aristotle at boot: on (`agent/autostart.sh on`) copies the app from
 take it away, and creates that file; off deletes both. The job runs
 `ui-boot.sh`, which stops the stock GUI as `takeover.sh start` does (the
 stock boot is unchanged up to `lab126_gui`), unloads blanket's boot splash,
-sends powerd the `bootSplashCleanup` that the framework would have sent, and
+sends [`powerd`](../docs/glossary.md#powerd) the `bootSplashCleanup` that the framework would have sent, and
 runs the app. It falls back to the stock GUI for the rest of the boot when:
 
 - `/mnt/us/aristotle-disable` exists;
@@ -146,7 +143,7 @@ runs the app. It falls back to the stock GUI for the rest of the boot when:
   `run-aristotle.sh` stops a boot-started Aristotle this way first, with
   `--keep-takeover`, so developers can run their own build.
 
-It logs to `ui.log`, the app to `app.log`. Measured on our PW4 [dev,
+The job logs to `ui.log`, and the app logs to `app.log`. Measured on our PW4 [dev,
 2026-10-17]: the job started at 37.2 s of uptime, the stock GUI was down at
 39.6 s, the app started at 39.8 s and submitted the library's first frame
 1.0 s later, so about 41 s from power-on to the library, without Java
@@ -162,7 +159,7 @@ checked.
 ### Amazon's updates
 
 `aristotle-ota.conf` handles `starting otaupd` and `starting otav3`: it
-bind-mounts `/var/local/aristotle/ota-stub`, which only sleeps, read-only
+[bind-mounts](../docs/glossary.md#bind-mount) `/var/local/aristotle/ota-stub`, which only sleeps, read-only
 over `/usr/bin/otaupd` and `/usr/bin/otav3` before upstart runs them. The real
 daemons never run and `com.lab126.ota` never appears. No stock file changes;
 the mounts end at the next reboot, and without the job they do not come
@@ -172,7 +169,7 @@ code to delete it [fw]. On the device [dev]: both daemons ran as
 `sleep 2147483647` after install, with the two read-only bind mounts in
 `/proc/mounts`; in the emulator the real `otav3` never started at boot (no
 `OTAController` lines). To update the firmware on purpose: remove the agent,
-reboot, update. The kill switch does not turn this off.
+reboot, update. The [kill switch](../docs/glossary.md#kill-switch) does not turn this off.
 
 ### Security
 
@@ -197,13 +194,10 @@ first stock boot. So:
 - Nothing on the USB drive runs as root at boot: SSH uses the agent's copy
   of `dropbear` and its own `authorized_keys`, and the boot job runs its own
   copy of the app.
-- `install.sh` over a directory others could write (earlier versions) keeps
-  only the log and the settings, as plain files, and replaces the rest.
+- `install.sh` over a directory others could write, as in earlier versions, keeps
+  only the log and the settings as plain files and replaces the rest.
 
-Not fixed here, because it is not ours: the USB drive is writable by every
-process, and KUAL runs its extensions from it as root; the jailbreak runs
-`/mnt/us/emergency.sh` as root; the stock system runs
-`/var/local/system/fixup`, in a directory the framework's group can write.
+Stock behavior remains outside these protections. Every process can write to the USB drive, and KUAL runs its extensions from it as root. The jailbreak runs `/mnt/us/emergency.sh` as root. The stock system also runs `/var/local/system/fixup`, whose directory the framework's group can write.
 `takeover.sh` and the KUAL launcher still log to `/var/tmp`, which any user
 can write.
 
@@ -243,7 +237,7 @@ finished.
 KUAL › Aristotle › Remove agent completely, or `agent/uninstall.sh` over SSH
 (the session drops at the end), removes:
 
-- the three upstart jobs, in one `mntroot` window;
+- the three upstart jobs, in one `mntroot` read-write window;
 - Aristotle started at boot, if it runs (it saves; the stock GUI comes back);
 - the OTA block: the stubs are unmounted and daemons that were running are
   started again for real;
@@ -288,9 +282,9 @@ in [docs/pw4-reference.md](../docs/pw4-reference.md#taking-over-the-screen).
 ## The probe
 
 `probe/bin/probe.sh` (KUAL › Aristotle › Run read-only probe) collects kernel,
-hardware, process, upstart and LIPC state into
+hardware, process, Upstart, and [LIPC](../docs/glossary.md#lipc) state into
 `/mnt/us/aristotle-probe/<UTC stamp>/` and writes nothing else. `probe.sh wfm`
-also copies the e-ink waveforms, which are Amazon's files and stay private.
+also copies the e-ink [waveforms](../docs/glossary.md#waveform), which are Amazon's files and stay private.
 The output identifies the device and its owner; review it before sharing any
 of it. Extend it for runtime questions, keeping it read-only, and record
 lasting findings in [docs/pw4-reference.md](../docs/pw4-reference.md).
@@ -309,19 +303,16 @@ the expected files.
 
 ## Network
 
-The reader listens on no port and opens connections only to the progress-sync server and the OPDS catalogs set up in its settings (`docs/library.md`, "Network"). Aristotle's only
-network is [the USB link](#the-usb-link) for development. Wi-Fi stays with the
-stock system unless you switch on the `scoped` policy, which lets the device
-reach a short list of hosts, such as a dashboard server.
+The reader listens on no port and connects only to the progress-sync server and [OPDS](../docs/glossary.md#opds) catalogs configured in its [network settings](../docs/library.md#network-progress-sync-and-catalogs). The [USB link](#the-usb-link) provides development access. Wi-Fi stays with the stock system unless you switch on the `scoped` policy, which lets the device reach a short list of hosts, such as a dashboard server.
 
 ### The USB link
 
 The device agent (`agent/boot.sh`) and KUAL › Aristotle › Start USB network
 once (`bin/start.sh`) give `usb0` the address `192.168.15.244/24`, and
 `dropbear` listens there only. On the computer,
-`tools/host/setup-host-net.sh` creates a NetworkManager profile for the
+`tools/host/setup-host-net.sh` creates a NetworkManager network profile for the
 gadget's fixed MAC with `192.168.15.201/24` and no default route. There is no
-gateway or DHCP.
+gateway or [DHCP](../docs/glossary.md#dhcp).
 
 If your own network also uses `192.168.15.0/24`, the two routes clash while
 the Kindle is plugged in. Move the USB link to a private `/24` that nothing
@@ -401,7 +392,7 @@ of a timeout.
 
 ### How it works
 
-`net.sh` adds two chains and jumps to them from the top of `INPUT` and
+[iptables](../docs/glossary.md#iptables) rules are grouped into chains. `net.sh` adds two chains and jumps to them from the top of `INPUT` and
 `OUTPUT` for `wlan0` only. `ARISTOTLE_OUT` accepts DHCP (`udp 68 → 67`), DNS
 (`udp` and `tcp` 53) to each resolver and each allowed address, port and
 protocol, then drops the rest. `ARISTOTLE_IN` accepts `ESTABLISHED,RELATED`
@@ -417,7 +408,7 @@ The generated commands are kept in `/var/local/aristotle/net-rules.sh` and
 run with `sh -e`. CI checks them with `device/tests/net.sh`, against
 expected files and a model of iptables.
 
-iptables matches addresses, so `net.sh` resolves each host (glibc's
+iptables matches addresses, so `net.sh` resolves each host ([glibc](../docs/glossary.md#glibc)'s
 `getent ahostsv4` [fw] or busybox `nslookup`) when the policy is applied,
 every 15 minutes after that, and whenever `wlan0`'s address, the resolvers or
 `net-allow` change. The agent checks for changes every 15 s, and allows DNS to
@@ -427,11 +418,11 @@ keeps its previous addresses.
 ### Limits
 
 - Rules are per IP address. Any process can reach anything else served from
-  an allowed address, which on a shared CDN can be many unrelated sites.
+  an allowed address, which on a shared content delivery network (CDN) can be many unrelated sites.
 - A host whose addresses rotate faster than the 15-minute refresh can fail in
   between. Prefer stable addresses, ideally a server on your local network.
-- TLS SNI and the HTTP `Host` header are not checked.
-- DNS to the configured resolvers is open, so data could leak out in DNS
+- [TLS](../docs/glossary.md#tls) Server Name Indication (SNI) and the HTTP `Host` header are not checked.
+- Domain Name System (DNS) queries to the configured resolvers are unrestricted, so data could leak out in DNS
   queries.
 - Until the agent's first tick after `started lab126`, the stock firewall
   applies. Wi-Fi may already be up then, since `wifid` starts on the same
@@ -439,7 +430,7 @@ keeps its previous addresses.
 - IPv4 only. The 5.13.6 kernel has `CONFIG_IPV6` unset and the firmware has no
   `ip6tables` [fw]. On a kernel with IPv6, `scoped` sets `disable_ipv6` on
   `wlan0`.
-- The stock clock sync uses `ntp-g7g.amazon.com` (`/etc/sysconfig/ntp` [fw])
+- The stock Network Time Protocol (NTP) clock sync uses `ntp-g7g.amazon.com` (`/etc/sysconfig/ntp` [fw])
   and is blocked in `scoped`. Allowing another NTP server does not reconfigure
   the stock client, so the clock drifts until Aristotle sets it itself.
 - The rules have been tested on the host only. Confirm them on the device with
