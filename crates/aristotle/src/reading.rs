@@ -103,6 +103,12 @@ pub enum Overlay {
     GoTo {
         value: f32,
     },
+    /// Another device's position, offered (`sync.rs`): its page start and
+    /// the question.
+    Sync {
+        target: usize,
+        text: String,
+    },
 }
 
 impl Overlay {
@@ -197,7 +203,10 @@ impl App {
         };
         if !matches!(
             r.overlay,
-            Overlay::Dict { .. } | Overlay::Gloss { .. } | Overlay::Note { .. }
+            Overlay::Dict { .. }
+                | Overlay::Gloss { .. }
+                | Overlay::Note { .. }
+                | Overlay::Sync { .. }
         ) {
             return None;
         }
@@ -262,6 +271,7 @@ impl App {
                 )),
                 Some(Overlay::Gloss { text, .. }) => Some(overlay::dictionary_text(text)),
                 Some(Overlay::Note { text, .. }) => Some(text.clone()),
+                Some(Overlay::Sync { text, .. }) => Some(RichText::plain(text)),
                 _ => None,
             }
             .map(|b| overlay::printable(&self.ui.text, &styles, &b))
@@ -392,6 +402,23 @@ impl App {
                         actions: vec![
                             (tr(Msg::ReaderGoToNote), act::GO_NOTE),
                             (tr(Msg::CommonClose), act::CANCEL),
+                        ],
+                        place: Place::Bottom,
+                        height: popup_height(&page_words, Place::Bottom, h, max),
+                    },
+                )),
+                Overlay::Sync { .. } => Some(overlay::popup(
+                    t,
+                    &styles,
+                    &PopupSpec {
+                        title: tr(Msg::ReaderSyncTitle).into(),
+                        subtitle: None,
+                        tabs: Vec::new(),
+                        body: &body,
+                        suggestions: Vec::new(),
+                        actions: vec![
+                            (tr(Msg::ReaderSyncGo), act::SYNC_GO),
+                            (tr(Msg::ReaderSyncStay), act::CANCEL),
                         ],
                         place: Place::Bottom,
                         height: popup_height(&page_words, Place::Bottom, h, max),
@@ -1253,6 +1280,19 @@ impl App {
             act::GOTO_SET => {
                 let v = Slider::value_at(self.ui.tree.rect(node), at.x);
                 self.set_goto(|_| v)
+            }
+            act::SYNC_GO => {
+                let target = match self.reading().map(|r| &r.overlay) {
+                    Some(Overlay::Sync { target, .. }) => Some(*target),
+                    _ => None,
+                };
+                match target {
+                    Some(t) => {
+                        perf!("sync: went to the synced position");
+                        self.jump_to(t)
+                    }
+                    None => self.close_overlay(),
+                }
             }
             act::GOTO_MINUS10 => self.set_goto(|v| v - 0.10),
             act::GOTO_MINUS1 => self.set_goto(|v| v - 0.01),

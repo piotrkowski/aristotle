@@ -46,9 +46,11 @@
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
+mod catalogs;
 mod device;
 mod dict;
 mod marks;
+mod net;
 mod open;
 mod overlay;
 mod pagecache;
@@ -63,6 +65,7 @@ mod session;
 mod shelf;
 mod snapshot;
 mod speed;
+mod sync;
 mod turns;
 
 use std::os::fd::AsRawFd;
@@ -150,6 +153,9 @@ struct Args {
     test_clippings: Option<PathBuf>,
     /// `--lang CODE`: the UI language, stored in the preferences.
     lang: Option<String>,
+    /// The folder of the binary, where `sync.json` and `catalogs.json`
+    /// are read from.
+    bundle: PathBuf,
 }
 
 fn usage() -> &'static str {
@@ -180,6 +186,7 @@ fn parse_args() -> Result<Args, Error> {
         index_dicts: false,
         test_clippings: None,
         lang: None,
+        bundle: exe_dir.clone(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -422,6 +429,12 @@ fn build_app(
         dict: Some(dict),
         speed: Speed::load(&args.library),
         exports: export_paths(args),
+        net: net::Net::new(net::Paths {
+            state: args.library.clone(),
+            import: args.bundle.clone(),
+        }),
+        sync: sync::SyncState::default(),
+        catalogs: catalogs::CatalogState::default(),
     };
     app.apply_night();
     app.show_library(Refresh::Full)?;
@@ -475,6 +488,8 @@ enum Screen {
         ids: Option<set_ui::Settings>,
         page: usize,
     },
+    /// Progress sync and the catalogs (catalogs.rs).
+    Network(Box<catalogs::NetScreen>),
 }
 
 struct App {
@@ -514,6 +529,12 @@ struct App {
     speed: Speed,
     /// Where highlights are exported.
     exports: ExportPaths,
+    /// Network settings and requests (net.rs).
+    net: net::Net,
+    /// Progress sync (sync.rs).
+    sync: sync::SyncState,
+    /// The catalog screens' requests (catalogs.rs).
+    catalogs: catalogs::CatalogState,
 }
 
 /// What a handler wants the loop to do next.
@@ -694,6 +715,7 @@ impl App {
         match &self.screen {
             Screen::Library { view, .. } => self.ui.tree.page(view.list).0,
             Screen::Settings { ids: Some(ids), .. } => self.ui.tree.page(ids.list).0,
+            Screen::Network(ns) => ns.frame.as_ref().map_or(0, |f| self.ui.tree.page(f.list).0),
             _ => 0,
         }
     }
@@ -739,6 +761,19 @@ impl App {
 
     fn show_settings(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
         let facts = Facts::read(&self.battery, &self.root);
+        let sync_account = self
+            .net
+            .accounts
+            .sync
+            .as_ref()
+            .filter(|s| !s.server.is_empty())
+            .map(|s| {
+                aristotle_i18n::tf!(
+                    aristotle_i18n::Msg::SettingsSyncOn,
+                    user = s.username,
+                    server = s.server
+                )
+            });
         self.clock = facts.clock.clone();
         let light = self
             .light
@@ -756,6 +791,8 @@ impl App {
             date: &facts.date,
             time: &facts.clock,
             usb: facts.usb,
+            sync: sync_account.as_deref(),
+            catalogs: self.net.accounts.catalogs.len(),
             about: &facts.about,
         };
         let (tree, ids) = set_ui::Settings::build(&mut self.ui.text, &self.styles, &view);
@@ -806,6 +843,16 @@ impl App {
                 self.set_light_step(step);
             }
             a::NIGHT => self.set_night(!self.prefs.night),
+            a::SYNC => {
+                return self
+                    .open_network(catalogs::NetView::Sync, page)
+                    .map(|_| Flow::Continue)
+            }
+            a::CATALOGS => {
+                return self
+                    .open_network(catalogs::NetView::Catalogs, page)
+                    .map(|_| Flow::Continue)
+            }
             a::CLIPPINGS => {
                 self.prefs.clippings = !self.prefs.clippings;
                 self.save_prefs();
@@ -884,6 +931,7 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
+        self.sync_push(false, false);
         self.save_snapshot();
         self.saver.save(&self.lib);
         self.debounce.saved();
@@ -913,6 +961,7 @@ impl App {
                 let page = *page;
                 self.show_settings(Refresh::Full, page)
             }
+            Screen::Network(_) => self.show_network(Refresh::Full),
             // (A book still opening was finished before the screensaver.)
             Screen::Reader(_) | Screen::Opening => self.reader_after_sleep(),
         }
@@ -951,6 +1000,9 @@ impl App {
             if self.opening.is_some() || self.pending.is_some() {
                 timeout = timeout.min(Duration::from_millis(10));
             }
+            if self.net.busy() {
+                timeout = timeout.min(Duration::from_millis(100));
+            }
             if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
                 timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
@@ -987,7 +1039,7 @@ impl App {
     /// Whether the UI tree (not the page-turn path) owns input right now.
     fn ui_driven(&self) -> bool {
         match &self.screen {
-            Screen::Library { .. } | Screen::Settings { .. } => true,
+            Screen::Library { .. } | Screen::Settings { .. } | Screen::Network(_) => true,
             Screen::Reader(r) => r.menu_open || !r.overlay.is_none(),
             Screen::Opening => self.opening.as_ref().is_some_and(|o| o.menu_open),
         }
@@ -1003,6 +1055,7 @@ impl App {
             self.finish_pending(result)?;
         }
         self.poll_lookup()?;
+        self.poll_net()?;
         // Snapshots ahead of time: only on the library screen (not the
         // settings), with no book opening and no screensaver.
         if matches!(self.screen, Screen::Library { .. })
@@ -1035,6 +1088,7 @@ impl App {
                 match &self.screen {
                     Screen::Library { .. } => self.show_library_at(Refresh::Auto, page)?,
                     Screen::Settings { .. } => self.show_settings(Refresh::Auto, page)?,
+                    Screen::Network(_) => self.show_network(Refresh::Auto)?,
                     Screen::Reader(_) | Screen::Opening => self.clock = clock,
                 }
             }
@@ -1090,6 +1144,7 @@ impl App {
         match &self.screen {
             Screen::Library { .. } => self.on_library_event(ev),
             Screen::Settings { .. } => self.on_settings_event(ev),
+            Screen::Network(_) => self.on_network_event(ev),
             Screen::Reader(r) => {
                 let reading_action =
                     matches!(ev, UiEvent::Action { id, .. } if id >= overlay::FIRST_ACTION);
@@ -1235,6 +1290,7 @@ impl App {
         let Some(rec) = self.lib.book(id).cloned() else {
             return Ok(());
         };
+        self.sync_before_open(id);
         let t0 = Instant::now();
         let style = self.prefs.style();
         let src = match Source::new(&self.lib, &rec, &self.mobi_cache) {
@@ -1742,6 +1798,7 @@ impl App {
         }));
         self.speed.page_shown(Instant::now());
         self.page_changed();
+        self.sync_book_opened();
     }
 
     /// Store the current page (and the next, if rendered) for the next
@@ -2103,6 +2160,7 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
+        self.sync_push(true, false);
         let snapshot = self.snapshot_parts();
         // The library goes out first; copying the pages and serialising the
         // index wait until it is submitted.
@@ -2127,6 +2185,7 @@ impl App {
             let now = aristotle_library::library::now();
             app.lib.set_progress(&r.session.id, r.session.progress(now));
         }
+        app.sync_push(true, true);
         if let Some(step) = app.asleep.take() {
             app.set_light_step(step);
         }

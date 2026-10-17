@@ -13,10 +13,17 @@ description = "Aristotle's reader app for the PW4: library, Plato-rendered pages
 name = "aristotle"
 path = "src/main.rs"
 
+[features]
+default = []
+# HTTPS for progress sync and catalogs (aristotle-net's rustls and ring).
+# tools/build-render.sh turns it on for the device bundle.
+tls = ["aristotle-net/tls"]
+
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
 aristotle-i18n = { path = "../aristotle-i18n" }
 aristotle-library = { path = "../aristotle-library" }
+aristotle-net = { path = "../aristotle-net" }
 aristotle-render = { path = "../aristotle-render" }
 # Neither the embedded UI font (the app maps Literata from the renderer's
 # data directory) nor the preview binary and its PNG encoder.
