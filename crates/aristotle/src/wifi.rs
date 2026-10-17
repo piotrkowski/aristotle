@@ -731,8 +731,10 @@ mod tests {
     #[test]
     fn errors_name_the_network() {
         aristotle_i18n::with_language("pl", || {
-            let mut m = Model::default();
-            m.phase = Phase::Connecting("Dom".into());
+            let mut m = Model {
+                phase: Phase::Connecting("Dom".into()),
+                ..Model::default()
+            };
             let next = m.apply(Done::Connected {
                 essid: "Dom".into(),
                 result: Err(hal::Error::BadPassword {
