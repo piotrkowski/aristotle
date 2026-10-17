@@ -53,18 +53,21 @@ The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benc
 ## Install
 
 > [!WARNING]
-> Aristotle needs a **jailbroken** Kindle. Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4.
+> Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4. Aristotle is alpha software.
 
-Aristotle contains no jailbreak, exploit or DRM-removal code, and it opens only DRM-free books. It uses the e-ink waveforms and firmware already on the device and never ships them or copies them off the device.
+You need:
 
-Aristotle is alpha software.
+- a Kindle Paperwhite 4 (2018) on firmware 5.13.x, jailbroken;
+- KUAL, the launcher that holds Aristotle's menu;
+- a computer and a USB cable.
 
-| Device | Firmware | Status |
-|---|---|---|
-| Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
-| Other devices | | Not supported. The install scripts refuse to run unless `ARISTOTLE_FORCE=1` is set. |
+Then:
 
-The Kindle also needs KUAL, the launcher that holds Aristotle's menu. In short: download the zip from the latest [release](https://github.com/piotrkowski/aristotle/releases), unzip it to the root of the Kindle's USB drive, and open KUAL › Aristotle › Start Aristotle; Return to the Kindle interface goes back. With the optional agent, Start Aristotle at boot: on makes it the Kindle's interface, and Amazon's updates stay off. **[docs/install.md](docs/install.md)** has every step, the optional agent, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
+1. Download `aristotle-X.Y.Z.zip` from the latest [release](https://github.com/piotrkowski/aristotle/releases).
+2. Unzip it to the root of the Kindle's USB drive and eject the Kindle.
+3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
+
+**[docs/install.md](docs/install.md)** covers starting at boot, the optional agent, updates, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
@@ -91,10 +94,12 @@ GNU AGPL 3.0 or later, like Plato. See [LICENSE](LICENSE). [THIRD_PARTY.md](THIR
 - [KOReader](https://github.com/koreader/koreader), for Kindle know-how and the SSH server
 - [FBInk](https://github.com/NiLuJe/FBInk), for the e-ink display interface
 - katadelos' [eink-emulator](https://github.com/katadelos/eink-emulator), the Paperwhite 4 in QEMU
-- [KindleModding](https://kindlemodding.org) and [MobileRead](https://www.mobileread.com), for the jailbreak, KUAL and MRPI
+- [KindleModding](https://kindlemodding.org) and [MobileRead](https://www.mobileread.com), for KUAL, MRPI and the Kindle guides
 - [Literata](https://www.type-together.com/literata-font) by TypeTogether
 - [hyph-utf8](https://github.com/hyphenation/tex-hyphen) hyphenation patterns
 - Wiktionary dictionaries via [wiktionary_stardict](https://github.com/xxyzz/wiktionary_stardict) ([CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/))
 - Sample books from [Project Gutenberg](https://www.gutenberg.org)
+
+Aristotle contains no exploit or DRM-removal code, and it opens only DRM-free books. It uses the e-ink waveforms and firmware already on the device and never ships them or copies them off it.
 
 Aristotle is not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and related marks are trademarks of Amazon.com, Inc. or its affiliates.
