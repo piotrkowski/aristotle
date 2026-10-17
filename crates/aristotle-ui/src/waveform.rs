@@ -27,9 +27,22 @@ pub enum Waveform {
     /// 16 gray levels without a flash. The default for anti-aliased text and
     /// images.
     GL16 = 3,
-    /// Fastest, black and white only, leaves ghosting. Used for transient
-    /// feedback such as a pressed button, which is replaced moments later.
+    /// Fastest, black and white only, leaves ghosting. Used only for the
+    /// touch-down acknowledgement of a control (and the live selection
+    /// while a finger drags); the UI always follows it with a [`GLKW16`]
+    /// update of the same pixels once the action settles.
+    ///
+    /// [`GLKW16`]: Waveform::GLKW16
     A2 = 6,
+    /// A cleaning 16-level update without a flash: mode 9, sent in full
+    /// mode so the driver drives every pixel of the rectangle, not only
+    /// the ones whose value changed. Mode 9 (FBInk's GLKW16) is what the
+    /// stock reader uses for every page turn on the PW4 by day,
+    /// and it runs the driver's ghost-reduction steps
+    /// (`docs/benchmarks.md`, "Page-turn strategy experiment") [dev].
+    /// Used for the final state of anything A2 touched, for paging and
+    /// for removing overlays.
+    GLKW16 = 9,
 }
 
 impl Waveform {
@@ -46,7 +59,8 @@ impl Waveform {
             Waveform::A2 => 0,
             Waveform::DU => 1,
             Waveform::GL16 => 2,
-            Waveform::GC16 => 3,
+            Waveform::GLKW16 => 3,
+            Waveform::GC16 => 4,
         }
     }
 
@@ -70,6 +84,7 @@ mod tests {
         assert_eq!(Waveform::DU.mode(), 1);
         assert_eq!(Waveform::GL16.mode(), 3);
         assert_eq!(Waveform::GC16.mode(), 2);
+        assert_eq!(Waveform::GLKW16.mode(), 9);
     }
 
     #[test]
@@ -77,5 +92,7 @@ mod tests {
         assert_eq!(Waveform::A2.max(Waveform::DU), Waveform::DU);
         assert_eq!(Waveform::GC16.max(Waveform::GL16), Waveform::GC16);
         assert_eq!(Waveform::GL16.max(Waveform::A2), Waveform::GL16);
+        assert_eq!(Waveform::GL16.max(Waveform::GLKW16), Waveform::GLKW16);
+        assert_eq!(Waveform::GC16.max(Waveform::GLKW16), Waveform::GC16);
     }
 }

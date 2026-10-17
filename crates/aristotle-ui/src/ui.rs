@@ -22,6 +22,14 @@
 //! full-screen GC16 for new screens, night-mode switches and every n-th page
 //! turn, to clear ghosting.
 //!
+//! A2 is only an acknowledgement. Pixels it showed are remembered until
+//! the next render that settles the screen (one with any non-A2 damage),
+//! and that render adds them as one GLKW16 rectangle (mode 9): a full-mode cleaning
+//! update, because A2 over gray anti-aliased text leaves residue that a
+//! partial DU or GL16 update would skip (`docs/benchmarks.md`, "Page-turn
+//! strategy experiment"). [`Ui::request_clean_refresh`] (a new page of a
+//! list) and [`Ui::render_clean`] (popup pages) ask for GLKW16 directly.
+//!
 //! 4. **Coalesce.** The minimal rectangles are then merged for transport
 //!    according to [`Coalesce`]. On the stock PW4 driver, which runs one
 //!    update at a time and takes about as long for a small region as for a
@@ -112,6 +120,13 @@ pub struct Ui {
     repaint_all: Option<Refresh>,
     pub coalesce: Coalesce,
     minimal: Vec<Damage>,
+    /// What A2 showed and no cleaning update has covered since.
+    fast: Option<Rect>,
+    /// Send the whole screen with GLKW16 on the next render.
+    clean_pending: bool,
+    /// The least faithful waveform the next render may use for settled
+    /// (non-A2) damage.
+    floor: Option<Waveform>,
 }
 
 impl Ui {
@@ -132,6 +147,9 @@ impl Ui {
             repaint_all: None,
             coalesce: Coalesce::Single,
             minimal: Vec::new(),
+            fast: None,
+            clean_pending: false,
+            floor: None,
         }
     }
 
@@ -184,6 +202,25 @@ impl Ui {
         self.full_pending = true;
     }
 
+    /// Send the whole screen with one GLKW16 update on the next render: a
+    /// new page of a list, clean like a book page and without a flash.
+    pub fn request_clean_refresh(&mut self) {
+        self.clean_pending = true;
+    }
+
+    /// [`Ui::render`], with every settled change sent as GLKW16: a change
+    /// that replaces most of a gray area (a popup's next page) and must
+    /// not leave the old text behind.
+    pub fn render_clean(&mut self) -> Vec<Damage> {
+        self.floor = Some(Waveform::GLKW16);
+        self.render()
+    }
+
+    /// Whether pixels shown with A2 still wait for their cleaning update.
+    pub fn has_fast_residue(&self) -> bool {
+        self.fast.is_some()
+    }
+
     /// Lays out the tree if anything changed since the last layout. Call it
     /// before reading node rectangles or page counts.
     pub fn layout(&mut self) {
@@ -232,14 +269,22 @@ impl Ui {
                 }
             }
         }
-        if self.full_pending {
+        let floor = self.floor.take();
+        if self.full_pending || self.clean_pending {
+            let waveform = if self.full_pending {
+                self.pages_since_full = 0;
+                Waveform::GC16
+            } else {
+                Waveform::GLKW16
+            };
             self.full_pending = false;
-            self.pages_since_full = 0;
+            self.clean_pending = false;
+            self.fast = None;
             self.repaint(self.screen);
             self.front.copy_from(&self.canvas, self.screen);
             self.minimal = vec![Damage {
                 rect: self.screen,
-                waveform: Waveform::GC16,
+                waveform,
             }];
             return self.minimal.clone();
         }
@@ -279,8 +324,32 @@ impl Ui {
                     }
                 }
             };
+            let waveform = match floor {
+                Some(f) if waveform != Waveform::A2 => waveform.max(f),
+                _ => waveform,
+            };
             self.front.copy_from(&self.canvas, t);
             damage.push(Damage { rect: t, waveform });
+        }
+        // A2 is only the acknowledgement: the first settled update after it
+        // also cleans what it showed.
+        let fast = damage
+            .iter()
+            .filter(|d| d.waveform == Waveform::A2)
+            .map(|d| d.rect)
+            .reduce(|a, b| a.union(&b));
+        if damage.iter().any(|d| d.waveform != Waveform::A2) {
+            if let Some(r) = self.fast.take() {
+                self.repaint(r);
+                self.front.copy_from(&self.canvas, r);
+                damage.push(Damage {
+                    rect: r,
+                    waveform: Waveform::GLKW16,
+                });
+            }
+        }
+        if let Some(r) = fast {
+            self.fast = Some(self.fast.map_or(r, |f| f.union(&r)));
         }
         // Regions overlap (a sheet and the labels on it), so drop rectangles
         // already covered by an equal or more faithful one.
@@ -560,12 +629,68 @@ mod tests {
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].waveform, Waveform::A2);
         assert!(u.tree.rect(btn).intersect(&d[0].rect) == Some(d[0].rect));
+        let pressed = d[0].rect;
         let ev = u.handle_touch(touch(Phase::Up, 80));
         assert!(matches!(ev[..], [UiEvent::Action { id: 42, .. }]));
         let d = u.render();
         assert_eq!(d.len(), 1);
-        // The label has gray anti-aliased edges, so the restore is GL16.
-        assert_eq!(d[0].waveform, Waveform::GL16);
+        // A2 crushed the label's gray edges: the restore cleans everything
+        // A2 showed with one full-mode GLKW16 update, not a partial GL16.
+        assert_eq!(d[0].waveform, Waveform::GLKW16);
+        assert!(d[0].rect.intersect(&pressed) == Some(pressed));
+        assert!(!u.has_fast_residue());
+        // Cleaned once: nothing is left to send.
+        assert!(u.render().is_empty());
+    }
+
+    #[test]
+    fn a2_waits_for_the_settling_update_and_a_flash_forgets_it() {
+        let mut btn = NodeId(0);
+        let mut u = ui(|t| {
+            let l = t.label("Open", style());
+            btn = t.button(Node::new(Kind::Spacer).border(3, 0, 12), l, 42);
+            let root = t.align(0.5, 0.5, btn);
+            t.set_root(root);
+        });
+        let c = u.tree.rect(btn).center();
+        u.handle_touch(TouchEvent {
+            phase: Phase::Down,
+            id: 0,
+            x: c.x,
+            y: c.y,
+            time_us: 0,
+        });
+        assert_eq!(u.render()[0].waveform, Waveform::A2);
+        // Nothing settled yet: no cleaning while the finger is down.
+        assert!(u.render().is_empty());
+        assert!(u.has_fast_residue());
+        u.request_full_refresh();
+        assert_eq!(u.render()[0].waveform, Waveform::GC16);
+        assert!(!u.has_fast_residue(), "a flash cleans everything");
+    }
+
+    #[test]
+    fn clean_requests_use_glkw16() {
+        let mut label = NodeId(0);
+        let mut u = ui(|t| {
+            label = t.label("Page 1", style());
+            let root = t.pad(Insets::all(50), label);
+            t.set_root(root);
+        });
+        u.tree.set_text(label, "Page 2");
+        let d = u.render_clean();
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].waveform, Waveform::GLKW16);
+        u.tree.set_text(label, "Page 3");
+        assert_eq!(u.render()[0].waveform, Waveform::GL16, "only once");
+        u.request_clean_refresh();
+        assert_eq!(
+            u.render(),
+            vec![Damage {
+                rect: Rect::new(0, 0, 600, 800),
+                waveform: Waveform::GLKW16
+            }]
+        );
     }
 
     #[test]

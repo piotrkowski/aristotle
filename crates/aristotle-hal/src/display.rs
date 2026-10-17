@@ -101,7 +101,8 @@ fn fidelity(w: Waveform) -> u32 {
     match w {
         Waveform::A2 => 0,
         Waveform::DU => 1,
-        Waveform::GC16 => 3,
+        Waveform::GLR16 | Waveform::GLKW16 => 3,
+        Waveform::GC16 | Waveform::GCK16 => 4,
         _ => 2,
     }
 }

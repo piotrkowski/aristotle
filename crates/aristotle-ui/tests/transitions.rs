@@ -5,9 +5,12 @@
 //!
 //! - A screen switch is exactly one full-screen GC16 (the device sends it
 //!   as one full mode-8 flash).
-//! - Touch-down is exactly one A2 update inside the touched control.
+//! - Touch-down is exactly one A2 update inside the touched control, and
+//!   the next settled update is one GLKW16 (cleaning, full-mode mode 9)
+//!   update that covers it.
 //! - An in-screen change is exactly one non-flashing update (DU or GL16)
 //!   that is not the whole screen.
+//! - A new page of a list is one full-screen GLKW16 update, no flash.
 //! - The night switch is exactly one full-screen GC16.
 //!
 //! On the device, `tools/scenarios/aristotle-ui.txt` checks the
@@ -110,7 +113,7 @@ fn one_quiet(d: &[Damage]) -> Damage {
     assert_eq!(d.len(), 1, "expected exactly one update: {d:?}");
     let u = d[0];
     assert!(
-        matches!(u.waveform, Waveform::DU | Waveform::GL16),
+        matches!(u.waveform, Waveform::DU | Waveform::GL16 | Waveform::GLKW16),
         "expected a non-flashing update: {u:?}"
     );
     assert!(u.rect != screen() || u.waveform != Waveform::GC16);
@@ -200,15 +203,18 @@ fn in_screen_changes_are_one_quiet_update() {
     ui.render();
 
     // Shelf chip: press, release, the app rebuilds with only the changed
-    // pixels. One A2, then one quiet update.
+    // pixels. One A2, then one quiet update that also cleans what A2
+    // showed.
     let p = find(&ui, a::FILTER + 1);
-    press(&mut ui, p);
+    let pressed = press(&mut ui, p)[0].rect;
     assert!(matches!(release(&mut ui, p)[..], [UiEvent::Action { id, .. }] if id == a::FILTER + 1));
     let (tree, lib) = library_tree(&mut ui.text, &items, View::Books, Filter::Reading);
     ui.set_tree_with(tree, Refresh::Auto);
     ui.layout();
     lib.sync(&mut ui.tree);
-    one_quiet(&ui.render());
+    let u = one_quiet(&ui.render());
+    assert_eq!(u.waveform, Waveform::GLKW16, "A2 is cleaned: {u:?}");
+    assert_eq!(u.rect.intersect(&pressed), Some(pressed));
 
     // View tab: the same.
     let folders = sample_items(&books, View::Folders);
@@ -218,7 +224,8 @@ fn in_screen_changes_are_one_quiet_update() {
     lib.sync(&mut ui.tree);
     one_quiet(&ui.render());
 
-    // List page: the list and the pager in one update.
+    // List page: the whole screen in one clean update without a flash,
+    // as the app asks for it.
     let (tree, mut lib) = library_tree(&mut ui.text, &items, View::Books, Filter::All);
     ui.set_tree_with(tree, Refresh::Auto);
     ui.layout();
@@ -227,8 +234,14 @@ fn in_screen_changes_are_one_quiet_update() {
     assert!(lib.handle(&mut ui.tree, a::NEXT_PAGE));
     ui.layout();
     lib.sync(&mut ui.tree);
-    let u = one_quiet(&ui.render());
-    assert!(u.rect.y > 300, "the header stays: {u:?}");
+    ui.request_clean_refresh();
+    assert_eq!(
+        ui.render(),
+        [Damage {
+            rect: screen(),
+            waveform: Waveform::GLKW16
+        }]
+    );
 
     // The busy mark: one small black-and-white update in the status line.
     ui.tree.set_hidden(lib.busy, false);

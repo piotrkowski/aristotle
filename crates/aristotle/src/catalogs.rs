@@ -274,6 +274,7 @@ impl App {
                 Paged::Turned => {
                     self.ui.layout();
                     f.sync(&mut self.ui.tree);
+                    self.ui.request_clean_refresh();
                     let now = self.ui.tree.page(f.list).0;
                     if let NetView::Feed(b) = &mut ns.view {
                         b.page.list_page = now;
