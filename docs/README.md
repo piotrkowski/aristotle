@@ -4,15 +4,15 @@ Aristotle runs on a jailbroken Kindle Paperwhite 4 on firmware 5.13.x. Start wit
 
 ## Use Aristotle
 
-| Task | Guide |
+| I want to... | Read |
 | --- | --- |
 | Install or remove Aristotle and its optional agent | [Install](install.md) |
-| Copy a book, read it, and save a highlight | [Your first book](first-book.md) |
-| Add an offline dictionary | [Install dictionaries](dictionaries.md) |
-| Connect progress sync or an OPDS catalog | [Set up network features](network.md) |
-| Back up data, update, or restore a previous version | [Back up and update](maintenance.md) |
-| Diagnose a problem or collect logs | [Troubleshooting](troubleshooting.md) |
-| Check what a book format supports | [Format support](formats.md) |
+| Start reading | [Your first book](first-book.md) |
+| Add word lookups | [Install dictionaries](dictionaries.md) |
+| Sync with KOReader or download from calibre | [Set up network features](network.md) |
+| Preserve my data or install a new version | [Back up and update](maintenance.md) |
+| Fix a problem or collect logs | [Troubleshooting](troubleshooting.md) |
+| Check whether a book will work | [Format support](formats.md) |
 
 The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use has not been verified. Quit to the stock interface when you finish reading. See [Power and sleep](reader.md#the-app) for the experimental alternative.
 
