@@ -1,0 +1,36 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Written for the tests in the shape of calibre's content server
+     (calibre/srv/opds.py): the root navigation feed. -->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <title>calibre Library</title>
+  <id>calibre-all:title</id>
+  <updated>2026-10-17T18:00:00+00:00</updated>
+  <link rel="search" title="Search" type="application/atom+xml" href="/opds/search?query={searchTerms}"/>
+  <link rel="start" title="Start" type="application/atom+xml;type=feed;profile=opds-catalog;kind=navigation" href="/opds"/>
+  <author>
+    <name>calibre</name>
+    <uri>https://calibre-ebook.com</uri>
+  </author>
+  <subtitle>Books in your library</subtitle>
+  <entry>
+    <title>By Newest</title>
+    <id>calibre-navcatalog:7f4c</id>
+    <updated>2026-10-17T18:00:00+00:00</updated>
+    <content type="text">Books sorted by date</content>
+    <link type="application/atom+xml;type=feed;profile=opds-catalog;kind=navigation" href="/opds/navcatalog/4f6e6577657374?library_id=Calibre_Library"/>
+  </entry>
+  <entry>
+    <title>Title</title>
+    <id>calibre-navcatalog:9a1b</id>
+    <updated>2026-10-17T18:00:00+00:00</updated>
+    <content type="text">Books sorted by title</content>
+    <link type="application/atom+xml;type=feed;profile=opds-catalog;kind=navigation" href="/opds/navcatalog/4f7469746c65?library_id=Calibre_Library"/>
+  </entry>
+  <entry>
+    <title>Authors</title>
+    <id>calibre:category:authors</id>
+    <updated>2026-10-17T18:00:00+00:00</updated>
+    <content type="text">3 books</content>
+    <link type="application/atom+xml;type=feed;profile=opds-catalog;kind=navigation" href="/opds/category/617574686f7273/49313a617574686f7273?library_id=Calibre_Library"/>
+  </entry>
+</feed>
