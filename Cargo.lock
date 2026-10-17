@@ -38,6 +38,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "aristotle-i18n"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "aristotle-library"
 version = "0.1.0"
 dependencies = [
