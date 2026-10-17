@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Device guard, sourced (not run) by every script that changes the device
-# outside /mnt/us: agent/install.sh, agent/migrate.sh, bin/start.sh and
-# takeover.sh. Aristotle is built and tested on one model and one firmware
+# outside /mnt/us: agent/install.sh, bin/start.sh and takeover.sh.
+# Aristotle is built and tested on one model and one firmware
 # line only, the Kindle Paperwhite 4 (2018) on firmware 5.13.x; its scripts
 # load kernel modules, open the firewall and write the root filesystem the way
 # that device needs. device_guard refuses everything else:

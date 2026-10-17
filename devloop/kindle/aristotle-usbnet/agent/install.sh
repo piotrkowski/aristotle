@@ -27,12 +27,6 @@ say() {
 . "$EXT/guard.sh"
 device_guard || exit 1
 
-# Two agents would fight over the USB port. One installed before the project's
-# rename is moved over by migrate.sh, which can roll back.
-if [ -e "$R/etc/upstart/aristotle.conf" ]; then
-    say "aristotle: earlier agent found; use Migrate agent instead"
-    exit 1
-fi
 if [ ! -s "$EXT/authorized_keys" ] && [ ! -s "$S/authorized_keys" ]; then
     say "aristotle: no authorized_keys, not installing"
     exit 1

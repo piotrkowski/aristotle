@@ -1,9 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Host-side test of the device scripts other than the migration: the device
-# guard (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and
-# takeover.sh, uninstall.sh, the kill switch in boot.sh, and the takeover
-# flag.
+# Host-side test of the device scripts: the device guard
+# (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and takeover.sh,
+# uninstall.sh, the kill switch in boot.sh, and the takeover flag.
 #
 #   sh devloop/kindle/tests/agent.sh
 #
@@ -77,7 +76,7 @@ EOF
 #!/bin/sh
 R=$AGENT_TEST_ROOT
 echo "start $*" >> "$R/calls"
-case "$1" in aristotle-agent | aristotle) ;; *) exit 0 ;; esac
+case "$1" in aristotle-agent) ;; *) exit 0 ;; esac
 [ -f "$R/etc/upstart/$1.conf" ] || { echo "start: Unknown job: $1" >&2; exit 1; }
 mkdir -p "$R/jobs"
 sleep 300 > /dev/null 2>&1 &
@@ -191,8 +190,8 @@ check "exit status 0" "[ $? = 0 ]"
 check "job file installed" "[ -f $r/etc/upstart/aristotle-agent.conf ]"
 
 # installed NAME: a PW4 with the agent installed and running, its dropbear
-# up, g_ether loaded, a log and its rotated copy, a scoped Wi-Fi policy, a
-# migration backup, and KOReader's authorized_keys holding the agent's key
+# up, g_ether loaded, a log and its rotated copy, a scoped Wi-Fi policy, the
+# backup directory an earlier version could leave, and KOReader's authorized_keys holding the agent's key
 # and one of the owner's.
 installed() {
     r=$(device "$1" "$PW4_SN" 5.13.6)

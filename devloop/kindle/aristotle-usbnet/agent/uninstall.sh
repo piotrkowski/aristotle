@@ -7,8 +7,8 @@
 #  - the upstart job, /etc/upstart/aristotle-agent.conf;
 #  - /var/local/aristotle: the scripts, the state (USB mode, Wi-Fi policy and
 #    allowlist, watchdog flags), the agent's copy of the SSH key and the log;
-#  - /var/local/aristotle-migrate, the backups of a migration from an earlier
-#    install (they hold copies of the key too);
+#  - /var/local/aristotle-migrate, if an earlier version of the agent left
+#    one: backups from moving an older install over, with copies of the key;
 #  - the agent's keys from KOReader's settings/SSH/authorized_keys (other keys
 #    there stay) and the extension's authorized_keys;
 #  - the runtime state: dropbear, usb0 and g_ether, the usb0 firewall rules,
