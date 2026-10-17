@@ -68,6 +68,7 @@ mod speed;
 mod sync;
 mod turns;
 
+use std::cell::Cell;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -455,7 +456,20 @@ impl Widget for PageView {
         let p = &self.page;
         cx.painter
             .blit_gray(r.x, r.y, p.width, p.height, p.stride, &p.data);
+        // As panel::night_page does for pages sent directly.
+        if NIGHT.with(Cell::get) {
+            for b in &p.images {
+                cx.painter
+                    .invert_rect(Rect::new(r.x + b.x0, r.y + b.y0, b.x1 - b.x0, b.y1 - b.y0));
+            }
+        }
     }
+}
+
+thread_local! {
+    /// Night mode, either method: [`PageView`] then inverts the book's
+    /// images, so the inversion of the whole screen shows them as by day.
+    static NIGHT: Cell<bool> = const { Cell::new(false) };
 }
 
 struct Reading {
@@ -648,6 +662,7 @@ impl App {
     /// render is a full flash that shows the switch everywhere at once.
     fn apply_night(&mut self) {
         let method = self.prefs.night.then_some(self.prefs.night_method);
+        NIGHT.with(|n| n.set(method.is_some()));
         self.panel.set_night(method);
         self.ui.set_night(method == Some(NightMethod::Software));
         self.ui.request_full_refresh();
@@ -1062,8 +1077,12 @@ impl App {
             && self.pending.is_none()
             && self.asleep.is_none()
         {
-            self.prewarm
-                .tick(&self.lib, &self.prefs.style(), &self.mobi_cache);
+            self.prewarm.tick(
+                &self.lib,
+                &self.prefs.style(),
+                &self.mobi_cache,
+                self.speed.secs_per_page(),
+            );
         }
         if let Screen::Reader(r) = &mut self.screen {
             if r.session.poll_pagination() {
@@ -1706,12 +1725,20 @@ impl App {
         let mut session = Session::from_prepared(prepared)?;
         session.set_speed(self.speed.secs_per_page());
         session.current = at;
-        let page = session.page(at)?;
+        let mut page = session.page(at)?;
         let verdict = if right {
             open::compare(&o.shown().1, &page, &session.style)
         } else {
             open::Verdict::Page
         };
+        if verdict == open::Verdict::Chrome {
+            // Same text, but the header or footer moved on since the
+            // snapshot was saved (page numbers that were not known then, a
+            // new reading speed). The page on the panel stays until the
+            // next turn: the open remains one update.
+            page = o.shown().1.clone();
+            session.keep_page(at, page.clone());
+        }
         perf!(
             "open: \"{}\": book ready {:.0} ms after the tap (worker: book {:.0} ms, position {:.0} ms, first page {:.0} ms, neighbours {:.0} ms; adopted in {:.0} ms); snapshot {:?}; page numbers {}",
             o.title,
@@ -1724,7 +1751,8 @@ impl App {
             verdict,
             if times.pages_cached { "from cache" } else { "being computed in the background" }
         );
-        if verdict == open::Verdict::Same && !o.turned {
+        let same = verdict != open::Verdict::Page;
+        if same && !o.turned {
             // The snapshot on disk is exactly this page: don't write it back.
             let key = snapshot::Key::new(&o.id, o.stamp, &o.style, o.current.0.locator.clone());
             let next = o.next.as_ref().map(|(i, _)| i.location);
@@ -1749,7 +1777,6 @@ impl App {
                 update_menu_labels(&mut self.ui, r);
             }
         }
-        let same = verdict == open::Verdict::Same;
         match (same, deferred, menu_open) {
             (true, _, true) => self.render_ui()?,
             // The UI's copy of the screen already has these pixels: no
@@ -2338,5 +2365,210 @@ mod tests {
         let fonts = ui_fonts(&dir).unwrap();
         assert_eq!(fonts.family_by_name("Literata"), Some(FamilyId(0)));
         assert!(ui_fonts(&dir.join("missing")).is_err());
+    }
+
+    /// The runtime data of `tools/build-render.sh host`, found as the
+    /// renderer's tests find it.
+    fn render_data() -> Option<PathBuf> {
+        let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
+        let dir = var("ARISTOTLE_RENDER_DATA")
+            .map(PathBuf::from)
+            .or_else(|| {
+                var("ARISTOTLE_CACHE")
+                    .map(PathBuf::from)
+                    .or_else(|| var("HOME").map(|h| PathBuf::from(h).join(".cache/aristotle")))
+                    .map(|c| c.join("render/host/data"))
+            })?;
+        dir.join("serif").is_dir().then_some(dir)
+    }
+
+    /// The app on an in-memory panel, as `--preview` runs it.
+    fn memory_app(library: &Path, root: &Path) -> App {
+        let args = Args {
+            data: PathBuf::new(),
+            library: library.to_path_buf(),
+            root: root.to_path_buf(),
+            turn_mode: None,
+            night_method: None,
+            scan: true,
+            bench_open: None,
+            dicts: Vec::new(),
+            preview: None,
+            open: None,
+            index_dicts: false,
+            test_clippings: None,
+            lang: None,
+        };
+        let panel = Panel::memory(1072, 1448, prefs::STOCK_TURN);
+        build_app(
+            &args,
+            panel,
+            Prefs::default(),
+            start_dictionaries(&args),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn updates(app: &App) -> Vec<String> {
+        match &app.panel {
+            Panel::Memory(m) => m.updates.iter().map(|u| u.label.clone()).collect(),
+            Panel::Device(_) => Vec::new(),
+        }
+    }
+
+    /// Run the loop's background work until `done`, for at most 20 s.
+    fn wait(app: &mut App, done: impl Fn(&App) -> bool) {
+        let t = Instant::now();
+        while !done(app) {
+            assert!(t.elapsed() < Duration::from_secs(20), "timed out");
+            std::thread::sleep(Duration::from_millis(10));
+            app.background().unwrap();
+        }
+    }
+
+    /// Open the book from its snapshot and return the panel updates that
+    /// took, the snapshot's flash included.
+    fn reopen(app: &mut App, title: &str) -> Vec<String> {
+        let before = updates(app).len();
+        app.open_by_title(title).unwrap();
+        assert!(matches!(app.screen, Screen::Opening), "no snapshot open");
+        wait(app, |a| matches!(a.screen, Screen::Reader(_)));
+        updates(app)[before..].to_vec()
+    }
+
+    /// Reopening a book from its snapshot is one update, also when the
+    /// snapshot's footer is out of date: made ahead of time before the page
+    /// numbers were known (or at another reading speed).
+    /// An EPUB titled "Reopened" with two chapters in its contents (the
+    /// footer's progress line needs chapters).
+    fn write_book(path: &Path) {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let mut put = |name: &str, data: String| {
+            zip.start_file(name, opts).unwrap();
+            zip.write_all(data.as_bytes()).unwrap();
+        };
+        put("mimetype", "application/epub+zip".into());
+        put(
+            "META-INF/container.xml",
+            "<?xml version=\"1.0\"?><container version=\"1.0\" \
+             xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles>\
+             <rootfile full-path=\"content.opf\" media-type=\"application/oebps-package+xml\"/>\
+             </rootfiles></container>"
+                .into(),
+        );
+        for c in 0..2 {
+            let mut body = format!("<h1>Chapter {c}</h1>");
+            for p in 0..40 {
+                body.push_str(&format!(
+                    "<p>Paragraph {p}. Every art, and every science reduced to a \
+                     teachable form, aims, it is thought, at some good.</p>"
+                ));
+            }
+            put(
+                &format!("c{c}.xhtml"),
+                format!(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?><html \
+                     xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\"><head><title>{c}\
+                     </title></head><body>{body}</body></html>"
+                ),
+            );
+        }
+        put(
+            "nav.xhtml",
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" \
+             xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Contents</title></head>\
+             <body><nav epub:type=\"toc\"><ol><li><a href=\"c0.xhtml\">Chapter 0</a></li>\
+             <li><a href=\"c1.xhtml\">Chapter 1</a></li></ol></nav></body></html>"
+                .into(),
+        );
+        put(
+            "content.opf",
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><package \
+             xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\">\
+             <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier \
+             id=\"id\">reopened</dc:identifier><dc:title>Reopened</dc:title>\
+             <dc:language>en</dc:language></metadata><manifest>\
+             <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" \
+             properties=\"nav\"/>\
+             <item id=\"c0\" href=\"c0.xhtml\" media-type=\"application/xhtml+xml\"/>\
+             <item id=\"c1\" href=\"c1.xhtml\" media-type=\"application/xhtml+xml\"/>\
+             </manifest><spine><itemref idref=\"c0\"/><itemref idref=\"c1\"/></spine></package>"
+                .into(),
+        );
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn reopening_from_a_snapshot_is_one_update() {
+        let Some(data) = render_data() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "no render data directory in CI"
+            );
+            eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
+            return;
+        };
+        aristotle_render::use_data_dir(&data).unwrap();
+        let dir = testdir("reopen");
+        let (root, library) = (dir.join("books"), dir.join("library"));
+        std::fs::create_dir_all(&root).unwrap();
+        let book = root.join("reopened.epub");
+        write_book(&book);
+        let mut lib = Library::open(&library).unwrap();
+        lib.scan(&root, &ScanOptions::default()).unwrap();
+        let id = lib.books()[0].id.clone();
+        let at = progress::progress_at(&aristotle_render::book::Position::Fraction(0.4), 0.4, 1);
+        lib.set_progress(&id, at);
+        lib.save().unwrap();
+        // A reading speed of its own: the footer's minutes depend on it.
+        std::fs::write(
+            library.join("reading.json"),
+            r#"{"secs_per_page": 10.0, "samples": 2}"#,
+        )
+        .unwrap();
+        let snap = snapshot::path(&library, &id);
+        let prewarm = |app: &mut App| {
+            std::thread::sleep(prewarm::QUIET + Duration::from_millis(100));
+            wait(app, |_| snap.exists());
+            // Let the job finish and be reaped.
+            wait(app, |a| a.prewarm.deadline().is_none());
+        };
+
+        // 1. A snapshot made ahead of time, with no page numbers known yet;
+        //    then the book is paginated (as by an earlier read) and opened.
+        let mut app = memory_app(&library, &root);
+        prewarm(&mut app);
+        let style = app.prefs.style();
+        let stamp = snapshot::file_stamp(&book).unwrap();
+        let mut b = aristotle_render::book::Book::open(&book, &style, None).unwrap();
+        b.paginate();
+        let cache = pagecache::cache_path(&library, &id, stamp.0, stamp.1, &style);
+        pagecache::store(&cache, b.pagination().unwrap()).unwrap();
+        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+        app.leave().unwrap();
+
+        // 2. Made ahead of time with the page numbers known: the footer is
+        //    the one the open renders, at the reader's own speed.
+        std::fs::remove_file(&snap).unwrap();
+        let mut app = memory_app(&library, &root);
+        prewarm(&mut app);
+        let rec = app.lib.book(&id).unwrap().clone();
+        let mut src = Source::new(&app.lib, &rec, &app.mobi_cache).unwrap();
+        src.secs_per_page = app.speed.secs_per_page();
+        let shown = open::find_snapshot(&src, &style).expect("a valid snapshot");
+        src.exact = Some(shown.info.location);
+        let mut s =
+            Session::from_prepared(Session::prepare(src, style.clone(), false).unwrap()).unwrap();
+        let real = s.page(s.current).unwrap();
+        assert_eq!(
+            open::compare(&shown.page, &real, &style),
+            open::Verdict::Same
+        );
+        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+        app.leave().unwrap();
     }
 }

@@ -99,6 +99,17 @@ impl Bounds {
         dx * dx + dy * dy
     }
 
+    /// The overlap of two rectangles, if they overlap.
+    pub fn intersect(&self, o: &Bounds) -> Option<Bounds> {
+        let b = Bounds {
+            x0: self.x0.max(o.x0),
+            y0: self.y0.max(o.y0),
+            x1: self.x1.min(o.x1),
+            y1: self.y1.min(o.y1),
+        };
+        (b.x0 < b.x1 && b.y0 < b.y1).then_some(b)
+    }
+
     pub fn union(&self, o: &Bounds) -> Bounds {
         Bounds {
             x0: self.x0.min(o.x0),
@@ -631,7 +642,9 @@ impl Book {
             progress: self.fraction(location),
             left: footer_left,
         };
-        Ok(self.compose(&body, &folio, chrome))
+        let mut page = self.compose(&body, &folio, chrome);
+        page.images = self.images(location);
+        Ok(page)
     }
 
     /// Locate, render and compose page `index` (0-based).
@@ -643,7 +656,9 @@ impl Book {
             .render_body(location)
             .ok_or_else(|| format_err!("can't render page {}", index + 1))?;
         let folio = self.folio(index, location);
-        Ok(self.compose(&body, &folio, chrome))
+        let mut page = self.compose(&body, &folio, chrome);
+        page.images = self.images(location);
+        Ok(page)
     }
 }
 
@@ -698,6 +713,32 @@ impl Book {
                 offset: w.location.location(),
                 text: w.text,
             })
+            .collect()
+    }
+
+    /// The images of the page starting at `location`, clipped to the text
+    /// block. Only for Plato's engine: MuPDF draws whole pages, which night
+    /// mode inverts like text.
+    pub fn images(&mut self, location: usize) -> Vec<Bounds> {
+        if self.engine != Engine::Plato {
+            return Vec::new();
+        }
+        let Some(place) = self.placement(location) else {
+            return Vec::new();
+        };
+        let Some((rects, _)) = self.doc.images(Location::Exact(location)) else {
+            return Vec::new();
+        };
+        let (top, body_h) = self.style.body();
+        let block = Bounds {
+            x0: 0,
+            y0: top,
+            x1: self.style.width as i32,
+            y1: top + body_h as i32,
+        };
+        rects
+            .iter()
+            .filter_map(|r| Self::to_screen(r, place).intersect(&block))
             .collect()
     }
 

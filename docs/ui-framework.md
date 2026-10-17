@@ -115,6 +115,8 @@ Night mode shows the library, the reader page, the menu and the settings as whit
 
 Software inversion is the default. `Ui::set_night` inverts the UI canvas, and `Framebuffer::blit_inverted` inverts book pages during the copy to the framebuffer. Hardware inversion (`--night-method hardware`) sets `EPDC_FLAG_ENABLE_INVERSION` on each update through `Framebuffer::set_hw_invert`. The panel receives the same values either way. The software method keeps the framebuffer and the panel in agreement, so screenshots and the host preview are exact. With the hardware method, an update sent without the flag shows in day colours. Snapshots and the page cache always hold day pixels.
 
+Images in a book keep their day look: a cover or a photograph inverted is a negative, and a gray picture on a white page would become a gray box on black. `Page::images` records where Plato drew images, and before a page is inverted, by either method, those rectangles are inverted once (`panel::night_page` for pages sent directly, `PageView` for pages in the UI), so the inversion of the whole page brings them back. KOReader does the same for reflowable books by default, with a setting to turn it off for books whose images are mostly inline formulas or ornaments (`nightmode_images` in its `creoptions.lua`). PDF and other MuPDF pages are inverted whole, like text.
+
 Night mode keeps the waveforms of page turns (full mode 9) and flashes (full mode 8). FBInk calls these the night waveforms (GLKW16, GCK16), and the stock UI uses them by day too. Only gray chrome changes. Partial GL16 becomes partial GLKW16 (mode 9), as in KOReader's `waveform_night`.
 
 ## Text

@@ -72,6 +72,10 @@ fn sample_epub() -> PathBuf {
 #[test]
 fn locations_agree_with_pagination() {
     let Some(data) = data_dir() else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "no render data directory in CI"
+        );
         eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
         return;
     };
@@ -170,6 +174,10 @@ fn mobi_file(title: &str, text: &str) -> Vec<u8> {
 #[test]
 fn kindle_positions_reopen_on_the_same_page() {
     let Some(data) = data_dir() else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "no render data directory in CI"
+        );
         eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
         return;
     };
@@ -232,6 +240,10 @@ fn kindle_positions_reopen_on_the_same_page() {
 #[test]
 fn lazy_layout_agrees_with_a_full_walk() {
     let Some(data) = data_dir() else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "no render data directory in CI"
+        );
         eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
         return;
     };

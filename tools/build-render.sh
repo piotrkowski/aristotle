@@ -170,6 +170,10 @@ for f in "$REPO/crates/aristotle-render/assets/fonts/"Literata-*.ttf; do
     subset "$f" "$OUT/data/serif/$(basename "$f")" "$TEXT_UNICODES"
 done
 cp -p "$REPO/crates/aristotle-render/assets/fonts/Literata-OFL.txt" "$OUT/data/serif/"
+# The Greek koronis (U+1FBD), which Greek texts use as the elision mark,
+# drawn as the apostrophe (U+2019) instead of a half-em spacing breathing.
+PYTHONPATH="$DL/$FONTTOOLS" python3 "$REPO/tools/font-koronis.py" \
+    "$OUT/data/serif/"Literata-*.ttf "$OUT/data/fonts/"NotoSans-*.ttf
 cp -p "$SRC/css/epub.css" "$SRC/css/html.css" "$OUT/data/css/"
 
 # Glyph fallback for Plato's engine when MuPDF has no Noto fonts (the fork's
