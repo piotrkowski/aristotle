@@ -183,6 +183,50 @@ A 2-core host, release build, 28 MB sample of 25 EPUB, 4 MOBI, 1 PDF and 1 TXT i
 
 Covers cost about 6–10 ms each on the host. The PW4's Cortex-A9 is roughly ten times slower, so a first scan should take a few seconds **[inference]**.
 
+## Network: progress sync and catalogs
+
+Both are off until set up, in Settings › Network. The app opens connections only to the sync server and the catalogs given there, from worker threads; reading never waits for the network. Requests and redirects to a host the device's Wi-Fi policy does not allow fail at once with "<host> is not in the allowed hosts" ([device/README.md](../device/README.md#network)). Saving a server or catalog adds `host:port   # aristotle:sync` or `# aristotle:opds` to `net-allow` through `aristotlectl net allow add`, and removing it takes that line out again; lines without the tag are never touched. Code: `crates/aristotle-net` (HTTP over `ureq`, Basic and Digest auth, KOSync, OPDS), `aristotle_library::kosync` (positions), `crates/aristotle/src/{net,sync,catalogs}.rs`.
+
+### Settings files
+
+Until the on-screen keyboard can type them, the settings come from two files next to the app (`/mnt/us/aristotle/` for the installed bundle). They are read at start when they changed, and again with "Load sync.json" or "Load catalogs.json". A password in them is stored and then removed from the file.
+
+```json
+// sync.json
+{ "server": "http://192.168.1.10:17200", "username": "anna", "password": "…", "auto": true }
+
+// catalogs.json
+{ "catalogs": [
+  { "name": "calibre", "url": "http://192.168.1.10:8080/opds", "username": "anna", "password": "…" },
+  { "name": "Project Gutenberg", "url": "https://m.gutenberg.org/ebooks.opds/" } ] }
+```
+
+They end up in `<data>/accounts.json`, created owner-only (0600). On the device that folder is on the FAT userstore, which has no permissions, so anyone with the device on a USB cable can read it. For sync only `md5(password)` is kept, which still works as the password for that one server; catalog passwords are kept as given, because Basic and Digest need them. Catalogs are matched by name: a listed one replaces ours (keeping the stored password when the file has none), new ones are added. The screens are built for a `TextInput` request per field (server, user name, password, a catalog's address, search terms); until the keyboard lands, tapping such a row says which file to edit.
+
+### Progress sync (KOSync)
+
+The protocol is KOReader's (`kosync.koplugin`) against any compatible server, such as `koreader/kosync` [KOReader]. The document ID is the book ID without its `-2` suffix, KOReader's partial MD5. A random 32-digit device ID is made once; the device name is "Aristotle".
+
+| Format | Sent as `progress` | A pulled position |
+| --- | --- | --- |
+| EPUB | `/body/DocFragment[N]/body`, the chapter start | chapter N, then KOReader's percentage within it if it falls inside |
+| PDF, CBZ | the 1-based page | that page |
+| MOBI, AZW3, TXT | nothing: KOReader lays these out in its own DOM, and a made-up XPointer would take its reader to page 1 | the percentage |
+
+N counts the `<itemref>`s whose `idref` names a manifest item with an `href`, placeholders for unreadable items included, as crengine does (`epubfmt.cpp`) [KOReader]. Plato skips items missing from the archive, so the two numberings differ after such an item; `Fragments` maps between them from the OPF. Element paths after `DocFragment[N]` are not resolved yet.
+
+- **Open:** with "Sync automatically" on, the server's position is fetched (5 s timeout). If another device stored it after the book was last read here and it is on another page, a popup asks "Kobo is at 62%, in "Chapter". Go there?". The page never moves without asking.
+- **Close** (back to the library, the screensaver, quitting): the position is sent if it changed since the book opened, and only in the forms above.
+- Errors (refused login, an unreachable server) show on the sync screen and never interrupt reading. Failed pushes are not queued yet.
+
+### Catalogs (OPDS 1.2)
+
+Atom feeds with navigation and acquisition entries, `next`/`previous` paging (the pager arrows ask for the server's next page at the end of the list), and search through an OpenSearch description or a direct `{searchTerms}` template (calibre's). Links resolve against `xml:base` (Project Gutenberg). EPUB, AZW3, MOBI, PDF, CBZ and TXT links are offered, EPUB first; shop, loan and indirect acquisitions are skipped. Feeds are limited to 2 MB, and no covers are shown.
+
+A download goes to `documents/<catalog name>/<title> - <author>.<ext>`, at most 200 MB and never filling the userstore past its last 20 MB. It streams into a hidden `.<name>.part` file, is synced and renamed, never over an existing file (` (2)` is added, compared without case as FAT does); a failure or Back removes the part file. The library then scans, so the book appears with its ID and "Read now" opens it.
+
+HTTPS needs the `tls` feature (rustls with ring and the webpki root certificates), on in the release build (`APP_FEATURES` in `tools/build-render.sh`). It adds about 611 KB to the app; plain HTTP is enough for a server on the local network. A certificate that is not valid at the device's time reads as "Check the date and time".
+
 ## Known limitations
 
 - Stock annotations are not verified on real data. Neither device sample had bookmarks, highlights or notes, and no KF8 sidecar (`.azw3f`, `.azw3r`) has been seen yet.
