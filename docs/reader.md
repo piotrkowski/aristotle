@@ -90,6 +90,8 @@ The two crates are members of the root workspace but not of its `default-members
 | `core: zip deflate only` | `zip` with deflate only |
 | `core: lazy epub layout` | See [Lazy layout](#lazy-layout) |
 | `core: zip 9` | `zip` 9, still deflate only |
+| `core: no blank page before a forced break` | A forced page break on a page that draws nothing yet starts no new page, see [Formats and positions](#formats-and-positions) |
+| `core: hyphenation by element language` | `lang` and `xml:lang` of elements choose the patterns, see [Hyphenation](#hyphenation) |
 
 To change Plato, commit inside `third_party/plato` on the `aristotle` branch, push to the fork, and commit the submodule bump here. Cargo builds the submodule's working tree, so the next `tools/build-render.sh` run picks up the change. Rerun `tools/build-plato.sh` with a fresh `PLATO_BUILD` only for changes to `thirdparty/` or `mupdf_wrapper/`. A fix to an earlier change is squashed into that change's commit.
 
@@ -116,6 +118,8 @@ Plato opens fonts, stylesheets and hyphenation patterns by relative paths, so bo
 | --- | --- |
 | `fonts/` | The 12 fonts Plato loads unconditionally, some cut down or stubbed; DejaVu Sans symbols and Noto Sans Coptic as glyph fallback |
 | `serif/` | Literata, the body and UI font, from `crates/aristotle-render/assets/fonts/` |
+
+Literata and Noto Sans draw the Greek koronis (U+1FBD) with their apostrophe (U+2019) glyph (`tools/font-koronis.py`). Greek texts, Bywater's Aristotle among them, write the elision mark with U+1FBD (πάντ᾽ ἐφίεται), and Literata draws that character as a spacing breathing half an em wide, 509 units against 328 for U+2019, which left a gap after every elision. The koronis proper sits over a vowel in crasis and is encoded with the vowel.
 | `css/` | Plato's `epub.css` and `html.css` |
 | `hyphenation-patterns/` | `pl`, `en-us`, `en-gb`, `grc`, `la` from the Plato 0.9.45 release |
 
@@ -179,19 +183,19 @@ The menu offers 8 to 15 pt in seven steps, line heights of 1.2, 1.3 and 1.5 em, 
 
 ### Hyphenation
 
-Plato's patterns include Polish (`pl.standard.bincode`, minima 2 and 2). Plato picks patterns per element from `lang` or `xml:lang`, and otherwise from the book's first `dc:language`. Without a language it uses English.
+Plato's patterns include Polish (`pl.standard.bincode`, minima 2 and 2). The book's language is its first `dc:language`, or the `xml:lang` of its first `html` element; without one Plato uses English. Below `body`, an element's `xml:lang` or `lang` attribute sets the language of its text, block or inline (the fork's `core: hyphenation by element language`; upstream Plato read only a CSS property `lang` that no stylesheet sets). Each piece of text gets the patterns of its own language, and text in a language without patterns is not hyphenated, rather than hyphenated with the paragraph's.
 
 Some EPUBs list the wrong language first. One Polish book listing `de-DE` first was hyphenated as German ("zobac-zymy"). For books that declare several languages, `lang.rs` samples 192 KiB of text, picks the declared language whose marker letters are most frequent, and passes it to `EpubDocument::set_language`. `aristotle-render --lang TAG` forces a language, and `aristotle-render info BOOK` prints the language and whether its patterns are loaded.
 
 Plato loads all files in `hyphenation-patterns/` on first use, 5 to 9 ms on the host, so the bundle ships only five languages. The app loads them on the `warm-up` thread.
-
-A trap not yet traced in Plato's code: in a Polish book, paragraphs marked `<p lang="grc" xml:lang="grc">` did not get the `grc` patterns. With `--lang grc` they did.
 
 ## Formats and positions
 
 `mobi.rs` converts a DRM-free MOBI 7 book once to an uncompressed EPUB, because MuPDF's HTML layout has no Polish patterns and justifies poorly. It handles PalmDOC, UTF-8 and CP1252, images, `<mbp:pagebreak/>` chapter splits, and HTML that Plato's XML parser rejects. The language comes from EXTH 524 or the header's locale. `<a filepos=N>` links point to anchors `id="fileposN"`, as calibre writes them. DRM, HUFF/CDIC compression and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. With a cached conversion, opening reads only the PalmDB header and record 0. `tools/host/make-test-mobi.py` makes a MOBI 7 test book from an EPUB.
 
 For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out a spine item as far as needed. For MuPDF documents, locations are page indices. `x / y` needs the whole book laid out, so `Book` also navigates by location (`page_start`, `next_page`, `previous_page`, `chapter_page`, `render_location`), and the footer leaves out the page number until `set_pagination` supplies the page starts.
+
+A forced page break (`page-break-before` or `page-break-after: always`) starts a new page only if the current one draws something. Upstream Plato also broke on a page that held nothing but anchors, and that page showed blank: Project Gutenberg's EPUB of Aristotle's Politics starts its text with `<header id="pg-header"><h2>` and breaks before every `h2`, so its second page was empty, and black in night mode. Changes like this one move page breaks, so they bump `LAYOUT_VERSION` (`pagecache.rs`), which keys the page numbers on disk and the snapshots.
 
 Saved positions (`position.rs`) survive a new layout. EPUB positions are a spine item and an offset inside it. `Spine::read` repeats how `EpubDocument::new` builds the spine, since Plato keeps it private. Converted MOBI books store the stock Kindle position, a byte offset into the MOBI text, as `.mbs` sidecars do (`docs/library.md`). The converter records an anchor pair at least 200 bytes apart and stores them as `<book>.posmap` next to the cached EPUB. Positions in between are interpolated. Other formats store a fraction.
 
@@ -209,14 +213,14 @@ The key covers the book id, the file's size and mtime from `stat`, a hash of the
 
 Copying the pages happens on the main thread. Compressing and writing happen on `snapshot-writer`, because an fsync on the FAT userstore took 79 to 379 ms on the device [dev].
 
-The page chrome depends only on the location. Anything live added to it, such as a clock, must be left out of saved pages or redrawn before they are shown.
+The page chrome depends on the location, on whether the page numbers are known, and on the reading speed (the minutes left in the chapter). Snapshots made ahead of time use the reader's measured speed, like an open. Anything live added to the chrome, such as a clock, must be left out of saved pages or redrawn before they are shown.
 
 ### The open path
 
 1. On touch-down the tapped card inverts with A2. On release the snapshot is decoded (0.6 ms on the host) and goes out with one mode-8 flash.
 2. The `open` worker opens the book, places it at the snapshot's page start, and renders that page and both neighbours.
 3. Meanwhile turns move between the snapshot's two pages, and the menu opens with the stored labels. "Library" abandons the worker and saves the page shown as the progress. Holds, drags and link taps do nothing. Anything else that needs the book waits for it.
-4. The main loop polls the worker every 10 ms. If the real page equals the snapshot's pixels at the same location, nothing is sent. Otherwise one full mode-9 update replaces it.
+4. The main loop polls the worker every 10 ms. If the real page equals the snapshot's pixels at the same location, nothing is sent. If only the header or footer differ, as when the page numbers became known after the snapshot was saved, the snapshot's page stays the session's page until the next turn, and nothing is sent either. Otherwise one full mode-9 update replaces it.
 
 Without a snapshot the tapped card stays inverted while the worker opens the book, and the library keeps taking input. `prewarm.rs` makes that case rare: after 2 s without input on the library screen, it makes snapshots for the five most recent books that lack a valid one. Any touch cancels it between steps, and each book is tried once per run, position and style.
 
@@ -249,7 +253,7 @@ The driver runs one update at a time and reads the framebuffer while processing 
 | Menu closing, page changed behind it | Full mode 9, whole screen |
 | Busy mark, bookmark ribbon | DU |
 
-In night mode, turns and flashes stay the same and gray chrome uses GLKW16 instead of GL16. Pages are inverted in software by default, or by the EPDC with `--night-method hardware` (`docs/ui-framework.md`, "Night mode").
+In night mode, turns and flashes stay the same and gray chrome uses GLKW16 instead of GL16. Pages are inverted in software by default, or by the EPDC with `--night-method hardware`; images in EPUBs keep their day look (`docs/ui-framework.md`, "Night mode").
 
 ## The app
 
@@ -351,7 +355,7 @@ The app writes `[perf <ms since start>]` lines to stderr, which `run-aristotle.s
 | `startup: first frame submitted` | Process start to the library's first frame |
 | `scan: ...` | Scan time and what changed |
 | `open: "<title>": snapshot submitted after N ms` | Tap release to the snapshot's flash |
-| `open: "<title>": book ready N ms after the tap ...; snapshot Same\|Chrome\|Page` | The worker's result; anything but `Same` sent a correcting update |
+| `open: "<title>": book ready N ms after the tap ...; snapshot Same\|Chrome\|Page` | The worker's result; `Chrome` kept the snapshot's page, `Page` sent a correcting update |
 | `open: ... no snapshot` | An open without a snapshot, with its steps |
 | `turn <dir>: tap->submit` | Release to submit, whether prerendered, the wait for the previous update |
 | `panel: <what> on the panel N ms after submit` | Update completion reported by the driver |
