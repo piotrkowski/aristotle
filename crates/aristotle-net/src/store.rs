@@ -166,17 +166,25 @@ struct CatalogsFile {
     catalogs: Vec<CatalogSettings>,
 }
 
-/// Make sure `dir` can hold secrets: create it (mode 0700) if missing, and
-/// refuse it unless it is a real directory (not a symlink) owned by this
-/// process's user and not writable by anyone else.
+/// Make sure `dir` can hold secrets: create it if missing, and refuse it
+/// unless it is a real directory (not a symlink) owned by this process's
+/// user with no permission bits for group or others.
+///
+/// On the device the app runs as root, and the folder is made mode 000 as
+/// the agent's install makes `/var/local/aristotle`: the stock framework
+/// runs `chgrp -R` and `chmod -R g=u` over `/var/local` on every start
+/// (`device/README.md`, "Security"), so the group would get whatever the
+/// owner has, and root needs no bits. Elsewhere (tests, a developer's
+/// folder) it is made 0700.
 pub fn private_dir(dir: &Path) -> io::Result<()> {
     use std::os::unix::fs::{DirBuilderExt, MetadataExt};
-    if !dir.exists() {
-        fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
-    }
-    let m = fs::symlink_metadata(dir)?;
     // SAFETY: geteuid has no preconditions and cannot fail.
     let me = unsafe { libc::geteuid() };
+    if !dir.exists() {
+        let mode = if me == 0 { 0o000 } else { 0o700 };
+        fs::DirBuilder::new().recursive(true).mode(mode).create(dir)?;
+    }
+    let m = fs::symlink_metadata(dir)?;
     let bad = |why: &str| {
         Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -189,8 +197,8 @@ pub fn private_dir(dir: &Path) -> io::Result<()> {
     if m.uid() != me {
         return bad("owned by another user");
     }
-    if m.mode() & 0o022 != 0 {
-        return bad("writable by other users");
+    if m.mode() & 0o077 != 0 {
+        return bad("open to other users");
     }
     Ok(())
 }
@@ -456,6 +464,8 @@ mod tests {
             .join("aristotle-net-tests")
             .join(format!("{name}-{}-{nanos}", std::process::id()));
         fs::create_dir_all(&d).unwrap();
+        // Owner-only, as private_dir wants a folder for secrets.
+        fs::set_permissions(&d, fs::Permissions::from_mode(0o700)).unwrap();
         d
     }
 
@@ -572,6 +582,10 @@ mod tests {
             io::ErrorKind::PermissionDenied
         );
         assert!(!open.join(FILE).exists());
+        // And one the framework's `chmod -R g=u` has opened to its group.
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o770)).unwrap();
+        assert!(a.save(&dir).is_err());
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
         // So is a symlink to a good folder.
         std::os::unix::fs::symlink(&dir, base.join("link")).unwrap();
         assert!(private_dir(&base.join("link")).is_err());
