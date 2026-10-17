@@ -34,6 +34,7 @@ Early bring-up. Our Rust code draws on the panel and reads touch on the real dev
 | `docs/ui-framework.md` | The UI toolkit: architecture, e-ink UX rules, font engine choice, damage and waveform hints, preview |
 | `docs/prior-art.md` | Survey of existing Kindle, e-ink and Plato-related projects |
 | `docs/reader.md` | The book renderer: how Plato's engine is built in, typesetting and hyphenation for Polish, MOBI, measurements |
+| `docs/press.md` | The daily newspaper: sources, extraction, e-ink image modes, the issue, configuration, sync to the Kindle |
 | `crates/aristotle-hal` | Hardware layer: e-ink framebuffer (Rex update ABI, pipelined `Presenter`), touch input |
 | `crates/aristotle-ui` | Retained UI toolkit for e-ink: shaped and justified text, widgets, damage with waveform hints, gestures, desktop PNG preview |
 | `crates/aristotle-pen` | Stroke rendering plus record/replay latency tooling |
@@ -45,6 +46,7 @@ Early bring-up. Our Rust code draws on the panel and reads touch on the real dev
 | `probe/host/` | Host-side tools that take apart the stock firmware |
 | `probe/device/` | KUAL extensions that run read-only probes on the Kindle |
 | `tools/` | Fetch scripts for pinned reverse-engineering tools; the Plato cross-build and patches; `build-render.sh` |
+| `tools/press` | Host tool (Python, uv) that builds the daily newspaper EPUB and syncs it to the Kindle over SSH |
 | `third_party/plato` | Upstream Plato (git submodule), used as a read-only reference |
 
 ## License
