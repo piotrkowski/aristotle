@@ -63,7 +63,7 @@ Plato opens fonts, stylesheets and hyphenation patterns by paths relative to the
 
 | Path | Contents | Source |
 | --- | --- | --- |
-| `fonts/` | The 12 fonts Plato's engine loads unconditionally (Libertinus Serif as a stub, Noto Sans cut to Latin and Greek, Source Code, Parisienne, Delius) | Plato source tree |
+| `fonts/` | The 12 fonts Plato's engine loads unconditionally (Libertinus Serif as a stub, Noto Sans cut to Latin and Greek, Source Code, Parisienne, Delius); the glyph fallback: DejaVu Sans cut to symbols, Noto Sans Coptic | Plato source tree; DejaVu 2.37 release, pinned by SHA-256; MuPDF's source tree |
 | `serif/` | Literata, the body, chrome and app UI font, cut to Latin and Greek | `crates/aristotle-render/assets/fonts/` (OFL, committed with its licence) |
 | `css/` | `epub.css`, `html.css` | Plato source tree |
 | `hyphenation-patterns/` | `pl`, `en-us`, `en-gb`, `grc`, `la` (`HYPH_LANGS`) | Plato 0.9.45 release archive, pinned by SHA-256 |
@@ -244,13 +244,14 @@ The device build only has to read what the owner reads: Polish and English, some
 | Noto Serif back in MuPDF | 9.14 | 6.94 | +0.29 MB, see below; patch `mupdf-0001` |
 | opt-level "s", 3 for the page path | 8.47 | 6.77 | `opt-level = "s"`, but 3 for `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` |
 | FreeType modules | **8.36** | **6.60** | No PFR, Type 42, Windows FNT, PCF, BDF, LZW/bzip2 streams, OT-SVG, SDF |
+| Merged with `main` (night mode, settings, series, icons, screensaver, page snapshots) | 9.15 | 6.63 | New features; the snapshots' `zstd` brings the Zstandard C library back (about 0.5 MB) |
 
-The data directory went from 5.04 to 2.54 MB: `fonts/` 2.91 to 1.18, `serif/` 1.28 to 0.90, `hyphenation-patterns/` 0.85 to 0.46. The app tarball went from 19.4 to 5.5 MB.
+The data directory went from 5.04 to 2.68 MB: `fonts/` 2.91 to 1.32 (0.14 of it the glyph fallback and licences), `serif/` 1.28 to 0.90, `hyphenation-patterns/` 0.85 to 0.46. The app tarball went from 19.4 to 6.0 MB.
 
 What was removed, and why that is safe for this owner:
 
 - **MuPDF's fonts.** Plato's engine renders EPUB (and converted MOBI) with Literata, which has Latin, Latin Extended and Greek with polytonic, so the Noto fallback fonts only ever drew symbols and CJK. PDFs embed their fonts; those that don't get the 14 standard fonts, which MuPDF keeps (URW Nimbus, Latin, monotonic Greek and Cyrillic; checked with a PDF using non-embedded Times, Helvetica and Courier with Polish and Greek glyph names, unchanged). Noto Serif (Latin, polytonic Greek, Cyrillic) stays because MuPDF's reflowed text (TXT, MOBI the converter can't take) needs it for polytonic Greek: without it the Greek accented letters of a TXT page vanished. Choices: `MUPDF_FONTS=latin-greek` (default), `base14` (without Noto Serif), `full`.
-- **Glyph fallback in Plato's engine.** Patch `0005` turns it off when MuPDF has no Noto fonts: a character Literata lacks shows Literata's `.notdef` box. In the 68 EPUBs on the host (the 23 Platon dialogues and 45 other Polish books), Literata lacks only CJK characters (a few in the bibliographies of two books), U+2B1C ⬜ (22 times in one book), and spaces and invisible marks that HarfBuzz handles without the font.
+- **Glyph fallback in Plato's engine.** Patch `0005` replaces MuPDF's Noto and Droid fonts with two small files from `data/fonts/`: Noto Sans Coptic for Coptic, and DejaVu Sans cut to arrows, mathematical operators up to ⋅, box drawing, geometric shapes, miscellaneous symbols up to the music signs, dingbats up to the checkmarks, crosses and stars, and U+2B00 to U+2B2F (106 KB unhinted). Other characters Literata lacks, CJK included, show a `.notdef` box. In the 68 EPUBs on the host (the 23 Platon dialogues and 45 other Polish books), Literata lacks only CJK characters (a few in the bibliographies of two books), U+2B1C ⬜ (22 times in one book), and spaces and invisible marks that HarfBuzz handles without the font.
 - **MuPDF formats.** EPUB and HTML go through Plato's engine. MuPDF keeps PDF, images (Plato decodes EPUB pictures through it; the owner's books have JPEG and PNG only), MOBI (fallback) and TXT. CBZ would no longer open; the library indexes it, but the owner has none. Choice: `MUPDF_FORMATS=minimal` (default) or `full`.
 - **DjVu.** None in the library. `PLATO_DJVU=1` brings it back.
 - **Fonts in `data/`.** `FONT_SUBSET=latin-greek` (default) cuts Literata and Noto Sans to Latin (all of it), Greek and Coptic, Greek Extended, combining marks, general punctuation, super- and subscripts, currency, letterlike symbols, number forms, arrows, mathematical operators, geometric shapes and the f-ligatures, with every OpenType feature and Literata's hinting (the app UI hints). Cyrillic goes. Libertinus Serif, which Plato opens but never draws because `Book` replaces the serif family with Literata, ships as a stub with only the space. Source Code Pro and Parisienne are unmodified: their licences reserve their names for the original fonts. `FONT_SUBSET=none` ships everything.
@@ -258,8 +259,10 @@ What was removed, and why that is safe for this owner:
 
 **Rendering check.** The host build before and after rendered every page of Platon's *Fedon* (EPUB, 341 pages), Arystoteles' *Etyka nikomachejska* (Polish EPUB with some Greek, 269), the MOBI made from *Fedon* by `make-test-mobi.py` (converted, 297; and through MuPDF, first 400 pages), a TXT with Polish and polytonic Greek (93), two PDFs (zlib's manual, non-embedded fonts, 2; LittleCMS tutorial, 60), a PDF with non-embedded base-14 fonts and Polish and Greek glyphs (1), and a synthetic EPUB with polytonic Greek, Latin, Polish and symbols (8). The raw frames are byte-identical except:
 
-- The symbols page of the synthetic EPUB: ★ ✓ ⬜ ♪ ☞ and 中文 now show `.notdef` boxes (they came from Noto and Droid fonts). Accepted: the owner reads no CJK, and these symbols are rare.
+- The symbols page of the synthetic EPUB: ★ ✓ ⬜ ♪ ☞ ∞ now come from DejaVu Sans instead of Noto, so they look slightly different, and 中文 shows `.notdef` boxes (it came from Droid Sans Fallback). Accepted: the owner reads no CJK.
 - The MOBI read through MuPDF (every rendered page): MuPDF's HTML layout uses Times (URW Nimbus Roman) instead of Charis SIL, so the book reflows (469 to 428 pages). This path only serves MOBI files the converter can't take; the text stays complete, Polish included.
+
+The app's UI uses the same subset Literata (mapped from `data/serif/`): `aristotle-ui-preview` built with the subset files in place of the full ones gives the same 48 PNGs, day, night and icons, pixel for pixel. The snapshot key hashes the sizes and mtimes of `data/fonts`, `serif`, `css` and `hyphenation-patterns`, so the new data invalidates old snapshots once; `build-render.sh` keeps the source files' mtimes, so rebuilding the same data does not.
 
 Host times (best of five, Fedon and Arystoteles): render median 2.1 and 2.8 ms before, 2.1 and 2.7 ms after; pagination unchanged within noise. Maximum RSS for Arystoteles fell from 25.4 to 23.5 MiB. Profile measurements: opt-level "s" everywhere cost about 5 % per page on the host, "z" 75 %; the split above stays within noise of opt-level 3.
 

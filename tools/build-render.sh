@@ -61,8 +61,8 @@ sh "$REPO/tools/prepare-plato-src.sh"
 # plato-core's patched build.rs links the archives from these directories
 # (libmupdf_wrapper.a sits in target/mupdf_wrapper/Kindle in older builds).
 export PLATO_LIB_DIRS="$B/plato/libs:$B/plato/target/mupdf_wrapper/Kindle"
-# Any crate that compiles C with the cc crate uses Zig too (none does since
-# zip lost its zstd codec, but the setup costs nothing).
+# zstd-sys (the reader app's page snapshots) compiles C with the cc crate:
+# use Zig too.
 T_=$(printf %s "$TARGET" | tr - _)
 export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar" "CFLAGS_$T_=-O2"
 
@@ -113,15 +113,20 @@ fetch "$FONTTOOLS" \
     "https://files.pythonhosted.org/packages/c7/93/0dd45cd283c32dea1545151d8c3637b4b8c53cdb3a625aeb2885b184d74d/$FONTTOOLS" \
     906306ac7afe2156fcf0042173d6ebbb05416af70f6b370967b47f8f00103bbb
 TEXT_UNICODES=U+0000-036F,U+0370-03FF,U+1E00-1FFF,U+2000-22FF,U+25A0-25FF,U+FB00-FB06
-# subset SRC DST UNICODES
+# subset SRC DST UNICODES [OPTION...]. The output keeps the source's mtime,
+# and copies keep theirs, so the app's snapshot key (sizes and mtimes of
+# data/) only changes when the data does.
 subset() {
     if [ "$FONT_SUBSET" = none ]; then
-        cp "$1" "$2"
+        cp -p "$1" "$2"
         return
     fi
-    PYTHONPATH="$DL/$FONTTOOLS" python3 -m fontTools.subset "$1" --output-file="$2" \
-        --unicodes="$3" --layout-features='*' --name-IDs='*' --name-languages='*' \
-        --notdef-outline
+    _src=$1 _dst=$2 _uni=$3
+    shift 3
+    PYTHONPATH="$DL/$FONTTOOLS" python3 -m fontTools.subset "$_src" --output-file="$_dst" \
+        --unicodes="$_uni" --layout-features='*' --name-IDs='*' --name-languages='*' \
+        --notdef-outline "$@"
+    touch -r "$_src" "$_dst"
 }
 for f in LibertinusSerif-Regular.otf LibertinusSerif-Italic.otf LibertinusSerif-Bold.otf \
          LibertinusSerif-BoldItalic.otf; do
@@ -134,13 +139,34 @@ done
 # them the engine has no fonts at all.
 for f in SourceCodeVariable-Roman.otf SourceCodeVariable-Italic.otf Parisienne-Regular.ttf \
          Delius-Regular.ttf; do
-    cp "$SRC/fonts/$f" "$OUT/data/fonts/"
+    cp -p "$SRC/fonts/$f" "$OUT/data/fonts/"
 done
 for f in "$REPO/crates/aristotle-render/assets/fonts/"Literata-*.ttf; do
     subset "$f" "$OUT/data/serif/$(basename "$f")" "$TEXT_UNICODES"
 done
-cp "$REPO/crates/aristotle-render/assets/fonts/Literata-OFL.txt" "$OUT/data/serif/"
-cp "$SRC/css/epub.css" "$SRC/css/html.css" "$OUT/data/css/"
+cp -p "$REPO/crates/aristotle-render/assets/fonts/Literata-OFL.txt" "$OUT/data/serif/"
+cp -p "$SRC/css/epub.css" "$SRC/css/html.css" "$OUT/data/css/"
+
+# Glyph fallback for Plato's engine when MuPDF has no Noto fonts (patch
+# 0005): DejaVu Sans cut to arrows, mathematical operators, box drawing,
+# geometric shapes, miscellaneous symbols up to the music signs, dingbats up
+# to the checkmarks, crosses and stars, and the white squares (about 105 KB
+# unhinted), and Noto Sans Coptic from MuPDF's tree. Neither licence
+# reserves the names used here. CJK stays without a font.
+DEJAVU=dejavu-fonts-ttf-2.37
+fetch "$DEJAVU.tar.bz2" \
+    "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/$DEJAVU.tar.bz2" \
+    fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7
+if [ ! -f "$DL/$DEJAVU/ttf/DejaVuSans.ttf" ]; then
+    tar -xjf "$DL/$DEJAVU.tar.bz2" -C "$DL" "$DEJAVU/ttf/DejaVuSans.ttf" "$DEJAVU/LICENSE"
+fi
+subset "$DL/$DEJAVU/ttf/DejaVuSans.ttf" "$OUT/data/fonts/DejaVuSans-Symbols.ttf" \
+    U+2190-21FF,U+2200-22C5,U+2500-257F,U+25A0-25FF,U+2600-266F,U+2700-2775,U+2B00-2B2F \
+    --no-hinting
+cp -p "$DL/$DEJAVU/LICENSE" "$OUT/data/fonts/DejaVuSans-LICENSE.txt"
+NOTO="$B/plato/thirdparty/mupdf/resources/fonts/noto"
+cp -p "$NOTO/NotoSansCoptic-Regular.otf" "$OUT/data/fonts/"
+cp -p "$NOTO/COPYING" "$OUT/data/fonts/Noto-OFL.txt"
 
 # Plato's hyphenation patterns are prebuilt (kl-hyphenate bincode) and only
 # published in its release archive; take them from the release that matches

@@ -1,11 +1,14 @@
 Let a MuPDF built without its Noto and CJK fonts (MuPDF's TOFU options,
-tools/build-plato.sh MUPDF_FONTS other than full) link. Plato takes the fallback
-fonts for glyphs its EPUB font lacks straight from MuPDF's embedded font
-symbols, which pulls in all of them (about 17 MB). build-plato.sh writes
-the font set to libs/mupdf-fonts; for anything but "full", build.rs sets
-cfg(mupdf_tofu), there is no fallback, and a missing glyph keeps the
-font's .notdef. build.rs also reruns when the archives change, so a
-rebuilt C library gets relinked.
+tools/build-plato.sh MUPDF_FONTS other than full) link. Plato takes the
+fallback fonts for glyphs its EPUB font lacks straight from MuPDF's
+embedded font symbols, which pulls in all of them (about 17 MB).
+build-plato.sh writes the font set to libs/mupdf-fonts; for anything but
+"full", build.rs sets cfg(mupdf_tofu) and the fallback comes from two
+small files in the data directory instead: fonts/NotoSansCoptic-Regular.otf
+for Coptic and fonts/DejaVuSans-Symbols.ttf (a symbol subset) for
+everything else. Without them a missing glyph keeps the font's .notdef.
+build.rs also reruns when the archives change, so a rebuilt C library gets
+relinked.
 
 --- a/crates/core/build.rs
 +++ b/crates/core/build.rs
@@ -57,22 +60,31 @@ rebuilt C library gets relinked.
      match script {
          HB_SCRIPT_HANGUL |
          HB_SCRIPT_HIRAGANA |
-@@ -963,6 +963,14 @@
+@@ -963,6 +963,23 @@
  
          _ => &_binary_resources_fonts_droid_DroidSansFallback_ttf_start,
      }
 +
-+    // MuPDF without its Noto and CJK fonts: no fallback, missing glyphs
-+    // keep the font's .notdef.
++    // MuPDF without its Noto and CJK fonts: two small fonts from the data
++    // directory stand in, Noto Sans Coptic for Coptic and a symbol font for
++    // the rest. A missing file means no fallback: the glyph keeps the
++    // font's .notdef.
 +    #[cfg(mupdf_tofu)]
 +    {
-+        let _ = script;
-+        &[]
++        use std::sync::OnceLock;
++        static COPTIC: OnceLock<Vec<u8>> = OnceLock::new();
++        static SYMBOLS: OnceLock<Vec<u8>> = OnceLock::new();
++        let (cell, path) = if script == HB_SCRIPT_COPTIC {
++            (&COPTIC, "fonts/NotoSansCoptic-Regular.otf")
++        } else {
++            (&SYMBOLS, "fonts/DejaVuSans-Symbols.ttf")
++        };
++        cell.get_or_init(|| std::fs::read(path).unwrap_or_default())
 +    }
  }
  
  #[inline]
-@@ -1318,6 +1326,9 @@
+@@ -1318,6 +1335,9 @@
                  }
              }
              let font_data = font_data_from_script(script);
