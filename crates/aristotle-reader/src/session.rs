@@ -9,6 +9,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use aristotle_library::{BookRecord, Library, Progress};
@@ -44,11 +46,88 @@ pub struct Session {
 }
 
 /// What the timing log reports about opening a book.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct OpenTimes {
     pub open: Duration,
     pub place: Duration,
     pub render: Duration,
+    /// Rendering the pages on either side, when opened with neighbours.
+    pub neighbours: Duration,
     pub pages_cached: bool,
+}
+
+/// Where a book is and where it was left: everything [`Session::prepare`]
+/// needs from the library, owned, so it can go to another thread.
+#[derive(Clone)]
+pub struct Source {
+    pub id: String,
+    pub title: String,
+    pub path: PathBuf,
+    pub stamp: (u64, i64),
+    pub data_dir: PathBuf,
+    pub mobi_cache: PathBuf,
+    pub saved: Option<Progress>,
+    /// A page start to open at instead of placing `saved`: the location of
+    /// a snapshot made for exactly this progress, so the book opens on the
+    /// page the snapshot shows, whatever rounding the locator went through.
+    pub exact: Option<usize>,
+    /// Whether to paginate the whole book in the background when its page
+    /// numbers are not cached (not for snapshots made ahead of time).
+    pub paginate: bool,
+    /// Set by whoever stops waiting for this open; [`Session::prepare`]
+    /// gives up between its steps.
+    pub cancel: Option<Arc<AtomicBool>>,
+}
+
+/// Held by every thread that opens a book in the background (an open
+/// worker, a snapshot made ahead of time) from the start of
+/// [`Session::prepare`] until its result is handed over or dropped, so an
+/// abandoned open never holds a laid-out book next to a new one.
+pub static OPEN_GATE: Mutex<()> = Mutex::new(());
+
+impl Source {
+    pub fn new(lib: &Library, rec: &BookRecord, mobi_cache: &Path) -> Result<Source, Error> {
+        let path = lib
+            .absolute_path(rec)
+            .ok_or_else(|| format_err!("the library has no root"))?;
+        // The file itself, in case it changed since the last scan.
+        let stamp = crate::snapshot::file_stamp(&path).unwrap_or((rec.file.size, rec.file.mtime));
+        Ok(Source {
+            id: rec.id.clone(),
+            title: rec.meta.title.clone(),
+            path,
+            stamp,
+            data_dir: lib.data_dir().to_path_buf(),
+            mobi_cache: mobi_cache.to_path_buf(),
+            saved: rec.progress.clone(),
+            exact: None,
+            paginate: true,
+            cancel: None,
+        })
+    }
+}
+
+/// A book opened, placed and rendered: the slow part of opening, done by
+/// [`Session::prepare`] on any thread. Unlike a [`Session`] it is `Send`
+/// (no `Rc` pages, no FreeType chrome fonts), so a worker thread can make
+/// it while the main loop shows a snapshot and keeps taking input.
+pub struct Prepared {
+    src: Source,
+    style: Style,
+    book: Book,
+    pub current: usize,
+    pages: Vec<(usize, Page)>,
+    next_of: HashMap<usize, Option<usize>>,
+    prev_of: HashMap<usize, Option<usize>>,
+    paginator: Option<Paginator>,
+    pub times: OpenTimes,
+}
+
+impl Prepared {
+    /// The page start after the current one, if the worker found it.
+    pub fn next(&self) -> Option<usize> {
+        self.next_of.get(&self.current).copied().flatten()
+    }
 }
 
 impl Session {
@@ -59,88 +138,133 @@ impl Session {
         style: Style,
         mobi_cache: &Path,
     ) -> Result<(Session, OpenTimes), Error> {
-        let path = lib
-            .absolute_path(rec)
-            .ok_or_else(|| format_err!("the library has no root"))?;
+        let prepared = Session::prepare(Source::new(lib, rec, mobi_cache)?, style, false)?;
+        let times = prepared.times;
+        Ok((Session::from_prepared(prepared)?, times))
+    }
+
+    /// Open, place at the saved position and render the first page (and,
+    /// with `neighbours`, the pages on either side), without touching
+    /// anything the main thread owns.
+    pub fn prepare(src: Source, style: Style, neighbours: bool) -> Result<Prepared, Error> {
+        let cancelled = || {
+            if src
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::Relaxed))
+            {
+                Err(format_err!("cancelled"))
+            } else {
+                Ok(())
+            }
+        };
+        cancelled()?;
         let t = Instant::now();
-        let book = Book::open(&path, &style, Some(mobi_cache))
-            .with_context(|| format!("can't open {}", path.display()))?;
-        let chrome = Chrome::load(&style).context("can't load the chrome fonts")?;
+        let mut book = Book::open(&src.path, &style, Some(&src.mobi_cache))
+            .with_context(|| format!("can't open {}", src.path.display()))?;
+        // The chrome fonts of this thread: FreeType faces can't move to
+        // another one, so the session loads its own.
+        let mut chrome = Chrome::load(&style).context("can't load the chrome fonts")?;
         let t_open = t.elapsed();
-        let mut s = Session {
-            id: rec.id.clone(),
-            title: rec.meta.title.clone(),
-            path,
-            stamp: (rec.file.size, rec.file.mtime),
-            data_dir: lib.data_dir().to_path_buf(),
-            mobi_cache: mobi_cache.to_path_buf(),
+        cancelled()?;
+        let (pages_cached, paginator) = start_pagination(
+            &mut book,
+            &style,
+            &src.data_dir,
+            &src.id,
+            src.stamp,
+            &src.path,
+            src.paginate.then_some(src.mobi_cache.as_path()),
+        );
+        let t = Instant::now();
+        let target = src.exact.unwrap_or_else(|| {
+            progress::positions(src.saved.as_ref())
+                .iter()
+                .find_map(|p| book.location_of(p))
+                .unwrap_or(0)
+        });
+        let current = book
+            .page_start(target)
+            .ok_or_else(|| format_err!("the book has no pages"))?;
+        let t_place = t.elapsed();
+        cancelled()?;
+        let t = Instant::now();
+        let mut pages = vec![(current, book.render_location(current, &mut chrome)?)];
+        let t_render = t.elapsed();
+        cancelled()?;
+        let t = Instant::now();
+        let (mut next_of, mut prev_of) = (HashMap::new(), HashMap::new());
+        if neighbours {
+            let next = book.next_page(current);
+            let prev = book.previous_page(current);
+            next_of.insert(current, next);
+            prev_of.insert(current, prev);
+            for loc in [next, prev].into_iter().flatten() {
+                match book.render_location(loc, &mut chrome) {
+                    Ok(page) => pages.push((loc, page)),
+                    Err(e) => eprintln!("aristotle: prerender: {e:#}"),
+                }
+            }
+        }
+        let t_neighbours = t.elapsed();
+        Ok(Prepared {
+            src,
             style,
             book,
-            chrome,
-            current: 0,
-            pages: Vec::new(),
-            next_of: HashMap::new(),
-            prev_of: HashMap::new(),
-            paginator: None,
-        };
-        let pages_cached = s.load_pagination();
-        let t = Instant::now();
-        s.current = s.place(rec.progress.as_ref())?;
-        let t_place = t.elapsed();
-        let t = Instant::now();
-        s.page(s.current)?;
-        let t_render = t.elapsed();
-        Ok((
-            s,
-            OpenTimes {
+            current,
+            pages,
+            next_of,
+            prev_of,
+            paginator,
+            times: OpenTimes {
                 open: t_open,
                 place: t_place,
                 render: t_render,
+                neighbours: t_neighbours,
                 pages_cached,
             },
-        ))
+        })
     }
 
-    /// The page start for a saved progress record: its locator if the book
-    /// can place it, else its fraction, else the first page.
-    fn place(&mut self, saved: Option<&Progress>) -> Result<usize, Error> {
-        let target = progress::positions(saved)
-            .iter()
-            .find_map(|p| self.book.location_of(p))
-            .unwrap_or(0);
-        self.book
-            .page_start(target)
-            .ok_or_else(|| format_err!("the book has no pages"))
+    /// The session for a prepared book, on the thread that will use it.
+    pub fn from_prepared(p: Prepared) -> Result<Session, Error> {
+        let chrome = Chrome::load(&p.style).context("can't load the chrome fonts")?;
+        Ok(Session {
+            id: p.src.id,
+            title: p.src.title,
+            path: p.src.path,
+            stamp: p.src.stamp,
+            data_dir: p.src.data_dir,
+            mobi_cache: p.src.mobi_cache,
+            style: p.style,
+            book: p.book,
+            chrome,
+            current: p.current,
+            pages: p
+                .pages
+                .into_iter()
+                .map(|(l, pg)| (l, Rc::new(pg)))
+                .collect(),
+            next_of: p.next_of,
+            prev_of: p.prev_of,
+            paginator: p.paginator,
+        })
     }
 
     /// Use the stored pagination for this book and style, or start one in
     /// the background. Returns true on a cache hit.
     fn load_pagination(&mut self) -> bool {
-        if self.book.engine() != Engine::Plato {
-            return true;
-        }
-        let file = self.cache_file();
-        if let Some(pages) = pagecache::load(&file) {
-            self.book.set_pagination(pages);
-            return true;
-        }
-        self.paginator = Some(Paginator::start(
-            self.path.clone(),
-            self.style.clone(),
-            self.mobi_cache.clone(),
-            file,
-        ));
-        false
-    }
-
-    fn cache_file(&self) -> PathBuf {
-        pagecache::cache_path(
+        let (cached, paginator) = start_pagination(
+            &mut self.book,
+            &self.style,
             &self.data_dir,
             &self.id,
-            self.stamp.0,
-            self.stamp.1,
-            &self.style,
-        )
+            self.stamp,
+            &self.path,
+            Some(&self.mobi_cache),
+        );
+        self.paginator = paginator;
+        cached
     }
 
     /// Adopt a finished background pagination. Returns true if the page
@@ -159,6 +283,11 @@ impl Session {
             }
             None => false,
         }
+    }
+
+    /// The book file's size and mtime when the library last saw it.
+    pub fn stamp(&self) -> (u64, i64) {
+        self.stamp
     }
 
     pub fn paginating(&self) -> bool {
@@ -183,6 +312,24 @@ impl Session {
 
     pub fn is_rendered(&self, location: usize) -> bool {
         self.pages.iter().any(|(l, _)| *l == location)
+    }
+
+    /// The page at `location` if it is already rendered (never renders).
+    pub fn rendered(&self, location: usize) -> Option<Rc<Page>> {
+        self.pages
+            .iter()
+            .find(|(l, _)| *l == location)
+            .map(|(_, p)| p.clone())
+    }
+
+    /// The page start after `location` if already known (never lays out).
+    pub fn known_next(&self, location: usize) -> Option<usize> {
+        self.next_of.get(&location).copied().flatten()
+    }
+
+    /// Whether `location` is known to be the last page (never lays out).
+    pub fn known_last(&self, location: usize) -> bool {
+        self.next_of.get(&location) == Some(&None)
     }
 
     /// The page start one page away from `location`.
@@ -265,4 +412,36 @@ impl Session {
         };
         (chapter, page, fraction)
     }
+}
+
+/// Use the stored pagination for `book` and `style`, or start one in the
+/// background (with `paginate_with`, the MOBI cache directory). Returns
+/// whether it was cached, and the pagination thread.
+fn start_pagination(
+    book: &mut Book,
+    style: &Style,
+    data_dir: &Path,
+    id: &str,
+    stamp: (u64, i64),
+    path: &Path,
+    paginate_with: Option<&Path>,
+) -> (bool, Option<Paginator>) {
+    if book.engine() != Engine::Plato {
+        return (true, None);
+    }
+    let file = pagecache::cache_path(data_dir, id, stamp.0, stamp.1, style);
+    if let Some(pages) = pagecache::load(&file) {
+        book.set_pagination(pages);
+        return (true, None);
+    }
+    let Some(mobi_cache) = paginate_with else {
+        return (false, None);
+    };
+    let paginator = Paginator::start(
+        path.to_path_buf(),
+        style.clone(),
+        mobi_cache.to_path_buf(),
+        file,
+    );
+    (false, Some(paginator))
 }

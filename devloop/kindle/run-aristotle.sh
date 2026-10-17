@@ -24,7 +24,8 @@ LOG=${ARISTOTLE_LOG:-/var/tmp/aristotle.log}
 # script itself must survive them to restore the stock GUI.
 trap '' HUP INT TERM
 
-start=$(wc -l < "$LOG" 2> /dev/null || echo 0)
+start=0
+[ -f "$LOG" ] && start=$(wc -l < "$LOG")
 echo "=== aristotle $(date) $*" >> "$LOG"
 sh "$DIR/takeover.sh" start
 "$DIR/aristotle" "$@" >> "$LOG" 2>&1

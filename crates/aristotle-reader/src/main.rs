@@ -1,12 +1,14 @@
 //! `aristotle`: the reader app for the Kindle Paperwhite 4.
 //!
 //! The library from `aristotle-library` (scanned incrementally on start,
-//! covers, progress, the book to continue), pages from `aristotle-render`
-//! (Plato's engine, Polish hyphenation), and the menu from `aristotle-ui`,
-//! on the panel and touchscreen through `aristotle-hal`.
+//! folders, series, the book to continue), pages from `aristotle-render`
+//! (Plato's engine, Polish hyphenation), the menu, settings and screensaver
+//! from `aristotle-ui`, on the panel, touchscreen, frontlight and battery
+//! through `aristotle-hal`.
 //!
 //! ```text
-//! aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode N] [--no-scan]
+//! aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode N]
+//!           [--night-method software|hardware] [--no-scan] [--bench-open TITLE]
 //!
 //!   --data DIR      renderer data (fonts/, css/, hyphenation-patterns/,
 //!                   serif/); default: data/ next to the binary
@@ -15,19 +17,27 @@
 //!   --root DIR      where the books are; default: /mnt/us/documents
 //!   --turn-mode N   page-turn waveform: 9 (stock, default) or 7 (DU4);
 //!                   saved in reader.json
+//!   --night-method  how night mode inverts: software (default) or
+//!                   hardware (EPDC inversion flag); saved in reader.json
 //!   --no-scan       don't look for new or changed books on start
+//!   --bench-open T  time opening the first book whose title contains T,
+//!                   without panel or touchscreen, and exit (see open.rs)
 //! ```
 //!
 //! Run it with the stock GUI stopped: `devloop/kindle/run-aristotle.sh`.
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
+mod device;
+mod open;
 mod pagecache;
 mod panel;
 mod prefs;
+mod prewarm;
 mod progress;
 mod session;
 mod shelf;
+mod snapshot;
 mod turns;
 
 use std::os::fd::AsRawFd;
@@ -39,25 +49,34 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use aristotle_hal::input::{monotonic_us, Phase as HalPhase, TouchScreen, Transform};
-use aristotle_hal::power::{Battery, Frontlight};
+use aristotle_hal::power::{self, Battery, Frontlight, LIGHT_STEPS};
+use aristotle_hal::system;
 use aristotle_library::{Library, ScanOptions, Status};
 use aristotle_render::page::Page;
 use aristotle_render::plato_core::anyhow::{bail, format_err, Context, Error};
+use aristotle_render::style::Style;
 use aristotle_ui::geom::{Rect, Size, MIN_TARGET};
 use aristotle_ui::input::{Phase, TouchEvent};
-use aristotle_ui::screens::library::{self as ui_lib, Filter};
-use aristotle_ui::screens::reader::{action as menu_action, build_menu, Menu, MenuSpec, Settings};
+use aristotle_ui::screens::library::{self as ui_lib, CoverMode, Filter, View};
+use aristotle_ui::screens::reader::{
+    action as menu_action, build_menu, mask_extents, Menu, MenuSpec, Settings,
+};
+use aristotle_ui::screens::settings::{self as set_ui, SystemView, LIGHT_PRESETS, SLEEP_MINUTES};
+use aristotle_ui::screens::sleep;
 use aristotle_ui::text::{FamilyId, FontData, Fonts, TextEngine};
 use aristotle_ui::theme::Styles;
 use aristotle_ui::tree::{Constraints, Kind, Node, NodeId, PaintCx, Refresh, Tree, Widget};
 use aristotle_ui::ui::{Ui, UiEvent};
-use aristotle_ui::widgets::{Slider, Steps};
+use aristotle_ui::widgets::{Slider, Steps, Toggle};
 
+use crate::device::Facts;
+use crate::open::{Opening, Pending};
 use crate::panel::{Content, Panel};
-use crate::prefs::Prefs;
+use crate::prefs::{Covers as CoverPref, NightMethod, Prefs};
+use crate::prewarm::Prewarm;
 use crate::progress::{Debounce, Saver};
-use crate::session::Session;
-use crate::shelf::{Covers, ShelfModel, SORTS};
+use crate::session::{Prepared, Session, Source};
+use crate::shelf::{Covers, Nav, ShelfModel, Target, SORTS};
 use crate::turns::{Intent, Turn, TurnGestures};
 
 static START: OnceLock<Instant> = OnceLock::new();
@@ -91,11 +110,14 @@ struct Args {
     library: PathBuf,
     root: PathBuf,
     turn_mode: Option<u32>,
+    night_method: Option<NightMethod>,
     scan: bool,
+    bench_open: Option<String>,
 }
 
 fn usage() -> &'static str {
-    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] [--no-scan]"
+    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] \
+     [--night-method software|hardware] [--no-scan] [--bench-open TITLE]"
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -110,7 +132,9 @@ fn parse_args() -> Result<Args, Error> {
             .map_or_else(|| PathBuf::from("/mnt/us/.aristotle"), PathBuf::from),
         root: PathBuf::from("/mnt/us/documents"),
         turn_mode: None,
+        night_method: None,
         scan: true,
+        bench_open: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -120,7 +144,15 @@ fn parse_args() -> Result<Args, Error> {
             "--library" => a.library = cwd.join(value("--library")?),
             "--root" => a.root = cwd.join(value("--root")?),
             "--turn-mode" => a.turn_mode = Some(value("--turn-mode")?.parse()?),
+            "--night-method" => {
+                a.night_method = Some(match value("--night-method")?.as_str() {
+                    "software" => NightMethod::Software,
+                    "hardware" => NightMethod::Hardware,
+                    other => bail!("unknown night method {other}\n{}", usage()),
+                })
+            }
             "--no-scan" => a.scan = false,
+            "--bench-open" => a.bench_open = Some(value("--bench-open")?),
             "-h" | "--help" => bail!("{}", usage()),
             other => bail!("unknown argument {other}\n{}", usage()),
         }
@@ -151,6 +183,11 @@ fn run() -> Result<(), Error> {
     std::fs::create_dir_all(&args.library)
         .with_context(|| format!("can't create {}", args.library.display()))?;
 
+    if let Some(title) = &args.bench_open {
+        let root = args.scan.then_some(args.root.as_path());
+        return open::bench(&args.library, root, title);
+    }
+
     let mut prefs = Prefs::load(&args.library);
     if let Some(mode) = args.turn_mode {
         if mode != prefs::STOCK_TURN && mode != prefs::DU4_TURN {
@@ -161,6 +198,10 @@ fn run() -> Result<(), Error> {
         prefs.turn_mode = mode;
         let _ = prefs.save(&args.library);
     }
+    if let Some(m) = args.night_method {
+        prefs.night_method = m;
+        let _ = prefs.save(&args.library);
+    }
     let panel = Panel::open(prefs.turn_mode).context("can't open the framebuffer")?;
     let (w, h) = panel.size();
     let mut touch =
@@ -169,43 +210,61 @@ fn run() -> Result<(), Error> {
     let lib = Library::open(&args.library)?;
     let saver = Saver::new(&args.library);
     perf!(
-        "startup: devices and library index ready ({} books, turn mode {})",
+        "startup: devices and library index ready ({} books, turn mode {}, night {} ({:?}))",
         lib.books().len(),
-        prefs.turn_mode
+        prefs.turn_mode,
+        prefs.night,
+        prefs.night_method
     );
+    // Our screensaver replaces the stock one, which powerd would otherwise
+    // draw over our screen. The previous value is put back on exit.
+    let screensaver_was = power::screensaver_prevented().ok();
+    if let Err(e) = power::prevent_screensaver(true) {
+        eprintln!("aristotle: can't hold off the stock screensaver: {e}");
+    }
 
+    let nav = Nav {
+        view: prefs.view(),
+        sort: prefs.sort,
+        ..Nav::default()
+    };
     // The data directory is the current directory by now.
-    let mut text = TextEngine::new(ui_fonts(Path::new("serif"))?);
-    let styles = Styles::new(FamilyId(0));
-    let mut covers = Covers::default();
-    let battery = Battery::open().ok();
-    let model = ShelfModel::build(&lib, Filter::All, 0, &mut covers);
-    let clock = clock();
-    let level = battery_level(&battery);
-    let (tree, view) =
-        ui_lib::Library::build_shelf(&mut text, &styles, &model.shelf(&clock, level));
-    let ui = Ui::new(tree, text, w, h);
+    let ui = Ui::new(
+        Tree::new(),
+        TextEngine::new(ui_fonts(Path::new("serif"))?),
+        w,
+        h,
+    );
+    perf!("startup: UI fonts ready");
     let mut app = App {
         panel,
         light: Frontlight::open().ok(),
-        battery,
+        battery: Battery::open().ok(),
         mobi_cache: args.library.join("epub-cache"),
+        root: args.root.clone(),
         lib,
         saver,
+        snapshots: snapshot::Writer::new(&args.library),
+        opening: None,
+        pending: None,
+        prewarm: Prewarm::default(),
         debounce: Debounce::default(),
         prefs,
         ui,
-        styles,
-        covers,
-        screen: Screen::Library { model, view },
-        filter: Filter::All,
-        sort: 0,
-        shelf_turns: 0,
+        styles: Styles::new(FamilyId(0)),
+        covers: Covers::default(),
+        screen: Screen::Settings { ids: None, page: 0 },
+        nav,
+        asleep: None,
+        last_touch: Instant::now(),
+        clock: String::new(),
+        screensaver_was,
+        swallow: false,
     };
-    app.enter_library_ui();
-    app.ui.request_full_refresh();
-    app.render_ui()?;
+    app.apply_night();
+    app.show_library(Refresh::Full)?;
     perf!("startup: first frame submitted");
+    open::warm_up();
 
     if args.scan {
         app.scan(&args.root)?;
@@ -250,6 +309,13 @@ enum Screen {
         view: ui_lib::Library,
     },
     Reader(Box<Reading>),
+    /// A book shown from its snapshot while it opens; see `App::opening`.
+    Opening,
+    /// `ids` is `None` only before the first screen is built.
+    Settings {
+        ids: Option<set_ui::Settings>,
+        page: usize,
+    },
 }
 
 struct App {
@@ -257,18 +323,33 @@ struct App {
     light: Option<Frontlight>,
     battery: Option<Battery>,
     mobi_cache: PathBuf,
+    root: PathBuf,
     lib: Library,
     saver: Saver,
+    snapshots: snapshot::Writer,
+    /// The book being opened in the background ([`Screen::Opening`]).
+    opening: Option<Box<Opening>>,
+    /// A book without a snapshot opening on a worker, the library still
+    /// on screen.
+    pending: Option<Box<Pending>>,
+    /// Snapshots made ahead of time while the library is idle.
+    prewarm: Prewarm,
     debounce: Debounce,
     prefs: Prefs,
     ui: Ui,
     styles: Styles,
     covers: Covers,
     screen: Screen,
-    filter: Filter,
-    sort: usize,
-    /// Shelf page turns since the last flash.
-    shelf_turns: u32,
+    nav: Nav,
+    /// The screensaver is up; holds the light step to restore.
+    asleep: Option<u32>,
+    last_touch: Instant,
+    /// The time the status line shows, to refresh it each minute.
+    clock: String,
+    /// `preventScreenSaver` before we set it.
+    screensaver_was: Option<bool>,
+    /// The touch that woke the screensaver: ignored until it lifts.
+    swallow: bool,
 }
 
 /// What a handler wants the loop to do next.
@@ -289,19 +370,6 @@ fn ui_event(ev: &aristotle_hal::input::TouchEvent) -> TouchEvent {
         x: ev.x as i32,
         y: ev.y as i32,
         time_us: ev.time_us,
-    }
-}
-
-/// Local time as "HH:MM" (musl reads the zone from `TZ`).
-fn clock() -> String {
-    // SAFETY: time and localtime_r only write into the values passed.
-    unsafe {
-        let t = libc::time(std::ptr::null_mut());
-        let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&t, &mut tm).is_null() {
-            return String::new();
-        }
-        format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
     }
 }
 
@@ -359,13 +427,16 @@ fn map_file(path: &Path) -> std::io::Result<&'static [u8]> {
     }
 }
 
-fn battery_level(b: &Option<Battery>) -> Option<f32> {
-    b.as_ref()?.status().ok().map(|s| s.capacity as f32 / 100.0)
-}
-
 /// The quit target: the library title, hit-tested at least 9 mm high.
 fn quit_zone(ui: &Ui, title: NodeId) -> Rect {
     ui.tree.rect(title).expand_to(MIN_TARGET)
+}
+
+/// The index of `id` in `first..first + n`, if it is there.
+fn in_range(id: u32, first: u32, n: usize) -> Option<usize> {
+    (first..first + n as u32)
+        .contains(&id)
+        .then(|| (id - first) as usize)
 }
 
 impl App {
@@ -380,30 +451,87 @@ impl App {
         Ok(())
     }
 
-    /// Settings for a freshly installed library tree.
-    fn enter_library_ui(&mut self) {
-        self.ui.layout();
-        if let Screen::Library { view, .. } = &self.screen {
-            view.sync(&mut self.ui.tree);
+    fn save_prefs(&self) {
+        if let Err(e) = self.prefs.save(self.lib.data_dir()) {
+            eprintln!("aristotle: can't save preferences: {e}");
         }
-        // Quitting is drastic: ask for a full second's hold.
-        self.ui.gesture_config_mut().long_press_us = 1_000_000;
     }
 
-    /// Rebuild the library screen from the index.
+    // --- Night mode and light -------------------------------------------
+
+    /// Bring the panel and the UI in line with `prefs.night`; the next
+    /// render is a full flash that shows the switch everywhere at once.
+    fn apply_night(&mut self) {
+        let method = self.prefs.night.then_some(self.prefs.night_method);
+        self.panel.set_night(method);
+        self.ui.set_night(method == Some(NightMethod::Software));
+        self.ui.request_full_refresh();
+    }
+
+    fn set_night(&mut self, on: bool) {
+        self.prefs.night = on;
+        self.save_prefs();
+        self.apply_night();
+        perf!("night mode {}", if on { "on" } else { "off" });
+    }
+
+    fn light_step(&self) -> u32 {
+        self.light.as_ref().and_then(|l| l.step().ok()).unwrap_or(0)
+    }
+
+    fn set_light_step(&self, step: u32) {
+        if let Some(l) = &self.light {
+            if let Err(e) = l.set_step(step.min(LIGHT_STEPS)) {
+                eprintln!("aristotle: frontlight: {e}");
+            }
+        }
+    }
+
+    /// The light as the reader menu's slider shows it, 0 to 1.
+    fn light_level(&self) -> f32 {
+        self.light_step() as f32 / LIGHT_STEPS as f32
+    }
+
+    // --- Library ----------------------------------------------------------
+
     fn show_library(&mut self, refresh: Refresh) -> Result<(), Error> {
-        let model = ShelfModel::build(&self.lib, self.filter, self.sort, &mut self.covers);
-        let clock = clock();
-        let level = battery_level(&self.battery);
+        self.show_library_at(refresh, 0)
+    }
+
+    /// Rebuild the library screen for `self.nav`, on list page `page`.
+    fn show_library_at(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
+        let mode = self.prefs.covers.mode();
+        let model = ShelfModel::build(&self.lib, &self.nav, mode, &mut self.covers);
+        let facts = Facts::status(&self.battery);
+        self.clock = facts.clock.clone();
         let (tree, view) = ui_lib::Library::build_shelf(
             &mut self.ui.text,
             &self.styles,
-            &model.shelf(&clock, level),
+            &model.shelf(facts.status_line(), mode),
         );
         self.ui.set_tree_with(tree, refresh);
-        self.screen = Screen::Library { model, view };
-        self.enter_library_ui();
-        self.render_ui()
+        self.ui.layout();
+        if page > 0 {
+            self.ui.tree.set_page(view.list, page);
+            self.ui.layout();
+        }
+        view.sync(&mut self.ui.tree);
+        // Quitting is drastic: ask for a full second's hold.
+        self.ui.gesture_config_mut().long_press_us = 1_000_000;
+        let old = std::mem::replace(&mut self.screen, Screen::Library { model, view });
+        let submitted = self.render_ui();
+        // A closed book is freed only now: the display lists of a laid-out
+        // chapter are many allocations, and the library should not wait.
+        drop(old);
+        submitted
+    }
+
+    fn list_page(&self) -> usize {
+        match &self.screen {
+            Screen::Library { view, .. } => self.ui.tree.page(view.list).0,
+            Screen::Settings { ids: Some(ids), .. } => self.ui.tree.page(ids.list).0,
+            _ => 0,
+        }
     }
 
     /// Bring the index in line with the books on the device.
@@ -428,14 +556,182 @@ impl App {
         for (path, err) in &r.errors {
             eprintln!("aristotle: scan: {path}: {err}");
         }
+        let lib = &self.lib;
+        let pruned = snapshot::prune(lib.data_dir(), |id| lib.book(id).is_some());
+        if pruned > 0 {
+            perf!("scan: {pruned} snapshots of books no longer in the library deleted");
+        }
         if r.added + r.updated + r.moved + r.removed + r.restored + r.sidecars_imported > 0 {
             self.saver.save(&self.lib);
             if matches!(self.screen, Screen::Library { .. }) {
-                self.show_library(Refresh::Auto)?;
+                let page = self.list_page();
+                self.show_library_at(Refresh::Auto, page)?;
             }
         }
         Ok(())
     }
+
+    // --- Settings ---------------------------------------------------------
+
+    fn show_settings(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
+        let facts = Facts::read(&self.battery, &self.root);
+        self.clock = facts.clock.clone();
+        let light = self
+            .light
+            .as_ref()
+            .map(|l| (l.step().unwrap_or(0), LIGHT_STEPS));
+        let view = SystemView {
+            status: facts.status_line(),
+            light,
+            night: self.prefs.night,
+            covers: self.prefs.covers.mode(),
+            sleep_minutes: self.prefs.sleep(),
+            battery: facts.battery_info(),
+            storage: facts.storage,
+            date: &facts.date,
+            time: &facts.clock,
+            usb: facts.usb,
+            about: &facts.about,
+        };
+        let (tree, ids) = set_ui::Settings::build(&mut self.ui.text, &self.styles, &view);
+        self.ui.set_tree_with(tree, refresh);
+        self.ui.layout();
+        if page > 0 {
+            self.ui.tree.set_page(ids.list, page);
+            self.ui.layout();
+        }
+        ids.sync(&mut self.ui.tree);
+        self.ui.gesture_config_mut().long_press_us = 500_000;
+        self.screen = Screen::Settings {
+            ids: Some(ids),
+            page,
+        };
+        self.render_ui()
+    }
+
+    fn on_settings_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
+        use set_ui::action as a;
+        let UiEvent::Action { id, node, at } = ev else {
+            return Ok(Flow::Continue);
+        };
+        let Screen::Settings { ids: Some(ids), .. } = &self.screen else {
+            return Ok(Flow::Continue);
+        };
+        let list = ids.list;
+        let page = self.ui.tree.page(list).0;
+        let turned = ids.handle(&mut self.ui.tree, id);
+        if turned {
+            self.ui.layout();
+            ids.sync(&mut self.ui.tree);
+            let now = self.ui.tree.page(list).0;
+            if let Screen::Settings { page: p, .. } = &mut self.screen {
+                *p = now;
+            }
+            return Ok(Flow::Continue);
+        }
+        match id {
+            a::BACK => return self.show_library(Refresh::Full).map(|_| Flow::Continue),
+            a::LIGHT_DOWN | a::LIGHT_UP | a::LIGHT_SET => {
+                let cur = self.light_step();
+                let step = match id {
+                    a::LIGHT_SET => Slider::step_at(self.ui.tree.rect(node), at.x, LIGHT_STEPS),
+                    a::LIGHT_DOWN => cur.saturating_sub(1),
+                    _ => (cur + 1).min(LIGHT_STEPS),
+                };
+                self.set_light_step(step);
+            }
+            a::NIGHT => self.set_night(!self.prefs.night),
+            id if in_range(id, a::USB, 2).is_some() => {
+                let storage = id == a::USB + 1;
+                let res = system::set_usb_mode(storage.then_some(10));
+                perf!(
+                    "usb: {} requested: {res:?}",
+                    if storage { "drive" } else { "network" }
+                );
+                if let Err(e) = res {
+                    eprintln!("aristotle: usb mode: {e}");
+                }
+            }
+            id => {
+                if let Some(i) = in_range(id, a::LIGHT_PRESET, LIGHT_PRESETS.len()) {
+                    self.set_light_step(LIGHT_PRESETS[i].1);
+                } else if let Some(i) = in_range(id, a::COVERS, CoverMode::ALL.len()) {
+                    self.prefs.covers = CoverPref::from_mode(CoverMode::ALL[i]);
+                    self.save_prefs();
+                } else if let Some(i) = in_range(id, a::SLEEP, SLEEP_MINUTES.len()) {
+                    self.prefs.set_sleep(SLEEP_MINUTES[i]);
+                    self.save_prefs();
+                } else {
+                    return Ok(Flow::Continue);
+                }
+            }
+        }
+        // Rebuild with only the changed pixels sent; a night switch makes
+        // that render a full flash.
+        self.show_settings(Refresh::Auto, page)?;
+        Ok(Flow::Continue)
+    }
+
+    // --- Screensaver ------------------------------------------------------
+
+    fn sleep_deadline(&self) -> Option<Instant> {
+        if self.asleep.is_some() {
+            return None;
+        }
+        self.prefs
+            .sleep()
+            .map(|m| self.last_touch + Duration::from_secs(m as u64 * 60))
+    }
+
+    /// Nobody has touched the screen for the chosen time: save, put the
+    /// light out and show the screensaver.
+    fn fall_asleep(&mut self) -> Result<(), Error> {
+        // The screensaver replaces the screen: no redraw for a book still
+        // opening, a book opening without a snapshot is given up, and no
+        // snapshots are made ahead of time while asleep.
+        self.finish_opening(true)?;
+        self.cancel_pending();
+        self.prewarm.input();
+        if let Screen::Reader(r) = &self.screen {
+            let now = aristotle_library::library::now();
+            self.lib
+                .set_progress(&r.session.id, r.session.progress(now));
+        }
+        self.save_snapshot();
+        self.saver.save(&self.lib);
+        self.debounce.saved();
+        self.asleep = Some(self.light_step());
+        self.set_light_step(0);
+        let photos = self.prefs.covers.mode() == CoverMode::Photos;
+        let book = shelf::current_book(&self.lib)
+            .cloned()
+            .map(|rec| shelf::screen_book(&self.lib, &rec, &mut self.covers, photos));
+        let tree = sleep::build(&self.styles, book.as_ref(), photos);
+        self.ui.set_tree(tree);
+        perf!("sleep: screensaver after {} min", self.prefs.sleep_minutes);
+        self.render_ui()
+    }
+
+    /// A touch on the screensaver: the light and the screen come back.
+    fn wake(&mut self) -> Result<(), Error> {
+        if let Some(step) = self.asleep.take() {
+            self.set_light_step(step);
+        }
+        self.last_touch = Instant::now();
+        self.prewarm.input();
+        perf!("sleep: woken");
+        match &self.screen {
+            Screen::Library { .. } => self.show_library(Refresh::Full),
+            Screen::Settings { page, .. } => {
+                let page = *page;
+                self.show_settings(Refresh::Full, page)
+            }
+            // (A book still opening was finished before the screensaver.)
+            Screen::Reader(_) | Screen::Opening => self.rebuild_reader(Refresh::Full),
+        }
+    }
+
+    // --- Event loop -------------------------------------------------------
 
     fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
         loop {
@@ -450,10 +746,19 @@ impl App {
             if let Some(d) = self.debounce.deadline() {
                 timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
+            if let Some(d) = self.sleep_deadline() {
+                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
+            }
             if let Screen::Reader(r) = &self.screen {
                 if r.session.paginating() {
                     timeout = timeout.min(Duration::from_millis(250));
                 }
+            }
+            if self.opening.is_some() || self.pending.is_some() {
+                timeout = timeout.min(Duration::from_millis(10));
+            }
+            if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
+                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
             let events = match touch.poll(timeout.max(Duration::from_millis(1))) {
                 Ok(e) => e,
@@ -465,30 +770,52 @@ impl App {
                     return Ok(());
                 }
             }
-            let ticked = self.ui.tick(monotonic_us());
-            for ev in ticked {
-                if self.on_ui_event(ev)? == Flow::Quit {
-                    return Ok(());
+            if self.asleep.is_none() {
+                let ticked = self.ui.tick(monotonic_us());
+                for ev in ticked {
+                    if self.on_ui_event(ev)? == Flow::Quit {
+                        return Ok(());
+                    }
                 }
-            }
-            if !events.is_empty() && self.ui_driven() {
-                self.render_ui()?;
+                if !events.is_empty() && self.ui_driven() {
+                    self.render_ui()?;
+                }
             }
             self.panel.poll();
             self.background()?;
+            if self.sleep_deadline().is_some_and(|d| Instant::now() >= d) {
+                self.fall_asleep()?;
+            }
         }
     }
 
     /// Whether the UI tree (not the page-turn path) owns input right now.
     fn ui_driven(&self) -> bool {
         match &self.screen {
-            Screen::Library { .. } => true,
+            Screen::Library { .. } | Screen::Settings { .. } => true,
             Screen::Reader(r) => r.menu_open,
+            Screen::Opening => self.opening.as_ref().is_some_and(|o| o.menu_open),
         }
     }
 
-    /// Work done between events: adopting page numbers, saving progress.
+    /// Work done between events: adopting page numbers, saving progress,
+    /// the clock in the status line.
     fn background(&mut self) -> Result<(), Error> {
+        if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
+            self.adopt(result, false)?;
+        }
+        if let Some(result) = self.pending.as_ref().and_then(|p| p.worker.poll()) {
+            self.finish_pending(result)?;
+        }
+        // Snapshots ahead of time: only on the library screen (not the
+        // settings), with no book opening and no screensaver.
+        if matches!(self.screen, Screen::Library { .. })
+            && self.pending.is_none()
+            && self.asleep.is_none()
+        {
+            self.prewarm
+                .tick(&self.lib, &self.prefs.style(), &self.mobi_cache);
+        }
         if let Screen::Reader(r) = &mut self.screen {
             if r.session.poll_pagination() {
                 let (pn, pp) = r.session.prerender();
@@ -500,14 +827,49 @@ impl App {
             }
         }
         if self.debounce.due(Instant::now()) {
+            self.save_snapshot();
             self.saver.save(&self.lib);
             self.debounce.saved();
+        }
+        if self.asleep.is_none() {
+            let (clock, _) = device::clock_and_date();
+            if clock != self.clock {
+                let page = self.list_page();
+                match &self.screen {
+                    Screen::Library { .. } => self.show_library_at(Refresh::Auto, page)?,
+                    Screen::Settings { .. } => self.show_settings(Refresh::Auto, page)?,
+                    Screen::Reader(_) | Screen::Opening => self.clock = clock,
+                }
+            }
         }
         Ok(())
     }
 
     fn on_touch(&mut self, ev: &aristotle_hal::input::TouchEvent) -> Result<Flow, Error> {
+        if self.asleep.is_some() {
+            // Any touch wakes; the rest of that touch does nothing.
+            if ev.phase == HalPhase::Down {
+                self.wake()?;
+                self.ui.reset_gestures();
+                if let Screen::Reader(r) = &mut self.screen {
+                    r.gestures.reset();
+                }
+                self.swallow = true;
+            }
+            return Ok(Flow::Continue);
+        }
+        if self.swallow {
+            if ev.phase == HalPhase::Up {
+                self.swallow = false;
+            }
+            return Ok(Flow::Continue);
+        }
+        self.last_touch = Instant::now();
         let ev = ui_event(ev);
+        self.prewarm.input();
+        if self.opening.is_some() {
+            return self.on_opening_touch(ev);
+        }
         if let Screen::Reader(r) = &mut self.screen {
             if !r.menu_open {
                 let intents = r.gestures.feed(ev);
@@ -528,47 +890,85 @@ impl App {
     fn on_ui_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
         match &self.screen {
             Screen::Library { .. } => self.on_library_event(ev),
+            Screen::Settings { .. } => self.on_settings_event(ev),
             Screen::Reader(_) => self.on_menu_event(ev).map(|_| Flow::Continue),
+            Screen::Opening => self.on_opening_ui_event(ev),
         }
     }
 
     fn on_library_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
+        use ui_lib::action as a;
+        // Anything but opening a book gives up a book still opening.
+        let opens_book = match (&self.screen, &ev) {
+            (Screen::Library { model, .. }, UiEvent::Action { id, .. }) => {
+                *id == a::RESUME
+                    || (*id >= a::ITEM
+                        && matches!(
+                            model.target((*id - a::ITEM) as usize),
+                            Some(Target::Book(_))
+                        ))
+            }
+            _ => false,
+        };
+        if !opens_book {
+            self.cancel_pending();
+        }
         let Screen::Library { model, view } = &mut self.screen else {
             return Ok(Flow::Continue);
         };
         match ev {
-            UiEvent::LongPress(p) if quit_zone(&self.ui, view.title).contains(p) => {
+            UiEvent::LongPress(p)
+                if self.nav.at_home() && quit_zone(&self.ui, view.title).contains(p) =>
+            {
                 perf!("quit: title held");
                 return Ok(Flow::Quit);
             }
-            UiEvent::Action { id, .. } => match id {
-                ui_lib::action::RESUME => {
+            UiEvent::Action { id, node, .. } => match id {
+                a::RESUME => {
                     if let Some(book) = model.hero_id().map(String::from) {
-                        self.open_book(&book)?;
+                        self.open_from_library(&book, node)?;
                     }
                 }
-                ui_lib::action::SORT => {
-                    self.sort = (self.sort + 1) % SORTS.len();
+                a::SETTINGS => self.show_settings(Refresh::Full, 0)?,
+                a::SORT => {
+                    self.nav.sort = (self.nav.sort + 1) % SORTS.len();
+                    self.prefs.sort = self.nav.sort;
+                    self.save_prefs();
                     self.show_library(Refresh::Auto)?;
                 }
-                id if id >= ui_lib::action::BOOK => {
-                    if let Some(book) = model.book_id((id - ui_lib::action::BOOK) as usize) {
-                        let book = book.to_string();
-                        self.open_book(&book)?;
+                a::BACK => {
+                    self.nav.up();
+                    self.show_library(Refresh::Full)?;
+                }
+                id if id >= a::ITEM => match model.target((id - a::ITEM) as usize).cloned() {
+                    Some(Target::Book(book)) => self.open_from_library(&book, node)?,
+                    Some(Target::Folder(name)) => {
+                        self.nav.folder.push(name);
+                        self.show_library(Refresh::Full)?;
                     }
-                }
-                id if (ui_lib::action::FILTER..ui_lib::action::FILTER + 4).contains(&id) => {
-                    self.filter = Filter::ALL[(id - ui_lib::action::FILTER) as usize];
-                    self.show_library(Refresh::Auto)?;
-                }
-                _ => {
-                    if view.handle(&mut self.ui.tree, id) {
+                    Some(Target::Series(name)) => {
+                        self.nav.series = Some(name);
+                        self.show_library(Refresh::Full)?;
+                    }
+                    None => {}
+                },
+                id => {
+                    if let Some(i) = in_range(id, a::VIEW, View::ALL.len()) {
+                        self.nav.view = View::ALL[i];
+                        self.prefs.library_view = i;
+                        self.save_prefs();
+                        self.show_library(Refresh::Auto)?;
+                    } else if let Some(i) = in_range(id, a::FILTER, Filter::ALL.len()) {
+                        self.nav.filter = Filter::ALL[i];
+                        self.show_library(Refresh::Auto)?;
+                    } else if view.handle(&mut self.ui.tree, id) {
                         self.ui.layout();
                         view.sync(&mut self.ui.tree);
-                        // Every few shelf pages, a flash clears the ghosts
-                        // of covers, as the stock UI does.
-                        self.shelf_turns += 1;
-                        if self.shelf_turns.is_multiple_of(5) {
+                        // A text-only list does not ghost: a quiet partial
+                        // update. Cards and cover photos (large grays) do:
+                        // their page turns are one clean flash each, never
+                        // a flash by count.
+                        if self.prefs.covers.mode() != CoverMode::None {
                             self.ui.request_full_refresh();
                         }
                     }
@@ -579,19 +979,109 @@ impl App {
         Ok(Flow::Continue)
     }
 
-    fn open_book(&mut self, id: &str) -> Result<(), Error> {
+    // --- Reader -----------------------------------------------------------
+
+    /// Open a book from the library. The pressed card already shows the
+    /// tap landed. With a snapshot the open is a single flash. Without one
+    /// the book opens on a worker while the card stays inverted; a first
+    /// open of a MOBI or AZW3 file also converts it (seconds on the
+    /// device), so for those the busy mark shows too, in the same update.
+    fn open_from_library(&mut self, id: &str, card: NodeId) -> Result<(), Error> {
+        let slow = self.lib.book(id).is_some_and(|r| {
+            matches!(
+                r.format,
+                aristotle_library::Format::Mobi | aristotle_library::Format::Azw3
+            ) && r.last_opened.is_none()
+        });
+        if slow {
+            if let Screen::Library { view, .. } = &self.screen {
+                self.ui.tree.set_hidden(view.busy, false);
+            }
+        }
+        self.open_book(id, Some(card))
+    }
+
+    fn open_book(&mut self, id: &str, card: Option<NodeId>) -> Result<(), Error> {
+        if self.pending.as_ref().is_some_and(|p| p.id == id) {
+            return Ok(());
+        }
+        self.cancel_pending();
         let Some(rec) = self.lib.book(id).cloned() else {
             return Ok(());
         };
         let t0 = Instant::now();
-        let (mut session, times) =
-            match Session::open(&self.lib, &rec, self.prefs.style(), &self.mobi_cache) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("aristotle: {}: {e:#}", rec.meta.title);
-                    return Ok(());
-                }
-            };
+        let style = self.prefs.style();
+        let src = match Source::new(&self.lib, &rec, &self.mobi_cache) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("aristotle: {}: {e:#}", rec.meta.title);
+                return Ok(());
+            }
+        };
+        if let Some(snap) = open::find_snapshot(&src, &style) {
+            return self.open_from_snapshot(src, style, snap, t0);
+        }
+        // Nothing to show before the layout: the tapped card stays inverted
+        // as the acknowledgement, the book opens on a worker, and the
+        // library keeps taking input (another card, a filter) meanwhile.
+        if let Some(card) = card {
+            self.ui.tree.set_inverted(card, true);
+        }
+        perf!(
+            "open: \"{}\": no snapshot, opening in the background",
+            rec.meta.title
+        );
+        self.pending = Some(Box::new(Pending {
+            id: id.to_string(),
+            title: rec.meta.title.clone(),
+            worker: open::spawn_with(src, style, false),
+            card,
+            tapped: t0,
+        }));
+        Ok(())
+    }
+
+    /// Forget a book opening without a snapshot (the reader tapped
+    /// something else): its worker drops to idle priority, its card is
+    /// released.
+    fn cancel_pending(&mut self) {
+        let Some(p) = self.pending.take() else {
+            return;
+        };
+        self.release_card(p.card);
+        perf!(
+            "open: \"{}\" given up {:.0} ms after the tap",
+            p.title,
+            ms(p.tapped.elapsed())
+        );
+    }
+
+    /// The library card of a book no longer opening: not inverted, and no
+    /// busy mark.
+    fn release_card(&mut self, card: Option<NodeId>) {
+        if let Some(card) = card {
+            self.ui.tree.set_inverted(card, false);
+        }
+        if let Screen::Library { view, .. } = &self.screen {
+            self.ui.tree.set_hidden(view.busy, true);
+        }
+    }
+
+    /// Show a book opened without a snapshot: one mode-8 flash to its page.
+    fn finish_pending(&mut self, result: Result<Prepared, Error>) -> Result<(), Error> {
+        let Some(p) = self.pending.take() else {
+            return Ok(());
+        };
+        let prepared = match result {
+            Ok(prepared) => prepared,
+            Err(e) => {
+                eprintln!("aristotle: {}: {e:#}", p.title);
+                self.release_card(p.card);
+                return self.render_ui();
+            }
+        };
+        let times = prepared.times;
+        let mut session = Session::from_prepared(prepared)?;
         let page = session.page(session.current)?;
         let light = self.light_level();
         let settings = self.prefs.menu_settings(light);
@@ -601,38 +1091,466 @@ impl App {
         self.ui.gesture_config_mut().long_press_us = 500_000;
         self.render_ui()?;
         perf!(
-            "open: \"{}\": book {:.0} ms, position {:.0} ms, first page {:.0} ms, submitted after {:.0} ms; page numbers {}",
+            "open: \"{}\": book {:.0} ms, position {:.0} ms, first page {:.0} ms, submitted {:.0} ms after the tap; page numbers {}; no snapshot",
             session.title,
             ms(times.open),
             ms(times.place),
             ms(times.render),
-            ms(t0.elapsed()),
+            ms(p.tapped.elapsed()),
             if times.pages_cached { "from cache" } else { "being computed in the background" }
         );
-        self.lib.mark_opened(id, aristotle_library::library::now());
+        self.lib
+            .mark_opened(&p.id, aristotle_library::library::now());
         self.debounce.changed(Instant::now());
-        let (pn, pp) = session.prerender();
+        let gestures = TurnGestures::new(self.ui.bounds());
+        let old = std::mem::replace(&mut self.screen, Screen::Opening);
+        self.enter_reader(session, menu, page_node, settings, gestures);
+        drop(old);
+        if let Screen::Reader(r) = &mut self.screen {
+            let (pn, pp) = r.session.prerender();
+            perf!(
+                "open: prerender next {:.0} ms, previous {:.0} ms",
+                ms(pn),
+                ms(pp)
+            );
+        }
+        Ok(())
+    }
+
+    /// Show the page the book was left at from its snapshot, and open the
+    /// book itself on a worker thread (see open.rs).
+    fn open_from_snapshot(
+        &mut self,
+        mut src: Source,
+        style: Style,
+        mut snap: snapshot::Loaded,
+        t0: Instant,
+    ) -> Result<(), Error> {
+        let light = self.light_level();
+        let settings = self.prefs.menu_settings(light);
+        let page = snap.page.clone();
+        let (tree, menu, page_node) =
+            reader_tree(&self.styles, &src.title, &settings, page.clone());
+        // A screen switch: the stock UI's flashing full refresh (mode 8).
+        self.ui.set_tree_with(tree, Refresh::Full);
+        self.ui.gesture_config_mut().long_press_us = 500_000;
+        self.render_ui()?;
         perf!(
-            "open: prerender next {:.0} ms, previous {:.0} ms",
-            ms(pn),
-            ms(pp)
+            "open: \"{}\": snapshot submitted after {:.0} ms (read {:.0} ms, {} KB; decode {:.0} ms); opening the book in the background",
+            src.title,
+            ms(t0.elapsed()),
+            ms(snap.read),
+            snap.bytes / 1024,
+            ms(snap.decode)
         );
+        let (title, id, stamp) = (src.title.clone(), src.id.clone(), src.stamp);
+        // Open exactly where the snapshot is, not where its locator maps.
+        src.exact = Some(snap.info.location);
+        let worker = open::spawn(src, style.clone());
+        let t = Instant::now();
+        let next = snap.take_next().map(|(i, p)| (i, Rc::new(p)));
+        if next.is_some() {
+            perf!(
+                "open: snapshot's next page decoded in {:.0} ms",
+                ms(t.elapsed())
+            );
+        }
+        self.lib.mark_opened(&id, aristotle_library::library::now());
+        self.debounce.changed(Instant::now());
+        self.screen = Screen::Opening;
+        self.opening = Some(Box::new(Opening {
+            title,
+            id,
+            stamp,
+            style,
+            worker,
+            tapped: t0,
+            current: (snap.info, page),
+            next,
+            turned: false,
+            menu_open: false,
+            menu,
+            page_node,
+            settings,
+            gestures: TurnGestures::new(self.ui.bounds()),
+        }));
+        Ok(())
+    }
+
+    /// Input while the book opens. Turns between the snapshot's two pages
+    /// and the menu work at once; anything else waits for the book, then
+    /// goes the normal way.
+    fn on_opening_touch(&mut self, ev: TouchEvent) -> Result<Flow, Error> {
+        let Some(o) = self.opening.as_mut() else {
+            return Ok(Flow::Continue);
+        };
+        if o.menu_open {
+            for e in self.ui.handle_touch(ev) {
+                if self.on_ui_event(e)? == Flow::Quit {
+                    return Ok(Flow::Quit);
+                }
+            }
+            return Ok(Flow::Continue);
+        }
+        for intent in o.gestures.feed(ev) {
+            if self.opening_intent(intent)? {
+                continue;
+            }
+            let before = self.panel.full_updates();
+            let stale = self.finish_opening(true)?;
+            self.on_intent(intent)?;
+            self.redraw_if_stale(stale, before)?;
+        }
+        Ok(Flow::Continue)
+    }
+
+    /// Handle `intent` from the snapshot alone; false if it needs the book.
+    fn opening_intent(&mut self, intent: Intent) -> Result<bool, Error> {
+        let Some(o) = self.opening.as_mut() else {
+            return Ok(false);
+        };
+        match intent {
+            Intent::Turn { dir, at_us } => {
+                let target = match (dir, o.turned) {
+                    (Turn::Forward, false) => o.next.as_ref(),
+                    (Turn::Back, true) => Some(&o.current),
+                    _ => None,
+                };
+                let Some((_, page)) = target.cloned() else {
+                    return Ok(false);
+                };
+                let waited = self.panel.show_page(&page, false, "turn")?;
+                let tap_to_submit = monotonic_us().saturating_sub(at_us) as f64 / 1000.0;
+                o.turned = dir == Turn::Forward;
+                if let Some(w) = self.ui.tree.widget_mut::<PageView>(o.page_node) {
+                    w.page = page;
+                }
+                self.ui.tree.invalidate(o.page_node, Refresh::Auto);
+                // The panel already shows the page; this only updates the UI's copy.
+                self.ui.render();
+                perf!(
+                    "turn {:?}: tap->submit {:.0} ms (a snapshot page, the book still opening; waited for the panel {:.0} ms)",
+                    dir,
+                    tap_to_submit,
+                    ms(waited)
+                );
+                Ok(true)
+            }
+            Intent::OpenMenu => {
+                let light = self.light_level();
+                let night = self.prefs.night;
+                let Some(o) = self.opening.as_mut() else {
+                    return Ok(false);
+                };
+                o.menu_open = true;
+                o.settings.light = light;
+                o.settings.night = night;
+                let (info, page) = o.shown().clone();
+                fit_menu(
+                    &mut self.ui,
+                    &self.styles,
+                    &o.title,
+                    &o.settings,
+                    &page,
+                    &mut o.menu,
+                    &mut o.page_node,
+                );
+                self.ui.tree.set_text(o.menu.chapter_label, &info.chapter);
+                self.ui.tree.set_text(o.menu.page_label, &info.label);
+                self.ui.tree.set_progress(o.menu.progress, info.fraction);
+                if let Some(w) = self.ui.tree.widget_mut::<Slider>(o.menu.light) {
+                    w.value = light;
+                }
+                self.ui.tree.invalidate(o.menu.light, Refresh::Auto);
+                self.ui.reset_gestures();
+                self.ui.layout();
+                let parts = menu_parts(&self.ui, &o.menu);
+                self.ui.render();
+                self.panel.present_overlay(&self.ui, &parts);
+                Ok(true)
+            }
+        }
+    }
+
+    /// The menu while the book opens: closing it and going back to the
+    /// library need only the snapshot; everything else waits for the book.
+    fn on_opening_ui_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
+        let Some(o) = self.opening.as_mut() else {
+            return Ok(Flow::Continue);
+        };
+        if !o.menu_open {
+            return Ok(Flow::Continue);
+        }
+        match ev {
+            UiEvent::Tap(_) => {
+                o.menu_open = false;
+                o.gestures.reset();
+                self.ui.tree.set_hidden(o.menu.root, true);
+                self.ui.render();
+                let page = o.shown().1.clone();
+                self.panel.show_page(&page, false, "menu closed")?;
+            }
+            UiEvent::Action {
+                id: menu_action::BACK,
+                ..
+            } => self.abandon_opening()?,
+            UiEvent::Action { .. } => {
+                let before = self.panel.full_updates();
+                let stale = self.finish_opening(true)?;
+                self.on_menu_event(ev)?;
+                self.redraw_if_stale(stale, before)?;
+            }
+            _ => {}
+        }
+        Ok(Flow::Continue)
+    }
+
+    /// After an action that needed the book: if the adopted page differs
+    /// from what the panel shows and the action did not redraw the whole
+    /// screen itself (a turn at the first or last page, a light change),
+    /// one full mode-9 update now.
+    fn redraw_if_stale(&mut self, stale: bool, full_updates_before: u64) -> Result<(), Error> {
+        if !stale || self.panel.full_updates() != full_updates_before {
+            return Ok(());
+        }
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
+        self.ui.tree.invalidate(r.page_node, Refresh::Auto);
+        if r.menu_open {
+            self.render_ui_with(Content::Page)
+        } else {
+            let page = r.session.page(r.session.current)?;
+            self.panel.show_page(&page, false, "corrected page")?;
+            self.ui.render();
+            Ok(())
+        }
+    }
+
+    /// Keep the page shown from the snapshot as the progress when the book
+    /// will not be adopted (back to the library, or the open failed).
+    fn keep_shown_progress(&mut self, o: &Opening) {
+        if !o.turned {
+            return;
+        }
+        let (info, page) = o.shown().clone();
+        let now = aristotle_library::library::now();
+        let progress = progress::progress_for(info.locator.clone(), info.fraction, now);
+        self.lib.set_progress(&o.id, progress);
+        if info.last {
+            self.lib.set_status(&o.id, Status::Finished);
+        }
+        let key = snapshot::Key::new(&o.id, o.stamp, &o.style, info.locator.clone());
+        self.snapshots.save(key, (info, page), None);
+    }
+
+    /// Back to the library before the book finished opening: drop the
+    /// worker and keep the page shown as the progress (and its snapshot).
+    fn abandon_opening(&mut self) -> Result<(), Error> {
+        let Some(o) = self.opening.take() else {
+            return Ok(());
+        };
+        self.keep_shown_progress(&o);
+        perf!(
+            "open: \"{}\": back to the library {:.0} ms after the tap, before the book was ready",
+            o.title,
+            ms(o.tapped.elapsed())
+        );
+        // Dropping the worker cancels it between its steps, at idle priority.
+        drop(o);
+        self.show_library(Refresh::Full)?;
+        self.snapshots.forget();
+        self.saver.save(&self.lib);
+        self.debounce.saved();
+        Ok(())
+    }
+
+    /// Wait for the book being opened and adopt it. With `deferred`, a
+    /// page that differs from the snapshot is not sent: the caller redraws
+    /// next. Returns whether the panel then still shows the snapshot's page
+    /// where the book's differs.
+    fn finish_opening(&mut self, deferred: bool) -> Result<bool, Error> {
+        let Some(o) = self.opening.as_ref() else {
+            return Ok(false);
+        };
+        let t = Instant::now();
+        let result = o.worker.wait();
+        perf!("open: waited {:.0} ms for the book", ms(t.elapsed()));
+        self.adopt(result, deferred)
+    }
+
+    /// Take over the session the worker made, and make sure the panel shows
+    /// its page: no update if the snapshot showed exactly that page, else
+    /// one full mode-9 update (none with `deferred`; see
+    /// [`App::finish_opening`]).
+    fn adopt(&mut self, result: Result<Prepared, Error>, deferred: bool) -> Result<bool, Error> {
+        let Some(o) = self.opening.take() else {
+            return Ok(false);
+        };
+        let prepared = match result {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("aristotle: {}: {e:#}", o.title);
+                self.keep_shown_progress(&o);
+                self.show_library(Refresh::Full)?;
+                self.saver.save(&self.lib);
+                return Ok(false);
+            }
+        };
+        let t = Instant::now();
+        let times = prepared.times;
+        let (at, right) = open::reconcile(
+            o.current.0.location,
+            o.next.as_ref().map(|(i, _)| i.location),
+            o.turned,
+            prepared.current,
+            prepared.next(),
+        );
+        let mut session = Session::from_prepared(prepared)?;
+        session.current = at;
+        let page = session.page(at)?;
+        let verdict = if right {
+            open::compare(&o.shown().1, &page, &session.style)
+        } else {
+            open::Verdict::Page
+        };
+        perf!(
+            "open: \"{}\": book ready {:.0} ms after the tap (worker: book {:.0} ms, position {:.0} ms, first page {:.0} ms, neighbours {:.0} ms; adopted in {:.0} ms); snapshot {:?}; page numbers {}",
+            o.title,
+            ms(o.tapped.elapsed()),
+            ms(times.open),
+            ms(times.place),
+            ms(times.render),
+            ms(times.neighbours),
+            ms(t.elapsed()),
+            verdict,
+            if times.pages_cached { "from cache" } else { "being computed in the background" }
+        );
+        if verdict == open::Verdict::Same && !o.turned {
+            // The snapshot on disk is exactly this page: don't write it back.
+            let key = snapshot::Key::new(&o.id, o.stamp, &o.style, o.current.0.locator.clone());
+            let next = o.next.as_ref().map(|(i, _)| i.location);
+            self.snapshots.already_saved(key, page.clone(), next);
+        }
+        if o.turned || !right {
+            let now = aristotle_library::library::now();
+            self.lib.set_progress(&session.id, session.progress(now));
+            self.debounce.changed(Instant::now());
+        }
+        let o = *o;
+        let menu_open = o.menu_open;
+        let page_node = o.page_node;
+        if let Some(w) = self.ui.tree.widget_mut::<PageView>(page_node) {
+            w.page = page.clone();
+        }
+        self.enter_reader(session, o.menu, page_node, o.settings, o.gestures);
+        if let Screen::Reader(r) = &mut self.screen {
+            if menu_open {
+                // The labels go out in the same frame as the page, if any.
+                r.menu_open = true;
+                update_menu_labels(&mut self.ui, r);
+            }
+        }
+        let same = verdict == open::Verdict::Same;
+        match (same, deferred, menu_open) {
+            (true, _, true) => self.render_ui()?,
+            // The UI's copy of the screen already has these pixels: no
+            // update at all.
+            (true, _, false) => {}
+            // The caller redraws the whole screen next, or asks us to.
+            (false, true, _) => {}
+            // Never a partial fix-up: one full mode-9 update, like a page
+            // turn (behind an open menu, like a chapter jump).
+            (false, false, true) => {
+                self.ui.tree.invalidate(page_node, Refresh::Auto);
+                self.render_ui_with(Content::Page)?;
+            }
+            (false, false, false) => {
+                self.panel.show_page(&page, false, "corrected page")?;
+                self.ui.tree.invalidate(page_node, Refresh::Auto);
+                // The panel already shows the page; this only updates the UI's copy.
+                self.ui.render();
+            }
+        }
+        if let Screen::Reader(r) = &mut self.screen {
+            r.session.prerender();
+        }
+        Ok(!same && deferred)
+    }
+
+    fn enter_reader(
+        &mut self,
+        session: Session,
+        menu: Menu,
+        page_node: NodeId,
+        settings: Settings,
+        gestures: TurnGestures,
+    ) {
         self.screen = Screen::Reader(Box::new(Reading {
             session,
             menu,
             page_node,
             menu_open: false,
-            gestures: TurnGestures::new(self.ui.bounds()),
+            gestures,
             settings,
         }));
-        Ok(())
     }
 
-    fn light_level(&self) -> f32 {
-        self.light
-            .as_ref()
-            .and_then(|l| l.brightness().ok().map(|b| prefs::raw_to_light(b, l.max())))
-            .unwrap_or(0.0)
+    /// Store the current page (and the next, if rendered) for the next
+    /// open, with the progress it belongs to; see snapshot.rs. Call before
+    /// saving the index.
+    fn save_snapshot(&mut self) {
+        if let Some((key, current, next)) = self.snapshot_parts() {
+            self.snapshots.save(key, current, next);
+        }
+    }
+
+    /// What [`App::save_snapshot`] stores, without copying any pixels yet;
+    /// sets the progress it belongs to.
+    #[allow(clippy::type_complexity)]
+    fn snapshot_parts(
+        &mut self,
+    ) -> Option<(
+        snapshot::Key,
+        (snapshot::PageInfo, Rc<Page>),
+        Option<(snapshot::PageInfo, Rc<Page>)>,
+    )> {
+        let Screen::Reader(r) = &mut self.screen else {
+            return None;
+        };
+        let s = &mut r.session;
+        let progress = s.progress(aristotle_library::library::now());
+        // The snapshot is only shown if the index stores this locator.
+        let stored = self.lib.book(&s.id).and_then(|b| b.progress.as_ref());
+        if stored.map(|p| &p.locator) != Some(&progress.locator) {
+            self.lib.set_progress(&s.id, progress.clone());
+        }
+        let key = snapshot::Key::new(&s.id, s.stamp(), &s.style, progress.locator);
+        let here = s.current;
+        let current = s.page(here).ok()?;
+        let next = s
+            .known_next(here)
+            .and_then(|l| s.rendered(l).map(|p| (open::page_info(s, l), p)));
+        let info = open::page_info(s, here);
+        Some((key, (info, current), next))
+    }
+
+    /// The reader screen built again around the current page, menu closed
+    /// (after the screensaver).
+    fn rebuild_reader(&mut self, refresh: Refresh) -> Result<(), Error> {
+        let settings = self.prefs.menu_settings(self.light_level());
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
+        let page = r.session.page(r.session.current)?;
+        let (tree, menu, page_node) = reader_tree(&self.styles, &r.session.title, &settings, page);
+        r.settings = settings;
+        r.menu = menu;
+        r.page_node = page_node;
+        r.menu_open = false;
+        r.gestures.reset();
+        self.ui.set_tree_with(tree, refresh);
+        self.render_ui()
     }
 
     fn on_intent(&mut self, intent: Intent) -> Result<(), Error> {
@@ -694,19 +1612,34 @@ impl App {
 
     fn open_menu(&mut self) -> Result<(), Error> {
         let light = self.light_level();
+        let night = self.prefs.night;
         let Screen::Reader(r) = &mut self.screen else {
             return Ok(());
         };
         r.menu_open = true;
-        update_menu_labels(&mut self.ui, r);
         r.settings.light = light;
+        r.settings.night = night;
+        let page = r.session.page(r.session.current)?;
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &r.settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
+        update_menu_labels(&mut self.ui, r);
         if let Some(w) = self.ui.tree.widget_mut::<Slider>(r.menu.light) {
             w.value = light;
         }
         self.ui.tree.invalidate(r.menu.light, Refresh::Auto);
-        self.ui.tree.set_hidden(r.menu.root, false);
         self.ui.reset_gestures();
-        self.render_ui()
+        self.ui.layout();
+        let parts = menu_parts(&self.ui, &r.menu);
+        self.ui.render();
+        self.panel.present_overlay(&self.ui, &parts);
+        Ok(())
     }
 
     /// Close the menu: the page comes back with a full mode-9 update of the
@@ -738,17 +1671,34 @@ impl App {
                 let mut s = r.settings;
                 match id {
                     menu_action::BACK => self.back_to_library(),
-                    menu_action::LIGHT_SET | menu_action::LIGHT_DOWN | menu_action::LIGHT_UP => {
-                        s.light = match id {
-                            menu_action::LIGHT_SET => {
-                                Slider::value_at(self.ui.tree.rect(node), at.x)
+                    menu_action::NIGHT => {
+                        let on = !self.prefs.night;
+                        s.night = on;
+                        r.settings = s;
+                        if let Some(t) = r.menu.night_toggle {
+                            if let Some(w) = self.ui.tree.widget_mut::<Toggle>(t) {
+                                w.on = on;
                             }
-                            menu_action::LIGHT_DOWN => (s.light - 1.0 / 24.0).max(0.0),
-                            _ => (s.light + 1.0 / 24.0).min(1.0),
+                            self.ui.tree.invalidate(t, Refresh::Auto);
+                        }
+                        self.set_night(on);
+                        self.render_ui()
+                    }
+                    menu_action::LIGHT_SET | menu_action::LIGHT_DOWN | menu_action::LIGHT_UP => {
+                        let cur = self.light.as_ref().and_then(|l| l.step().ok()).unwrap_or(0);
+                        let step = match id {
+                            menu_action::LIGHT_SET => {
+                                Slider::step_at(self.ui.tree.rect(node), at.x, LIGHT_STEPS)
+                            }
+                            menu_action::LIGHT_DOWN => cur.saturating_sub(1),
+                            _ => (cur + 1).min(LIGHT_STEPS),
                         };
                         if let Some(l) = &self.light {
-                            let _ = l.set_brightness(prefs::light_to_raw(s.light, l.max()));
+                            if let Err(e) = l.set_step(step) {
+                                eprintln!("aristotle: frontlight: {e}");
+                            }
                         }
+                        s.light = step as f32 / LIGHT_STEPS as f32;
                         if let Some(w) = self.ui.tree.widget_mut::<Slider>(r.menu.light) {
                             w.value = s.light;
                         }
@@ -794,9 +1744,18 @@ impl App {
         r.session.current = location;
         let page = r.session.page(location)?;
         if let Some(w) = self.ui.tree.widget_mut::<PageView>(r.page_node) {
-            w.page = page;
+            w.page = page.clone();
         }
         self.ui.tree.invalidate(r.page_node, Refresh::Auto);
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &r.settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
         update_menu_labels(&mut self.ui, r);
         let now = aristotle_library::library::now();
         self.lib
@@ -827,11 +1786,20 @@ impl App {
         let page = r.session.page(r.session.current)?;
         let t_layout = t.elapsed();
         r.settings = settings;
-        let (tree, menu, page_node) = reader_tree(&self.styles, &r.session.title, &settings, page);
+        let (tree, menu, page_node) =
+            reader_tree(&self.styles, &r.session.title, &settings, page.clone());
         r.menu = menu;
         r.page_node = page_node;
         self.ui.set_tree_with(tree, Refresh::Auto);
-        self.ui.tree.set_hidden(r.menu.root, false);
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
         update_menu_labels(&mut self.ui, r);
         perf!(
             "restyle: {} pt, line height {}, margin {} mm: layout and page {:.0} ms",
@@ -853,20 +1821,40 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
+        let snapshot = self.snapshot_parts();
+        // The library goes out first; copying the pages and serialising the
+        // index wait until it is submitted.
+        self.show_library(Refresh::Full)?;
+        if let Some((key, current, next)) = snapshot {
+            self.snapshots.save(key, current, next);
+        }
+        // The closed book's page needn't stay in memory for the skip test.
+        self.snapshots.forget();
         self.saver.save(&self.lib);
         self.debounce.saved();
-        self.show_library(Refresh::Full)
+        Ok(())
     }
 
-    /// Save progress and leave a white screen for the stock UI.
+    /// Save progress, give back the light and the stock screensaver, and
+    /// leave a white day-mode screen for the stock UI.
     fn leave(self) -> Result<(), Error> {
         let mut app = self;
+        // A forward turn made while the book was opening counts.
+        app.finish_opening(true)?;
         if let Screen::Reader(r) = &app.screen {
             let now = aristotle_library::library::now();
             app.lib.set_progress(&r.session.id, r.session.progress(now));
         }
+        if let Some(step) = app.asleep.take() {
+            app.set_light_step(step);
+        }
+        if app.screensaver_was == Some(false) {
+            let _ = power::prevent_screensaver(false);
+        }
+        app.save_snapshot();
         app.saver.save(&app.lib);
         app.saver.flush();
+        app.snapshots.flush();
         app.panel.clear()?;
         perf!("quit: progress saved, screen cleared");
         Ok(())
@@ -880,19 +1868,73 @@ fn reader_tree(
     settings: &Settings,
     page: Rc<Page>,
 ) -> (Tree, Menu, NodeId) {
+    reader_tree_with(styles, title, settings, page, (0, 0))
+}
+
+/// [`reader_tree`] with the menu's edges moved by `extents` (see
+/// [`fit_menu`]).
+fn reader_tree_with(
+    styles: &Styles,
+    title: &str,
+    settings: &Settings,
+    page: Rc<Page>,
+    extents: (i32, i32),
+) -> (Tree, Menu, NodeId) {
     let mut t = Tree::new();
     let page_node = t.custom(PageView { page });
     let spec = MenuSpec {
         title,
-        // Only Literata ships with the renderer, and night mode would need
-        // inverted pages; both stay out of the menu until they work.
+        // Only Literata ships with the renderer, so there is no font row.
         families: None,
-        night: false,
+        night: true,
+        top_extra: extents.0,
+        bottom_extra: extents.1,
     };
     let menu = build_menu(&mut t, styles, &spec, settings);
     let root = t.add(Node::new(Kind::Stack), [page_node, menu.root]);
     t.set_root(root);
     (t, menu, page_node)
+}
+
+/// Show the menu over `page` with its edges in the white between two lines
+/// of text, never through them: the bars hide whole lines. Rebuilds the
+/// reader tree when the edges have to move (the menu's labels are then
+/// fresh: set them after this).
+fn fit_menu(
+    ui: &mut Ui,
+    styles: &Styles,
+    title: &str,
+    settings: &Settings,
+    page: &Rc<Page>,
+    menu: &mut Menu,
+    page_node: &mut NodeId,
+) {
+    ui.tree.set_hidden(menu.root, false);
+    ui.layout();
+    let top = ui.tree.rect(menu.top).bottom() - menu.top_extra;
+    let sheet = ui.tree.rect(menu.sheet).y + menu.bottom_extra;
+    let extents = mask_extents(
+        &page.data,
+        page.stride,
+        page.width as usize,
+        page.height as usize,
+        top,
+        sheet,
+        120,
+    );
+    if extents != (menu.top_extra, menu.bottom_extra) {
+        let (tree, m, pn) = reader_tree_with(styles, title, settings, page.clone(), extents);
+        ui.set_tree_with(tree, Refresh::Auto);
+        ui.tree.set_hidden(m.root, false);
+        ui.layout();
+        *menu = m;
+        *page_node = pn;
+    }
+}
+
+/// The two opaque parts of the menu, for [`Panel::present_overlay`].
+fn menu_parts(ui: &Ui, menu: &Menu) -> [Rect; 2] {
+    [ui.tree.rect(menu.top), ui.tree.rect(menu.sheet)]
 }
 
 fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {

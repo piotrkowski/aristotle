@@ -121,3 +121,94 @@ fn locations_agree_with_pagination() {
     assert_eq!(page.data.len(), style.stride * style.height as usize);
     assert!(page.data.iter().any(|&p| p < 0x80));
 }
+
+/// A MOBI 7 file (uncompressed UTF-8 text in 4096-byte records) as the
+/// stock Kindle would have it.
+fn mobi_file(title: &str, text: &str) -> Vec<u8> {
+    let text = text.as_bytes();
+    let chunks: Vec<&[u8]> = text.chunks(4096).collect();
+    let mut r0 = vec![0u8; 16 + 0xe8];
+    r0[0..2].copy_from_slice(&1u16.to_be_bytes()); // no compression
+    r0[4..8].copy_from_slice(&(text.len() as u32).to_be_bytes());
+    r0[8..10].copy_from_slice(&(chunks.len() as u16).to_be_bytes());
+    r0[16..20].copy_from_slice(b"MOBI");
+    r0[20..24].copy_from_slice(&0xe8u32.to_be_bytes());
+    r0[28..32].copy_from_slice(&65001u32.to_be_bytes());
+    r0[36..40].copy_from_slice(&6u32.to_be_bytes());
+    let title_at = r0.len() as u32;
+    r0[84..88].copy_from_slice(&title_at.to_be_bytes());
+    r0[88..92].copy_from_slice(&(title.len() as u32).to_be_bytes());
+    r0.extend_from_slice(title.as_bytes());
+    let mut records = vec![r0];
+    records.extend(chunks.iter().map(|c| c.to_vec()));
+    let mut out = vec![0u8; 78 + 8 * records.len() + 2];
+    out[60..68].copy_from_slice(b"BOOKMOBI");
+    out[76..78].copy_from_slice(&(records.len() as u16).to_be_bytes());
+    for (i, r) in records.iter().enumerate() {
+        let at = 78 + 8 * i;
+        let offset = out.len() as u32;
+        out[at..at + 4].copy_from_slice(&offset.to_be_bytes());
+        out.extend_from_slice(r);
+    }
+    out
+}
+
+/// A converted MOBI saves stock Kindle positions through its position map.
+/// Every page must come back to itself, or each reopen would land a page
+/// early (seen on the device with "Pan Tadeusz").
+#[test]
+fn kindle_positions_reopen_on_the_same_page() {
+    let Some(data) = data_dir() else {
+        eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
+        return;
+    };
+    // One long chapter with markup the converter rewrites, like a real book.
+    let mut html = String::from("<html><body>");
+    for p in 0..400 {
+        html.push_str(&format!(
+            "<p width=\"0\" align=\"justify\"><font size=\"3\">Akapit {p}. </font>Zażółć \
+             <i>gęślą</i> jaźń, a potem <b>jeszcze</b> raz to samo, żeby tekst \
+             wypełnił wiele stron.</p>"
+        ));
+        if p % 7 == 0 {
+            html.push_str("<p height=\"1em\" width=\"0\" align=\"center\">* * *</p>");
+        }
+    }
+    html.push_str("</body></html>");
+    let dir = std::env::temp_dir().join(format!(
+        "aristotle-render-kindle-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pan-tadeusz.mobi");
+    std::fs::write(&path, mobi_file("Pan Tadeusz", &html)).unwrap();
+    aristotle_render::use_data_dir(&data).unwrap();
+    let style = Style::pw4();
+    let cache = dir.join("cache");
+
+    let mut book = Book::open(&path, &style, Some(&cache)).unwrap();
+    assert!(book.mobi().is_some_and(|m| m.posmap.is_some()));
+    book.paginate();
+    let pages = book.pagination().unwrap().to_vec();
+    assert!(pages.len() > 20, "{} pages", pages.len());
+    let mut fresh = Book::open(&path, &style, Some(&cache)).unwrap();
+    let mut wrong = Vec::new();
+    for &start in &pages {
+        let pos = book.position_at(start);
+        assert!(matches!(pos, Position::Kindle(_)), "{pos:?}");
+        let loc = fresh.location_of(&pos).unwrap();
+        if fresh.page_start(loc) != Some(start) {
+            wrong.push((start, pos, loc));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} of {} pages move: {wrong:?}",
+        wrong.len(),
+        pages.len()
+    );
+}

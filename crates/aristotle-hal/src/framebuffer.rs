@@ -31,6 +31,8 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::AsRawFd;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
 const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
@@ -42,6 +44,19 @@ const MXCFB_WAIT_FOR_UPDATE_COMPLETE: libc::c_ulong = 0xC008_462F;
 const UPDATE_MODE_PARTIAL: u32 = 0;
 const UPDATE_MODE_FULL: u32 = 1;
 const TEMP_USE_AMBIENT: i32 = 0x1000;
+/// `EPDC_FLAG_ENABLE_INVERSION` from FBInk's `mxcfb-kindle.h`: the PXP
+/// inverts the update region on its way from the framebuffer to the panel.
+/// FBInk and KOReader report it as working on mxcfb Kindles (`canHWInvert`).
+const EPDC_FLAG_ENABLE_INVERSION: u32 = 0x01;
+
+/// The update flags for the current inversion state.
+fn update_flags(invert: &AtomicBool) -> u32 {
+    if invert.load(Ordering::Relaxed) {
+        EPDC_FLAG_ENABLE_INVERSION
+    } else {
+        0
+    }
+}
 
 /// EPDC waveform mode: how the panel moves each pixel to its new value.
 ///
@@ -283,9 +298,18 @@ pub struct Updater {
     width: u32,
     height: u32,
     next_marker: u32,
+    invert: Arc<AtomicBool>,
 }
 
 impl Updater {
+    /// Count this handle's update markers from `base`, so two updaters on
+    /// two threads never hand out the same marker (a waiter would then wake
+    /// for the wrong update). The default base is `0x8000_0000`.
+    pub fn with_marker_base(mut self, base: u32) -> Self {
+        self.next_marker = base;
+        self
+    }
+
     /// Same contract as [`Framebuffer::update`]. Blocks while the driver is
     /// still busy with an earlier update (about one waveform duration,
     /// measured: 120 ms for A2).
@@ -323,6 +347,7 @@ impl Updater {
             },
             update_marker: marker,
             temp: TEMP_USE_AMBIENT,
+            flags: update_flags(&self.invert),
             ..Default::default()
         };
         ioctl(&self.file, MXCFB_SEND_UPDATE_REX, &mut data)?;
@@ -369,6 +394,8 @@ pub struct Framebuffer {
     geometry: Geometry,
     id: String,
     next_marker: u32,
+    /// Hardware inversion for every update, shared with [`Updater`]s.
+    invert: Arc<AtomicBool>,
 }
 
 fn ioctl<T>(file: &File, request: libc::c_ulong, arg: *mut T) -> io::Result<()> {
@@ -429,6 +456,7 @@ impl Framebuffer {
             },
             id: String::from_utf8_lossy(&fix.id[..id_len]).into_owned(),
             next_marker: 1,
+            invert: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -447,7 +475,23 @@ impl Framebuffer {
             width: self.geometry.width,
             height: self.geometry.height,
             next_marker: 0x8000_0000,
+            invert: self.invert.clone(),
         })
+    }
+
+    /// Hardware night mode: from now on every update, from this handle and
+    /// from every [`Updater`] made from it, asks the PXP to invert the region
+    /// on its way to the panel (`EPDC_FLAG_ENABLE_INVERSION`). The
+    /// framebuffer keeps day pixels, so screenshots of `/dev/fb0` show the
+    /// day picture. The inversion only reaches the panel with the next
+    /// update of each region, so follow a switch with a full update of the
+    /// whole screen.
+    pub fn set_hw_invert(&self, on: bool) {
+        self.invert.store(on, Ordering::Relaxed);
+    }
+
+    pub fn hw_invert(&self) -> bool {
+        self.invert.load(Ordering::Relaxed)
     }
 
     pub fn geometry(&self) -> Geometry {
@@ -483,6 +527,17 @@ impl Framebuffer {
     /// of each row are used. Clipped to the screen. One memcpy per row, so a
     /// full page takes well under a millisecond.
     pub fn blit(&mut self, src: &[u8], src_stride: usize, rect: Rect) {
+        self.blit_rows(src, src_stride, rect, false);
+    }
+
+    /// [`Framebuffer::blit`] with every pixel inverted (`255 - v`), for
+    /// software night mode. The inversion is fused into the copy, which is
+    /// bound by memory bandwidth, so it costs about the same as a plain blit.
+    pub fn blit_inverted(&mut self, src: &[u8], src_stride: usize, rect: Rect) {
+        self.blit_rows(src, src_stride, rect, true);
+    }
+
+    fn blit_rows(&mut self, src: &[u8], src_stride: usize, rect: Rect, invert: bool) {
         let Some(clipped) = self.clip(rect) else {
             return;
         };
@@ -498,14 +553,16 @@ impl Framebuffer {
             if src_off + width > src.len() || dst_off + width > self.map_len {
                 break;
             }
-            // SAFETY: both ranges were bounds-checked just above.
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    src.as_ptr().add(src_off),
-                    self.map.as_ptr().add(dst_off),
-                    width,
-                )
-            };
+            let from = &src[src_off..src_off + width];
+            // SAFETY: the destination range was bounds-checked just above,
+            // and the mapping is not aliased by any Rust reference.
+            let to =
+                unsafe { std::slice::from_raw_parts_mut(self.map.as_ptr().add(dst_off), width) };
+            if invert {
+                invert_into(to, from);
+            } else {
+                to.copy_from_slice(from);
+            }
         }
     }
 
@@ -553,6 +610,7 @@ impl Framebuffer {
             },
             update_marker: marker,
             temp: TEMP_USE_AMBIENT,
+            flags: update_flags(&self.invert),
             ..Default::default()
         };
         ioctl(&self.file, MXCFB_SEND_UPDATE_REX, &mut data)?;
@@ -610,9 +668,38 @@ impl Framebuffer {
     }
 }
 
+/// `dst[i] = 255 - src[i]`; a plain loop the compiler vectorizes (NEON on
+/// the PW4).
+pub fn invert_into(dst: &mut [u8], src: &[u8]) {
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = !*s;
+    }
+}
+
 impl Drop for Framebuffer {
     fn drop(&mut self) {
         // SAFETY: unmapping exactly the region mapped in `open`.
         unsafe { libc::munmap(self.map.as_ptr().cast(), self.map_len) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inversion_flag_follows_the_switch() {
+        let invert = AtomicBool::new(false);
+        assert_eq!(update_flags(&invert), 0);
+        invert.store(true, Ordering::Relaxed);
+        assert_eq!(update_flags(&invert), EPDC_FLAG_ENABLE_INVERSION);
+    }
+
+    #[test]
+    fn invert_into_maps_every_level() {
+        let src: Vec<u8> = (0..=255).collect();
+        let mut dst = vec![0; 256];
+        invert_into(&mut dst, &src);
+        assert!(dst.iter().enumerate().all(|(i, &v)| v as usize == 255 - i));
     }
 }

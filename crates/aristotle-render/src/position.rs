@@ -157,6 +157,37 @@ impl PosMap {
         interpolate(&self.anchors, location, |a| a.1, |a| a.0)
     }
 
+    /// The smallest MOBI position whose location is at or after `location`.
+    /// [`PosMap::position`] rounds down, and where the EPUB has more bytes
+    /// than the MOBI text (rewritten markup), mapping it back lands before
+    /// `location`: on a page start, that is the previous page. Saving this
+    /// position instead makes a page start come back to its own page.
+    pub fn position_at_or_after(&self, location: u64) -> u64 {
+        let mut lo = self.position(location);
+        if self.location(lo) >= location {
+            return lo;
+        }
+        let end = self.anchors.last().map_or(lo, |a| a.0);
+        let mut hi = lo + 1;
+        while hi < end && self.location(hi) < location {
+            hi = lo + (hi - lo) * 2;
+        }
+        let mut hi = hi.min(end);
+        if self.location(hi) < location {
+            return hi;
+        }
+        // location() never decreases with the position: bisect (lo, hi].
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if self.location(mid) >= location {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        hi
+    }
+
     /// One anchor per line, `position location`, so the file can be read in
     /// a shell.
     pub fn to_text(&self) -> String {
@@ -242,6 +273,16 @@ mod tests {
         for p in [0u64, 10, 999, 1000, 1700] {
             let back = m.position(m.location(p));
             assert!(back.abs_diff(p) <= 1, "{p} -> {back}");
+        }
+        // Where locations outnumber positions, rounding down loses ground;
+        // position_at_or_after never lands before the location.
+        for l in [300u64, 301, 1301, 1302, 2299, 2301, 2799] {
+            let p = m.position_at_or_after(l);
+            assert!(m.location(p) >= l, "{l} -> {p} -> {}", m.location(p));
+            assert!(
+                p == 0 || m.location(p - 1) < l,
+                "{l} -> {p} is not the smallest"
+            );
         }
         let text = m.to_text();
         assert_eq!(PosMap::from_text(&text).unwrap(), m);

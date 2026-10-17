@@ -212,7 +212,7 @@ fn main() -> io::Result<()> {
                         return quit(&mut fb, &display)
                     }
                     UiEvent::Action { id, .. }
-                        if id == library::action::RESUME || id >= library::action::BOOK =>
+                        if id == library::action::RESUME || id >= library::action::ITEM =>
                     {
                         let (tree, reader) = Reader::build(
                             &mut ui.text,

@@ -60,7 +60,7 @@ fn field<'a>(message: &'a str, key: &str) -> Option<&'a str> {
 /// Accumulates driver log lines into [`Update`]s.
 #[derive(Default)]
 pub struct UpdateLog {
-    open: HashMap<u64, Update>,
+    open: HashMap<i64, Update>,
     pub done: Vec<Update>,
 }
 
@@ -75,7 +75,9 @@ impl UpdateLog {
         let Some((id, body)) = rest.split_once("] ") else {
             return;
         };
-        let Ok(id) = id.parse::<u64>() else { return };
+        // Updates without a marker of their own (our partial updates) get a
+        // driver-assigned one with the top bit set, printed as negative.
+        let Ok(id) = id.parse::<i64>() else { return };
         if body.starts_with("update start") {
             // `[N]` is the driver's own update sequence number, used only to
             // join the start, detail and end lines of one update.
@@ -142,6 +144,17 @@ mod tests {
         assert_eq!(log.done.len(), 1);
         assert_eq!(log.done[0].rect, (10, 951, 75, 37));
         assert_eq!(log.done[0].waveform, "auto");
+    }
+
+    #[test]
+    fn joins_updates_with_negative_markers() {
+        let mut log = UpdateLog::default();
+        log.feed(1, "[ 3145.087017] mxc_epdc_fb: [-2147483573] update start marker=-2147483573, start time=1");
+        log.feed(2, "[ 3145.087034] mxc_epdc_fb: [-2147483573] waveform=0x6 (a2) mode=0x0 temp:4096 update region top=65, left=839, width=162, height=106 flags=0x0");
+        log.feed(3, "[ 3145.207175] mxc_epdc_fb: [-2147483573] update end marker=2147483723, end time=2, time taken=120 ms");
+        assert_eq!(log.done.len(), 1);
+        assert_eq!(log.done[0].waveform, "a2");
+        assert!(!log.done[0].full);
     }
 
     #[test]
