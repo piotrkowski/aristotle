@@ -9,7 +9,7 @@ built, and the device and firmware.
 ## What runs on the device
 
 The reader opens no ports. The attack surface is the device agent
-(`devloop/kindle/aristotle-usbnet/`).
+(`device/extension/`).
 
 - The agent turns the USB port into a network link (`usb0`, with the Kindle at
   `192.168.15.244`) and starts KOReader's `dropbear` as root, with public-key
@@ -39,11 +39,11 @@ The reader opens no ports. The attack surface is the device agent
   `/var/local/aristotle/net-allow`. It filters by IP address, so anything else
   hosted on an allowed address is reachable too. It does not inspect TLS SNI
   or filter DNS queries, and it applies from the agent's first tick after boot.
-  [docs/network.md](../docs/network.md) describes these limits and how to check
+  [device/README.md](../device/README.md#network) describes these limits and how to check
   the rules on a device. A way past `scoped` that those limits do not cover is
   a security issue.
 
-The device probe (`probe/device/aristotle-probe`) is read-only, but its output
+The device probe (`device/probe`) is read-only, but its output
 identifies the device and its owner (serial number, MAC addresses, Wi-Fi
 networks). Review it before sharing any of it, never attach it unedited to a
 public issue, and never share the e-ink waveforms it can copy.

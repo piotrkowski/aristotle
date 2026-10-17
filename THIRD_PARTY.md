@@ -11,7 +11,7 @@ includes or links the following work by others.
 | --- | --- | --- |
 | `third_party/plato` | [Plato](https://github.com/baskerville/plato), a submodule pointing at our fork [piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`. The MuPDF it pins is built with the patches in `tools/mupdf-patches/`. | AGPL-3.0 |
 | `crates/aristotle-render/assets/fonts/`, `crates/aristotle-ui/assets/fonts/` | [Literata](https://github.com/googlefonts/literata) (The Literata Project Authors, designed by TypeTogether), [Charis](https://software.sil.org/charis/) and [Gentium Book](https://software.sil.org/gentium/) (SIL Global) | SIL OFL 1.1, text next to each font |
-| `devloop/emulator/eink-emulator-pw4.patch` | Our patch to [eink-emulator](https://github.com/katadelos/eink-emulator), which has no licence. The patch keeps one line of upstream context per change. | Ours |
+| `tools/emulator/eink-emulator-pw4.patch` | Our patch to [eink-emulator](https://github.com/katadelos/eink-emulator), which has no licence. The patch keeps one line of upstream context per change. | Ours |
 | `crates/aristotle-library/src/id.rs` | The partial-MD5 document hash follows KOReader's `util.partialMD5`, so both compute the same id. | KOReader: AGPL-3.0 |
 
 ## In the device bundle

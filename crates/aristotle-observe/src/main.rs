@@ -11,6 +11,9 @@
 //! aristotle-observe watch SECONDS          observe real use
 //! aristotle-observe run SCRIPT             inject a script and observe it
 //! aristotle-observe tap X Y                inject one tap
+//! aristotle-observe caps                   the axes the touchscreen declares
+//! aristotle-observe raw SECONDS            the touchscreen's raw evdev stream
+//! aristotle-observe bench ...              EPDC benchmarks (`bench` module)
 //! ```
 //!
 //! Script lines: `tap X Y`, `hold X Y MS`, `swipe X1 Y1 X2 Y2 MS`,
@@ -25,6 +28,7 @@
 //! driver logs with its own clock, so `kmsg` timestamps are calibrated against
 //! CLOCK_MONOTONIC by writing a marker line first.
 
+mod bench;
 mod kmsg;
 
 use std::fs::{self, File, OpenOptions};
@@ -441,7 +445,7 @@ const SNAP_DIR: &str = "/mnt/us/aristotle-snaps";
 
 /// Save the visible framebuffer (1088-byte stride × 1448 rows) to
 /// `SNAP_DIR/NAME.raw`, so each scenario step can be checked by eye with
-/// `devloop/host/fb2png.py`.
+/// `tools/host/fb2png.py`.
 fn snap(name: &str) -> io::Result<()> {
     let mut fb = File::open("/dev/fb0")?;
     let mut buf = vec![0u8; 1088 * 1448];
@@ -576,8 +580,12 @@ fn main() -> io::Result<()> {
         Some("tap") => Injector::open()?.tap(n(1), n(2), 60),
         Some("raw") => raw(n(1).max(1) as u64),
         Some("caps") => caps(),
+        Some("bench") => bench::run(&args[1..]),
         _ => {
-            eprintln!("usage: aristotle-observe watch SECONDS | run SCRIPT | tap X Y");
+            eprintln!(
+                "usage: aristotle-observe watch SECONDS | run SCRIPT | tap X Y | caps | raw SECONDS | {}",
+                bench::USAGE
+            );
             std::process::exit(2);
         }
     }

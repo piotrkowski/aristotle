@@ -84,7 +84,7 @@ def rust_crates() -> list[dict]:
         ).stdout
     )
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
-    roots = ("aristotle-render", "aristotle-reader")
+    roots = ("aristotle-render", "aristotle")
     todo = [p["id"] for p in meta["packages"]
             if p["name"] in roots and p["id"] in meta["workspace_members"]]
     assert len(todo) == len(roots), todo

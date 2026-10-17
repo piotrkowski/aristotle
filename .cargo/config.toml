@@ -1,8 +1,8 @@
 # Device builds: static, hard-float musl. Runs on the softfp stock userspace
 # because nothing is linked dynamically.
 #
-# The build directory is set by the devloop scripts through CARGO_TARGET_DIR
-# ($ARISTOTLE_CACHE/target, see devloop/env.sh); Cargo cannot expand variables
+# The build directory is set by the scripts in tools/ through CARGO_TARGET_DIR
+# ($ARISTOTLE_CACHE/target, see tools/env.sh); Cargo cannot expand variables
 # here.
 [target.armv7-unknown-linux-musleabihf]
 linker = "rust-lld"

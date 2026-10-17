@@ -2,32 +2,22 @@
 resolver = "2"
 members = [
     "crates/aristotle-hal",
-    "crates/aristotle-hello",
-    "crates/aristotle-touch",
-    "crates/aristotle-bench",
-    "crates/aristotle-pen",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",
     "crates/aristotle-ui",
-    "crates/aristotle-app",
     "crates/aristotle-render",
-    "crates/aristotle-reader",
+    "crates/aristotle",
 ]
 # Everything but the two crates that link Plato and its C libraries: plain
 # `cargo build`, `cargo test` and `cargo clippy` work on any host. Build those
 # two with tools/build-render.sh after tools/build-plato.sh.
 default-members = [
     "crates/aristotle-hal",
-    "crates/aristotle-hello",
-    "crates/aristotle-touch",
-    "crates/aristotle-bench",
-    "crates/aristotle-pen",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
     "crates/aristotle-library",
     "crates/aristotle-ui",
-    "crates/aristotle-app",
 ]
 # Plato's own workspace (our fork, a submodule): plato-core is a path
 # dependency, not a member.

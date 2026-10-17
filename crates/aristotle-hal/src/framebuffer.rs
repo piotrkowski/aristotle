@@ -16,7 +16,7 @@
 //! and submitting while an earlier update is still on the panel blocks until
 //! it is done. Interactive code should therefore submit from the display
 //! thread in [`crate::display`] and never from its input path. See
-//! `docs/eink-rendering.md`.
+//! `docs/ui-framework.md` ("E-ink rendering").
 //!
 //! Coordinates are framebuffer pixels in portrait orientation: (0, 0) is the
 //! top-left corner and the visible area is 1072 × 1448 on the PW4. Gray levels
@@ -132,7 +132,7 @@ impl Rect {
 /// driver handles one update at a time, and the submit ioctl itself blocks
 /// while an earlier update is still on the panel, so a `Presenter` used from
 /// an input loop still stalls that loop. Interactive code should use
-/// [`crate::display::Display`]. Measurements: `docs/eink-rendering.md`.
+/// [`crate::display::Display`]. Measurements: `docs/ui-framework.md` ("E-ink rendering").
 pub struct Presenter {
     in_flight: std::collections::VecDeque<u32>,
     max_in_flight: usize,

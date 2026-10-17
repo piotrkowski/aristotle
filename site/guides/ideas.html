@@ -31,19 +31,19 @@
 
   <div class="prose">
     <h2 id="newspaper">A daily newspaper</h2>
-    <p>Turn Hacker News and your RSS feeds into one EPUB a day in <code>documents/Gazeta/</code>. A small script can extract each article in reader mode, replace photos with line drawings or one-line descriptions, and add the top Hacker News comments. A sync step keeps the last few issues on the device.</p>
+    <p>Turn Hacker News and your RSS feeds into one EPUB a day in <code>documents/Gazeta/</code>, which the library shows as a folder. A small script can extract each article in reader mode, replace photos with line drawings or one-line descriptions, and add the top Hacker News comments. A sync step keeps the last few issues on the device.</p>
     <p>Calibre's <strong>Fetch news</strong> does much the same with its built-in recipes. Save the result as EPUB and copy it over.</p>
 
     <h2 id="web">Send a web page to the Kindle</h2>
     <p><a href="https://github.com/danburzo/percollate">percollate</a> or pandoc can turn an article into an EPUB. Copy it to the library with <code>scp</code>:</p>
 <pre><code>percollate epub https://example.com/long-read -o long-read.epub
-scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</code></pre>
+scp -F tools/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</code></pre>
 
     <h2 id="notes">Highlights in your notes</h2>
-    <p>Highlights are saved to <code>My Clippings.txt</code> in the stock Kindle format, which Obsidian plugins, Readwise importers and your own scripts already read. Aristotle also writes a Markdown file per book to <code>aristotle-notes/</code>.</p>
+    <p>Highlights are saved to <code>My Clippings.txt</code> in the stock Kindle format, which Obsidian plugins, Readwise importers and your own scripts already read. Aristotle also writes a Markdown file per book to <code>aristotle-notes/</code>. Turn off <strong>Save highlights to My Clippings.txt</strong> in the settings to keep only the Markdown notes.</p>
 
     <h2 id="dictionaries">Dictionaries for other languages</h2>
-    <p>Put StarDict dictionaries, such as the Wiktionary exports for Ancient Greek or Latin, in the dictionary folder. Holding a word then looks it up offline. See <a href="dictionaries.html">Add dictionaries</a>.</p>
+    <p>Put StarDict dictionaries, such as the Wiktionary exports for Ancient Greek or Latin, in the dictionary folder. Holding a word then looks it up offline. Greek lookups ignore accents and breathings. See <a href="dictionaries.html">Add dictionaries</a>.</p>
   </div>
 
   <nav class="pager" aria-label="Guides">

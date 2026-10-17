@@ -32,7 +32,7 @@
   <div class="prose">
     <h2 id="workspaces">One workspace, two build paths</h2>
     <p>Plain <code>cargo test</code> checks the pure-Rust default members. The renderer and reader app also belong to this workspace, but need Plato's C libraries. From the repository root:</p>
-<pre><code>. devloop/env.sh
+<pre><code>. tools/env.sh
 export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
 cargo test
 
@@ -47,20 +47,20 @@ cargo run --release -p aristotle-ui --bin aristotle-ui-preview
 
 # the reading interactions on a test book: menu, contents,
 # dictionaries, selection, highlights, footnotes, "go to"
-devloop/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
+tools/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
 $ARISTOTLE_CACHE/render/host/aristotle --data DATA --library LIB \
     --dict DICTIONARIES --preview OUT BOOKS/Aristotle/proba-czytania.epub</code></pre>
     <p>Both log each panel update with its waveform and rectangle, the reader to <code>updates.txt</code>. Compare the output before and after a change. Images should only differ if the change is visual.</p>
 
     <h2 id="emulator">The emulator</h2>
-    <p><code>devloop/emulator/setup.sh</code> builds a QEMU Paperwhite 4 with stock firmware 5.13.6, KUAL, MRPI and the jailbreak. Try anything that could hang the boot, touch the stock framework or load kernel code there first. The emulator does not reproduce e-ink timing or ghosting.</p>
-<pre><code>devloop/emulator/setup.sh
+    <p><code>tools/emulator/setup.sh</code> builds a QEMU Paperwhite 4 with stock firmware 5.13.6, KUAL, MRPI and the jailbreak. Try anything that could hang the boot, touch the stock framework or load kernel code there first. The emulator does not reproduce e-ink timing or ghosting.</p>
+<pre><code>tools/emulator/setup.sh
 cd $ARISTOTLE_CACHE/emulator/eink-emulator
 ./eink run pw4 --headless --qmp-socket --serial-socket</code></pre>
 
     <h2 id="scenarios">Scenarios on the device</h2>
-    <p><code>aristotle-observe</code> plays touch scenarios from <code>devloop/kindle/scenarios/</code> against the stock interface or Aristotle. From the panel driver's log it reports, for each interaction, the time to the first and last update, the update count, flashes and waveforms.</p>
-<pre><code># from devloop/kindle/scenarios/aristotle-transitions.txt
+    <p><code>aristotle-observe</code> plays touch scenarios from <code>tools/scenarios/</code> against the stock interface or Aristotle. From the panel driver's log it reports, for each interaction, the time to the first and last update, the update count, flashes and waveforms.</p>
+<pre><code># from tools/scenarios/aristotle-transitions.txt
 label turn-fwd
 tap 900 800
 wait 1500
@@ -71,7 +71,7 @@ wait 2000</code></pre>
     <p>Start each scenario from a known state with <code>go-home</code> and check its steps with <code>snap</code> screenshots. Unchecked numbers were wrong more than once. A change to what reaches the panel should keep the same updates and waveforms, and latency within 10 %.</p>
 
     <h2 id="screenshots">Screenshots</h2>
-    <p><code>tools/screenshots/compose.sh</code> makes the screenshots for the README, the docs and this site from 1072 × 1448 framebuffer captures in <code>$ARISTOTLE_CACHE/captures/readme/</code>, taken with <code>devloop/host/screenshot.sh</code>. <code>manifest.toml</code> lists each output and its inputs. The outputs are framed shots and demo frames in the panel's 16 grays.</p>
+    <p><code>tools/screenshots/compose.sh</code> makes the screenshots for the README, the docs and this site from 1072 × 1448 framebuffer captures in <code>$ARISTOTLE_CACHE/captures/readme/</code>, taken with <code>tools/host/screenshot.sh</code>. <code>manifest.toml</code> lists each output and its inputs. The outputs are framed shots and demo frames in the panel's 16 grays.</p>
     <p>The demo reads <code>site/demo/frames.js</code>, which holds each frame's image, alt text and tap targets in panel pixels. For new captures or another language, replace the images and that file.</p>
 
     <h2 id="rules">Before you send a change</h2>

@@ -15,7 +15,7 @@ use crate::style::Style;
 
 /// Gray level below which a pixel becomes black in the black and white
 /// frame of a page turn. Same value as the page-turn experiment
-/// (`aristotle-bench --bin pageturn`), where it was legible on the panel.
+/// (`aristotle-observe bench pageturn`), where it was legible on the panel.
 pub const BW_THRESHOLD: u8 = 160;
 
 /// A full-screen page: `height` rows of `stride` bytes, the first `width`
@@ -76,7 +76,7 @@ impl Page {
     }
 
     /// Write the raw buffer (stride included), readable by
-    /// `devloop/host/fb2png.py` like a framebuffer dump.
+    /// `tools/host/fb2png.py` like a framebuffer dump.
     pub fn write_raw(&self, path: &Path) -> io::Result<()> {
         File::create(path)?.write_all(&self.data)
     }
@@ -155,7 +155,7 @@ pub struct Folio {
 /// than by the book: chapter title on top, page number and progress below.
 /// They are drawn in the same frame as the text, so a page turn needs no
 /// separate footer update (the stock reader sends one, see
-/// `docs/native-vs-aristotle.md`).
+/// `docs/benchmarks.md`).
 pub struct Chrome {
     regular: Font,
     italic: Font,

@@ -2,9 +2,9 @@
 
 `compose.py` turns raw panel captures into the images of the README, the docs
 and the site. Inputs are 1072 x 1448 8-bit gray PNGs of the device's
-framebuffer (`devloop/host/screenshot.sh`) or of the desktop preview.
+framebuffer (`tools/host/screenshot.sh`) or of the desktop preview.
 
-- Framed shots go to `assets/screenshots/` (README and docs) and
+- Framed shots go to `docs/images/` (README and docs) and
   `site/assets/shots/` (the site's figures), as lossless gray-and-alpha PNGs
   with a transparent background, so they sit on light and dark pages.
 - The site's demo frames go to `site/demo/frames/` unframed, snapped to the
@@ -17,7 +17,7 @@ tools/screenshots/compose.sh
 ```
 
 The wrapper keeps uv's cache, the virtualenv and `TMPDIR` under the cache
-directory, `$ARISTOTLE_CACHE` (`devloop/env.sh`), and runs against the pinned
+directory, `$ARISTOTLE_CACHE` (`tools/env.sh`), and runs against the pinned
 `uv.lock`.
 
 ## Inputs
@@ -26,7 +26,7 @@ directory, `$ARISTOTLE_CACHE` (`devloop/env.sh`), and runs against the pinned
 `$ARISTOTLE_CACHE/captures/readme/`, named as the manifest names them
 (`day-library.png`, `night-greek-popup.png`, ...): the English interface, in
 day and night mode, with public-domain books only. To take them, run
-`devloop/host/screenshot.sh NAME` for each screen and copy the PNGs there
+`tools/host/screenshot.sh NAME` for each screen and copy the PNGs there
 under those names.
 
 Relative input paths resolve against `base`; `SCREENSHOTS_BASE` overrides it,

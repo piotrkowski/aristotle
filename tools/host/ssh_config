@@ -1,0 +1,12 @@
+# Use with: ssh -F tools/host/ssh_config kindle
+# ARISTOTLE_CACHE must be set: source tools/env.sh first (the scripts in
+# tools/ do). Environment variables in IdentityFile need OpenSSH 8.4 or later.
+Host kindle
+    HostName 192.168.15.244
+    User root
+    IdentityFile ${ARISTOTLE_CACHE}/ssh/kindle_ed25519
+    IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile ${ARISTOTLE_CACHE}/known_hosts
+    ConnectTimeout 5
+    ServerAliveInterval 10

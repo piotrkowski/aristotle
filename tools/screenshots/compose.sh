@@ -6,7 +6,7 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
-. "$here/../../devloop/env.sh"
+. "$here/../env.sh"
 export UV_CACHE_DIR="$ARISTOTLE_CACHE/uv-cache"
 export UV_PROJECT_ENVIRONMENT="$ARISTOTLE_CACHE/screenshots-venv"
 mkdir -p "$UV_CACHE_DIR"

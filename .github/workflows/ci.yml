@@ -35,9 +35,11 @@ jobs:
       - run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - run: cargo test --all-features --locked
       - name: Shell scripts parse
-        run: git ls-files -z '*.sh' | xargs -0 -n1 sh -n
+        run: |
+          git ls-files -z '*.sh' | xargs -0 -n1 sh -n
+          sh -n device/extension/agent/aristotlectl
       - name: Device agent tests (host-side, stubbed)
-        run: sh devloop/kindle/tests/net.sh && sh devloop/kindle/tests/agent.sh
+        run: sh device/tests/net.sh && sh device/tests/agent.sh
 
   # The default members for the device: static armv7 musl, linked by rust-lld
   # with Rust's own musl (.cargo/config.toml), so no C cross toolchain is

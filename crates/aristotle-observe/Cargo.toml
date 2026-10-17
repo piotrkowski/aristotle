@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Observes any UI on the device (stock or ours): pairs touches with the EPDC updates they cause, and injects scripted touches"
+description = "Observes any UI on the device (stock or ours): pairs touches with the EPDC updates they cause, injects scripted touches, and benchmarks the EPDC"
 
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }

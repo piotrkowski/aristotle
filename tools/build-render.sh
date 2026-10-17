@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Build the workspace members that link Plato (crates/aristotle-render and
-# the reader app, crates/aristotle-reader) and assemble their bundle:
+# the reader app, crates/aristotle) and assemble their bundle:
 #
 #   $OUT/aristotle-render      static binary: the renderer CLI
 #   $OUT/aristotle             static binary: the reader app
@@ -23,14 +23,14 @@
 # target: PLATO_BUILD (default $ARISTOTLE_CACHE/plato-build/main for device,
 # .../host-x86_64 for host; the host one only needs PLATO_LIBS_ONLY=1).
 # OUT defaults to $ARISTOTLE_CACHE/render/<device|host> (ARISTOTLE_CACHE comes
-# from devloop/env.sh); the device tarball goes to BUNDLE (default
+# from tools/env.sh); the device tarball goes to BUNDLE (default
 # $ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz)
-# and the reader app's to APP_BUNDLE (.../aristotle-app-device.tar.gz).
+# and the reader app's to APP_BUNDLE (.../aristotle-device.tar.gz).
 # CARGO_CMD=clippy|test runs that cargo command instead of building.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-. "$REPO/devloop/env.sh"
+. "$REPO/tools/env.sh"
 WHAT=${1:-device}
 case $WHAT in
     device) TARGET=armv7-unknown-linux-musleabihf PFX=arm DEFAULT_BUILD=main ;;
@@ -80,7 +80,7 @@ export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar"
 # environment, and skips the bundle (tests need the host target).
 CARGO_CMD=${CARGO_CMD:-build}
 cargo "$CARGO_CMD" --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
-    --manifest-path "$REPO/Cargo.toml" -p aristotle-render -p aristotle-reader
+    --manifest-path "$REPO/Cargo.toml" -p aristotle-render -p aristotle
 [ "$CARGO_CMD" = build ] || exit 0
 
 DL="$TOOLS/downloads"
@@ -224,15 +224,15 @@ du -sh "$OUT/data"
 #   ssh kindle 'tar -xzf - -C /var/tmp' < "$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz"
 # The reader app's bundle (aristotle/ with the app, data/ and
 # run-aristotle.sh) is meant for the userstore; see docs/reader.md:
-#   ssh kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
+#   ssh kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-device.tar.gz"
 if [ "$WHAT" = device ]; then
     BUNDLE=${BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz}
     tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data \
         ./licenses ./SOURCE.txt
     mv -f "$BUNDLE.part" "$BUNDLE"
-    APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz}
-    cp "$REPO/devloop/kindle/run-aristotle.sh" "$REPO/devloop/kindle/takeover.sh" \
-        "$REPO/devloop/kindle/aristotle-usbnet/guard.sh" "$OUT/"
+    APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-device.tar.gz}
+    cp "$REPO/device/app/run-aristotle.sh" "$REPO/device/app/takeover.sh" \
+        "$REPO/device/extension/guard.sh" "$OUT/"
     tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \
         ./aristotle ./data ./run-aristotle.sh ./takeover.sh ./guard.sh ./licenses ./SOURCE.txt
     mv -f "$APP_BUNDLE.part" "$APP_BUNDLE"

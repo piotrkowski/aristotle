@@ -10,7 +10,7 @@
 //!   that is not the whole screen.
 //! - The night switch is exactly one full-screen GC16.
 //!
-//! On the device, `devloop/kindle/scenarios/aristotle-ui.txt` checks the
+//! On the device, `tools/scenarios/aristotle-ui.txt` checks the
 //! same with the EPDC driver's own log.
 
 use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};

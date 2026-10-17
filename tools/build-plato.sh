@@ -11,7 +11,7 @@
 # repo's .cargo/config.toml (+crt-static).
 #
 # Output: $PLATO_BUILD/out/plato (default PLATO_BUILD: $ARISTOTLE_CACHE/plato-build/main;
-# ARISTOTLE_CACHE comes from devloop/env.sh).
+# ARISTOTLE_CACHE comes from tools/env.sh).
 # Static C archives, also used by crates/aristotle-render: $PLATO_BUILD/plato/libs.
 #
 # PLATO_TARGET=x86_64-unknown-linux-musl builds the same C libraries for the PC
@@ -59,7 +59,7 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-. "$REPO/devloop/env.sh"
+. "$REPO/tools/env.sh"
 SUB="$REPO/third_party/plato"
 MUPDF_PATCHES="$REPO/tools/mupdf-patches"
 TARGET=${PLATO_TARGET:-armv7-unknown-linux-musleabihf}

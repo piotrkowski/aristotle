@@ -6,7 +6,7 @@ Aristotle is one Rust workspace that builds static binaries for the PW4, plus sh
 
 - One static binary per device. Static musl binaries cannot `dlopen`, and Rust has no stable ABI, so there is no runtime plugin system. Extensions are Rust code chosen at compile time. Code from outside comes in as data, such as books and dictionaries, or as a separate program.
 - Pure-Rust crates build and test on any host. Only `aristotle-render` and the reader app link C code.
-- Offline first. Network features are optional and off by default. Wi-Fi stays with the stock system or is limited to an allowlist of hosts ([Network](network.md)).
+- Offline first. Network features are optional and off by default. Wi-Fi stays with the stock system or is limited to an allowlist of hosts ([Network](../device/README.md#network)).
 - English is the source language. Other languages are catalogs checked at compile time.
 - Refresh rules come from measurements on the panel and are tested on the host.
 
@@ -16,9 +16,11 @@ Aristotle is one Rust workspace that builds static binaries for the PW4, plus sh
 Cargo.toml          the workspace; default-members leave out the two crates that link C
 .cargo/config.toml  static musl targets: armv7 for the device, x86_64 for host previews
 crates/             the Rust crates, flat; the directory name is the package name
-devloop/            env.sh, host scripts, device scripts and the agent, the emulator setup, scenarios
-probe/              the read-only device probe (a KUAL extension) and firmware unpackers
-tools/              the C cross-build, MuPDF patches, licence bundling, screenshots, RE tools
+device/             what runs on the Kindle: the KUAL extension and agent, the app's launch
+                    scripts, the read-only probe, and host-side tests of the scripts
+tools/              what runs on the host: env.sh, the C cross-build, the dev loop (host/),
+                    the emulator setup, device scenarios, firmware unpackers (probe/),
+                    licence bundling, screenshots, RE tools
 third_party/plato   our Plato fork (git submodule, branch aristotle)
 docs/, site/        developer documents and the project site
 ```
@@ -32,16 +34,12 @@ docs/, site/        developer documents and the project site
 | `aristotle-i18n` | Message catalogs, plurals, dates and numbers |
 | `aristotle-library` | Finds, indexes and describes EPUB, MOBI/AZW3, PDF, TXT and CBZ files. Covers, clippings, export, and `aristotle-library-cli` ([Library](library.md)) |
 | `aristotle-render` | Plato's document engine and MuPDF: opening, pagination, page rendering, footnotes ([Reader](reader.md)) |
-| `aristotle-reader` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
-| `aristotle-app` | An earlier device driver for the `aristotle-ui` screens, without books |
-| `aristotle-hello`, `aristotle-touch` | First on-device tests: drawing and refresh, touch marks |
-| `aristotle-bench` | EPDC latency per waveform, parallel updates, page turns |
-| `aristotle-pen` | Stroke rendering, with record and replay in `aristotle-pen-live` and `aristotle-pen-bench` |
-| `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches |
+| `aristotle` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
+| `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches. `bench` measures EPDC latency per waveform, streamed updates and page-turn strategies |
 
-`aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The reader depends on all of them, and takes `aristotle-ui` without its embedded fonts.
+`aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The app, `aristotle`, depends on all of them but `aristotle-observe`, and takes `aristotle-ui` without its embedded fonts.
 
-The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle-reader`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
+The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
 
 ## On the device
 
@@ -51,7 +49,7 @@ The app bundle unpacks into `/mnt/us/aristotle/`: the `aristotle` binary, `data/
 
 `powerd`, `volumd`, `wifid` and `lipcd` keep running. The app sets `preventScreenSaver` so `powerd` does not draw the stock screensaver, and draws its own.
 
-The device agent is a separate upstart job (`aristotle-agent.conf`), installed from `devloop/kindle/aristotle-usbnet/agent/`. It brings up the USB network and SSH at boot. `aristotlectl` switches between network and drive mode, and the settings screen calls it through `aristotle_hal::system::set_usb_mode`.
+The device agent is a separate upstart job (`aristotle-agent.conf`), installed from `device/extension/agent/`. It brings up the USB network and SSH at boot ([device/README.md](../device/README.md)). `aristotlectl` switches between network and drive mode, and the settings screen calls it through `aristotle_hal::system::set_usb_mode`.
 
 Books are read from `/mnt/us/documents`. The app keeps its index, covers, page cache, snapshots and `reader.json` in `/mnt/us/.aristotle`.
 
@@ -81,8 +79,8 @@ Today these are code paths in the workspace. None is a stable API yet.
 | Languages | A JSON file in `crates/aristotle-i18n/locales/` ([Adding a language](ui-framework.md#adding-a-language)) |
 | Hyphenation | `aristotle_ui::text::Hyphenator` for the UI. Liang patterns in `data/hyphenation-patterns/` for books, chosen by `HYPH_LANGS` in `tools/build-render.sh` |
 | Book formats | `aristotle_library::format` detects a format by content. EPUB goes through Plato's HTML engine. MOBI 7 is converted to EPUB first (`aristotle-render/src/mobi.rs`). PDF and the rest go through MuPDF |
-| Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle-reader/src/dict/` picks them by script and the book's language |
-| Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source ([Fun use cases](fun-use-cases.md)) |
+| Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle/src/dict/` picks them by script and the book's language |
+| Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source (the site's [ideas](https://piotrkowski.github.io/aristotle/guides/ideas.html)) |
 | Refresh policy | The waveform hints in `aristotle_ui::ui` and `panel::plan` in the reader ([Transitions](ui-framework.md#transitions)) |
 
 `aristotle-hal` knows only the PW4. There is no device profile yet.
@@ -91,13 +89,23 @@ Today these are code paths in the workspace. None is a stable API yet.
 
 Leptos and Topcoat render HTML for a browser. On the device that means a browser engine of tens of megabytes with no control over waveforms, regions or the driver's one update at a time. Slint is the serious alternative. It has a software renderer, a PW4 backend under MIT or Apache, and GPLv3 terms compatible with the AGPL. Its renderer reports dirty rectangles without the reason for the change, so our refresh policy would have to guess from rectangles. Its text wraps greedily, without hyphenation or justification. It adds a compiler and a runtime to a binary we cut from 29.5 to 8.4 MB. Its royalty-free licence excludes embedded devices, so a closed third-party frontend would need a commercial licence. iced, egui and Xilem are GPU-first or redraw each frame. Third-party authors who prefer Slint can still ship a Slint program as an external app.
 
+## Related projects
+
+Check these before building something that may already exist. What the device bundle ships, with licences, is in [THIRD_PARTY.md](../THIRD_PARTY.md).
+
+- Built on: [Plato](https://github.com/baskerville/plato) (AGPL-3.0) renders the pages, through `plato-core` from our fork ([piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`; [reader.md](reader.md)), with none of its Kobo interface. [KOReader](https://github.com/koreader/koreader) (AGPL-3.0) gave the PW4 sysfs paths (battery, frontlight, hall sensor), the `refresh_rex` waveform policy in [koreader-base](https://github.com/koreader/koreader-base) and the way to stop the stock framework, and the dev loop uses its `dropbear`. [FBInk](https://github.com/NiLuJe/FBInk)'s `eink/mxcfb-kindle.h` (GPL-3.0) is our reference for the Kindle EPDC ABI; no FBInk code is linked. [eink-emulator](https://github.com/katadelos/eink-emulator) and its [QEMU fork](https://github.com/katadelos/qemu/tree/eink-emulator) boot the stock PW4 (`imx6sll-rex`) firmware; `tools/emulator/` sets them up.
+- Device knowledge: [slint-kindle-backend](https://github.com/sverrejb/slint-kindle-backend) (MIT or Apache-2.0), a Rust Kindle backend tested on the PW4 (Rex update struct, ioctl probing, evdev touch). [yb-reader](https://github.com/albu/yb-reader) (AGPL-3.0), a Rust reader for newer Kindles that takes over through Amazon's `DONT_START_FRAMEWORK` flag. [kindlemodding.org](https://kindlemodding.org) lists the LIPC services, their properties and the upstart jobs. [openlipc](https://github.com/arkq/openlipc) and [liblipc-go](https://github.com/clintharrison/liblipc-go) show that LIPC is D-Bus underneath and works without `liblipc.so`. Amazon's GPL source release for 5.13.6 (`Kindle_src_5.13.6_3731980038.tar.gz`) has the 4.1.15-lab126 kernel tree and configuration that kernel modules need.
+- Jailbreak and tools: [KindleModding](https://github.com/KindleModding) publishes the jailbreaks (LanguageBreak covers firmware up to 5.16.2.1.1), Hotfix and the documentation the install relies on. KUAL and MRPI come from NiLuJe's snapshots on MobileRead. [KindleTool](https://github.com/NiLuJe/KindleTool) unpacks update packages. [koxtoolchain](https://github.com/koreader/koxtoolchain)'s `kindlepw2` matches the PW4 below 5.16.3; we build static musl binaries with Zig and Rust instead.
+- A kernel of our own would start through kexec from the stock one, since the PW4 is secure-boot locked ([pw4-reference.md](pw4-reference.md)). [kindle-kexec](https://github.com/katadelos/eink-emulator/tree/HEAD/kindle-kexec) is a kexec module with a PW4 profile, tested only in the emulator. [akemnade/linux](https://github.com/akemnade/linux) has an out-of-tree mainline DRM driver for the i.MX6 EPDC, with device trees for Kobo readers on the same SoC.
+- Other readers and systems: [cadmus](https://github.com/OGKevin/cadmus), a maintained Plato fork for Kobo. [kindle-dash](https://github.com/H4rryp0tt3r/kindle-dash), a replacement OS for the PW2, which is not locked. [Quill OS](https://github.com/Quill-OS/quill), a replacement system for Kobo readers and the Kindle Touch.
+
 ## Planned
 
 None of this is in the code yet. Each step should land on its own and pass the same checks. The previews stay identical unless the step changes visuals on purpose. The device scenarios keep the same updates, modes and flashes, with latency within 10 %. The binary grows by at most 50 KB per step, and peak RAM is checked.
 
-### Workspace and xtask
+### xtask
 
-Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts that run on the Kindle's busybox. `devloop/` and `probe/` split into `device/` and `tools/`. The bring-up crates (`aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen`, `aristotle-observe`) merge into `aristotle-devtools`. `aristotle-reader` becomes `aristotle`, and `aristotle-app` goes away.
+Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts in `device/` that run on the Kindle's busybox.
 
 ### Structure
 
@@ -115,8 +123,8 @@ Shortcuts to remove along the way:
 - Screen geometry and device paths are literals in several crates.
 - Typography steps are defined twice, in points and in pixels.
 - Screens use integer action ranges.
-- Rejected page-turn strategies (`render::screen`, `ARISTOTLE_TURN`) are still code. They belong in the devtools as benchmarks.
-- Test books come from Python scripts in `devloop/host`.
+- Rejected page-turn strategies (`render::screen`, `ARISTOTLE_TURN`) are still code. They belong in `aristotle-observe bench`.
+- Test books come from Python scripts in `tools/host`.
 - Quitting needs a one-second hold on the library title.
 
 ### Dashboards and the SDK

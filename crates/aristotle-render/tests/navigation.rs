@@ -21,7 +21,7 @@ fn data_dir() -> Option<PathBuf> {
     dir.join("fonts").is_dir().then_some(dir)
 }
 
-/// `$ARISTOTLE_CACHE`, defaulting as `devloop/env.sh` does.
+/// `$ARISTOTLE_CACHE`, defaulting as `tools/env.sh` does.
 fn cache_dir() -> Option<PathBuf> {
     let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
     var("ARISTOTLE_CACHE").map(PathBuf::from).or_else(|| {

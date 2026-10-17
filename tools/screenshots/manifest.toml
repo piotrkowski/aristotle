@@ -1,7 +1,7 @@
 # Screenshot manifest for compose.py.
 #
 # Inputs are raw 1072x1448 8-bit gray captures of the device's framebuffer
-# (devloop/host/screenshot.sh), in English, of public-domain books: Aristotle's
+# (tools/host/screenshot.sh), in English, of public-domain books: Aristotle's
 # Nicomachean Ethics, Book I, in Bywater's Greek and Chase's translation
 # (Project Gutenberg #8438), with a Wiktionary dictionary (CC BY-SA). Relative
 # input paths resolve against `base`; set SCREENSHOTS_BASE to override it.
@@ -9,7 +9,7 @@
 # set its own.
 
 base = "$ARISTOTLE_CACHE/captures/readme"
-out_dir = "../../assets/screenshots"
+out_dir = "../../docs/images"
 
 # Frame styles; an output picks one with `style`, which overrides `default`.
 #   radius     corner radius in output pixels

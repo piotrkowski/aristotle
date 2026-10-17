@@ -4,7 +4,7 @@ Facts about the device and its stock firmware. `AGENTS.md` has the short list of
 
 Each fact is marked by its source:
 
-- **[fw]** read from the stock firmware 5.13.6 update package on the host. `probe/host/` reproduces it.
+- **[fw]** read from the stock firmware 5.13.6 update package on the host. `tools/probe/` reproduces it.
 - **[dev]** observed on our device.
 - **[ko]** taken from KOReader's device support code and not yet confirmed by our own probe.
 
@@ -17,7 +17,7 @@ Each fact is marked by its source:
 | SoC | NXP i.MX6 SoloLite-Lite (imx6sll), one Cortex-A9 core with NEON and VFPv3, PL310 L2 cache [fw] |
 | RAM | 512 MB. The DT `memory` node says 2 GB at `0x80000000`, and the bootloader fixes it up [fw] |
 | Firmware | 5.13.6 (373198 038), jailbroken, with KUAL, MRPI and KOReader [dev]. `/etc/prettyversion.txt` starts with `Kindle 5.13.6` [dev] |
-| Identification | `/proc/usid` holds the serial number. Unless it starts with `B` or `9`, characters 4–6 are the device code, `0PP` on ours [dev]. KOReader lists 21 PW4 codes [ko], which `devloop/kindle/aristotle-usbnet/guard.sh` checks along with the firmware |
+| Identification | `/proc/usid` holds the serial number. Unless it starts with `B` or `9`, characters 4–6 are the device code, `0PP` on ours [dev]. KOReader lists 21 PW4 codes [ko], which `device/extension/guard.sh` checks along with the firmware |
 | Kernel | `Linux 4.1.15-lab126 #1 SMP PREEMPT Thu Apr 8 09:28:53 UTC 2021`, gcc 4.9.1, `HZ=100` [fw][dev] |
 
 ## Boot chain
@@ -83,7 +83,7 @@ The EPDC driver loads waveforms with `request_firmware("eink/waveform")` from `/
 
 ### Waveform modes and timings
 
-The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where A2 is mode 6. The PW2 numbering does not apply. Times were measured with `aristotle-bench` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
+The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where A2 is mode 6. The PW2 numbering does not apply. Times were measured with `aristotle-observe bench latency` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
 
 | Mode | Name | Time |
 | --- | --- | --- |
@@ -98,15 +98,15 @@ The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, wher
 | 9 | GLKW16 (night) | 544 ms |
 | 257 | AUTO (picked DU for this content) | 309 ms |
 
-A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms (`aristotle-hello`) [dev].
+A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms, from an early bring-up test since removed [dev].
 
-The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. `docs/eink-rendering.md` has the measurements and the display thread built on them.
+The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. [ui-framework.md](ui-framework.md#e-ink-rendering) has the measurements and the display thread built on them.
 
 ## Input
 
 - The touch chip differs between units. `/etc/upstart/touch` powers the touch rail through PMIC register `0x12`, probes I2C2 at `0x24` (Parade), then at `0x5d` and `0x14` (Goodix), and loads the matching driver [fw].
 - Our unit has Goodix `goodix-ts` on `/dev/input/event2`, with axes 0–1072 × 0–1448, the same as framebuffer coordinates [dev]. LTE units have an extra SX9310 proximity sensor, which moves touch to `event3` [ko]. Find the device by name in `/proc/bus/input/devices`.
-- The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. `docs/native-vs-aristotle.md` lists what an injected contact needs.
+- The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. [benchmarks.md](benchmarks.md#method) lists what an injected contact needs.
 - The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. musl's time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
 
 ## Power and light
@@ -163,13 +163,13 @@ The Aristotle agent and KUAL › Aristotle › Start USB network replace it with
 | Firewall | the stock iptables rules drop unsolicited input. The scripts accept `usb0` only |
 | SSH | KOReader's `dropbear`, key-only, on `192.168.15.244:22` only |
 
-Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the device off the bus, and the network gadget then needs a physical replug [dev]. After an eject the device leaves mass storage with the cable still in, and only a replug enters it again [dev]. `docs/network.md` covers the link and the Wi-Fi policy.
+Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the device off the bus, and the network gadget then needs a physical replug [dev]. After an eject the device leaves mass storage with the cable still in, and only a replug enters it again [dev]. [device/README.md](../device/README.md#network) covers the link and the Wi-Fi policy.
 
 ## Taking over the screen
 
 KOReader's `koreader.sh` either runs `stop lab126_gui` and restarts it on exit, or disables Pillow (`lipc-set-prop com.lab126.pillow disableEnablePillow disable`) and sends `SIGSTOP` to `awesome`. It also stops several cloud jobs to free RAM [ko].
 
-The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `devloop/kindle/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
+The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `device/app/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
 
 - `stop lab126_gui` takes down the framework (`cvm`), Pillow and the keyboard. The script also stops 12 cloud and telemetry jobs (`stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd`). Available RAM goes from 236 MB to 392 MB.
 - `x` (Xorg, awesome, `lxinit`, `blanket`, about 22 MB) keeps running, because its job stops only on `stopping dbus or stop_x`. Judging by its command line, `blanket` draws the screensaver when `powerd` suspends, so `x` stays until we own power management. This is not tested.
@@ -180,11 +180,11 @@ The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `
 
 ## Host-side artifacts
 
-Large artifacts stay in the cache directory `$ARISTOTLE_CACHE` (`devloop/env.sh`) as local working copies. Firmware, decompiled code and probe dumps are never committed (`.github/CONTRIBUTING.md`, "What this project will never include").
+Large artifacts stay in the cache directory `$ARISTOTLE_CACHE` (`tools/env.sh`) as local working copies. Firmware, decompiled code and probe dumps are never committed (`.github/CONTRIBUTING.md`, "What this project will never include").
 
 | Path | What |
 | --- | --- |
 | `$ARISTOTLE_CACHE/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here |
 | `$ARISTOTLE_CACHE/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
-| `$ARISTOTLE_CACHE/probe/static/` | Output of `probe/host/`: kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs |
+| `$ARISTOTLE_CACHE/probe/static/` | Output of `tools/probe/`: kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs |
 | `$ARISTOTLE_CACHE/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |

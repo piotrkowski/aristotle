@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/readme-light.png#gh-light-mode-only" alt="Aristotle on a Kindle Paperwhite 4: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
-  <img src="assets/screenshots/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
+  <img src="docs/images/readme-light.png#gh-light-mode-only" alt="Aristotle on a Kindle Paperwhite 4: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
+  <img src="docs/images/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
 Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped, and a reboot brings them back. Aristotle makes no network connections, and books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
@@ -46,7 +46,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 | Page turn, from release | 0.57 s | 0.44 s |
 | Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
 
-See [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html) and [docs/native-vs-aristotle.md](docs/native-vs-aristotle.md) for the method.
+The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method. The [benchmarks page](https://piotrkowski.github.io/aristotle/benchmarks.html) presents the same numbers.
 
 ## Install
 
@@ -66,13 +66,15 @@ The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). The [install
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
-Uninstalling removes everything Aristotle installed, including its SSH key. To disable Aristotle without SSH, choose KUAL › Aristotle › USB drive mode for 10 minutes, create an empty file named `aristotle-disable` at the root of the drive and restart the Kindle. The stock system then starts instead.
+Uninstalling removes everything Aristotle installed, including its SSH key. To disable Aristotle without SSH, choose KUAL › Aristotle › USB drive mode for 10 minutes, create an empty file named `aristotle-disable` at the root of the drive and restart the Kindle. The stock system then starts instead. [device/README.md](device/README.md#uninstall) lists what uninstalling removes.
 
 ## Documentation
 
 - [Guides](https://piotrkowski.github.io/aristotle/guides/) and [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html)
-- Design notes on the [architecture](docs/architecture.md), [reader](docs/reader.md), [UI framework](docs/ui-framework.md), [library](docs/library.md), [network](docs/network.md) and [e-ink rendering](docs/eink-rendering.md)
-- [Paperwhite 4 reference](docs/pw4-reference.md) and [related projects](docs/related-projects.md)
+- Design notes on the [architecture](docs/architecture.md) (with related projects), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
+- [Benchmarks](docs/benchmarks.md), the source of every number in this README and on the site
+- [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
+- [Paperwhite 4 reference](docs/pw4-reference.md)
 
 ## Contributing
 

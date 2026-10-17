@@ -1,8 +1,8 @@
 # The reader
 
-The reader is two crates. `crates/aristotle-render` turns books into full-screen 8-bit pages with the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and uses none of Plato's Kobo UI. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device and measures CPU and panel time. `crates/aristotle-reader` is the reader app, binary `aristotle`. It takes the library from `aristotle-library`, pages from `aristotle-render` and screens from `aristotle-ui`, and reaches the hardware through `aristotle-hal`. The renderer does not depend on the UI or the library.
+The reader is two crates. `crates/aristotle-render` turns books into full-screen 8-bit pages with the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and uses none of Plato's Kobo UI. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device and measures CPU and panel time. `crates/aristotle` is the reader app, binary `aristotle`. It takes the library from `aristotle-library`, pages from `aristotle-render` and screens from `aristotle-ui`, and reaches the hardware through `aristotle-hal`. The renderer does not depend on the UI or the library.
 
-The reader opens EPUB, DRM-free MOBI 7, PDF and TXT, and runs on the device. Device measurements are in [`native-vs-aristotle.md`](native-vs-aristotle.md), "Device measurements of the app". Numbers here are host numbers unless marked [dev].
+The reader opens EPUB, DRM-free MOBI 7, PDF and TXT, and runs on the device. Device measurements are in [Benchmarks](benchmarks.md#device-measurements-of-the-app). Numbers here are host numbers unless marked [dev].
 
 ## Architecture
 
@@ -28,7 +28,7 @@ aristotle-render (CLI: info, render, show, bench, turn, pages, place)
 | `notes.rs` | Footnote detection and text |
 | `richtext.rs` | HTML fragments as styled paragraphs for popups |
 
-| `aristotle-reader` | Role |
+| `aristotle` | Role |
 | --- | --- |
 | `main.rs` | Arguments, startup, the event loop, screens, menu actions |
 | `panel.rs` | Pages and UI damage onto the panel, night mode, the menu overlay |
@@ -126,12 +126,12 @@ Downloads are pinned by SHA-256. The CLI keeps converted MOBI books in `cache/` 
 The host build links the same library versions built for x86_64 musl, so host pages match the device's apart from floating-point rounding.
 
 ```sh
-. devloop/env.sh
+. tools/env.sh
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
 CARGO_CMD=test tools/build-render.sh host
 tools/build-render.sh host
 "$ARISTOTLE_CACHE/render/host/aristotle-render" render BOOK.epub 10 page.raw
-"$ARISTOTLE_CACHE/venv/bin/python" -I devloop/host/fb2png.py page.raw page.png
+"$ARISTOTLE_CACHE/venv/bin/python" -I tools/host/fb2png.py page.raw page.png
 ```
 
 `crates/aristotle-render/tests/navigation.rs` checks navigation, MOBI positions and lazy layout against a full pagination. `aristotle-render pages BOOK 20` prints all page starts plus 20 placements in fresh copies of the book, for diffing layout changes. `aristotle --library DIR --bench-open TITLE` times the open path without panel or touchscreen. Two tests are ignored by default: `real_dictionaries` needs real dictionaries, and `clippings_script` runs the script in `ARISTOTLE_CLIPPINGS_SCRIPT` on the export.
@@ -139,22 +139,22 @@ tools/build-render.sh host
 ### Preview and device scenario
 
 ```sh
-devloop/host/make-reading-test-epub.py BOOKS/proba-czytania.epub
+tools/host/make-reading-test-epub.py BOOKS/proba-czytania.epub
 "$ARISTOTLE_CACHE/render/host/aristotle" --data .../data --library LIB \
     --dict DICTIONARIES \
     --preview "$ARISTOTLE_CACHE/ui-preview/reading" BOOKS/proba-czytania.epub
 ```
 
-The test book is a short Polish text written for it, with Greek and Latin words and two kinds of footnote. The preview drives the app on an in-memory panel with synthetic touches. It writes a PNG per step, `updates.txt` with each update's waveform and rectangle, the exported `My Clippings.txt`, and `reading.txt` with the same taps as an `aristotle-observe` scenario. Copy that into `devloop/kindle/scenarios/reading.txt` after layout changes; coordinates depend on the typography and the UI language. `devloop/kindle/scenarios/aristotle-open.txt` covers opening, turning, the menu and going back while a book opens.
+The test book is a short Polish text written for it, with Greek and Latin words and two kinds of footnote. The preview drives the app on an in-memory panel with synthetic touches. It writes a PNG per step, `updates.txt` with each update's waveform and rectangle, the exported `My Clippings.txt`, and `reading.txt` with the same taps as an `aristotle-observe` scenario. Copy that into `tools/scenarios/reading.txt` after layout changes; coordinates depend on the typography and the UI language. `tools/scenarios/aristotle-open.txt` covers opening, turning, the menu and going back while a book opens.
 
 ### Running it on the device
 
 ```sh
-. devloop/env.sh
+. tools/env.sh
 PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
 tools/build-render.sh device
-ssh -F devloop/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
-ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh [--turn-mode 7]
+ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-device.tar.gz"
+ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh [--turn-mode 7]
 ```
 
 The app bundle unpacks to `/mnt/us/aristotle/` with `data/`, `run-aristotle.sh`, `takeover.sh` and `guard.sh`. It lives on the userstore because `/var/tmp` is a 64 MB tmpfs. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `takeover.sh start` refuses anything but a PW4 on firmware 5.13.x unless `ARISTOTLE_FORCE=1`. Freezing the framework with SIGSTOP does not work: Amazon's watchdog killed it, and the GUI needed a reboot. The script ignores hangups and logs to `/var/tmp/aristotle.log`. Quit by holding the "Library" title for a second, or with `killall aristotle`.
@@ -189,7 +189,7 @@ A trap not yet traced in Plato's code: in a Polish book, paragraphs marked `<p l
 
 ## Formats and positions
 
-`mobi.rs` converts a DRM-free MOBI 7 book once to an uncompressed EPUB, because MuPDF's HTML layout has no Polish patterns and justifies poorly. It handles PalmDOC, UTF-8 and CP1252, images, `<mbp:pagebreak/>` chapter splits, and HTML that Plato's XML parser rejects. The language comes from EXTH 524 or the header's locale. `<a filepos=N>` links point to anchors `id="fileposN"`, as calibre writes them. DRM, HUFF/CDIC compression and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. With a cached conversion, opening reads only the PalmDB header and record 0. `devloop/host/make-test-mobi.py` makes a MOBI 7 test book from an EPUB.
+`mobi.rs` converts a DRM-free MOBI 7 book once to an uncompressed EPUB, because MuPDF's HTML layout has no Polish patterns and justifies poorly. It handles PalmDOC, UTF-8 and CP1252, images, `<mbp:pagebreak/>` chapter splits, and HTML that Plato's XML parser rejects. The language comes from EXTH 524 or the header's locale. `<a filepos=N>` links point to anchors `id="fileposN"`, as calibre writes them. DRM, HUFF/CDIC compression and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. With a cached conversion, opening reads only the PalmDB header and record 0. `tools/host/make-test-mobi.py` makes a MOBI 7 test book from an EPUB.
 
 For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out a spine item as far as needed. For MuPDF documents, locations are page indices. `x / y` needs the whole book laid out, so `Book` also navigates by location (`page_start`, `next_page`, `previous_page`, `chapter_page`, `render_location`), and the footer leaves out the page number until `set_pagination` supplies the page starts.
 
@@ -234,7 +234,7 @@ A restyle that lays out more than 48 KB of chapter text (`Session::slow_relayout
 
 ## Page turns and waveforms
 
-Pages turn like the stock reader: one full-mode update of the whole screen with waveform mode 9. Partial updates, and A2 previews followed by GL16, left visible ghosting in real reading ([`native-vs-aristotle.md`](native-vs-aristotle.md), "Page-turn strategy experiment"). `--turn-mode 7` uses DU4: 317 ms instead of 503 ms on the device [dev], with fewer grays. The CLI's `--a2-preview` keeps the old two-step turn for experiments.
+Pages turn like the stock reader: one full-mode update of the whole screen with waveform mode 9. Partial updates, and A2 previews followed by GL16, left visible ghosting in real reading ([Benchmarks](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` uses DU4: 317 ms instead of 503 ms on the device [dev], with fewer grays. The CLI's `--a2-preview` keeps the old two-step turn for experiments.
 
 A tap turns when the finger lifts: the left 30 % goes back, the rest below the top 12 % forward. A tap or a swipe down in the top strip opens the menu. A horizontal swipe turns one page. Turning on touch-down saves 80 to 150 ms but makes a long press on a word turn the page first, so a hold never turns. After each submit the pages on both sides are rendered, about 106 ms on the device [dev], so a turn costs a memcpy and a submit.
 
@@ -292,7 +292,7 @@ Popups sit at the bottom, or at the top when the word is in the lower half, and 
 
 ### Dictionary
 
-<img src="../assets/screenshots/dictionary.png" width="325" alt="The dictionary popup for the Greek word ἀγαθοῦ over a page of Bywater's Greek text: the dictionary form ἀγαθός, good; brave; noble; moral; gentle, from a grc-en Wiktionary dictionary, with a tab for grc-pl">
+<img src="images/dictionary.png" width="325" alt="The dictionary popup for the Greek word ἀγαθοῦ over a page of Bywater's Greek text: the dictionary form ἀγαθός, good; brave; noble; moral; gentle, from a grc-en Wiktionary dictionary, with a tab for grc-pl">
 
 The app reads StarDict dictionaries (`dict/stardict.rs`) one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict` or `--dict DIR`. The language pair comes from the file name, as in `grc-pl.ifo`. The tested dictionaries are Wiktionary exports (xxyzz/wiktionary_stardict), which list inflected forms as synonyms and sort their files by Python's `str.lower()`. StarDict's own order cannot be assumed.
 

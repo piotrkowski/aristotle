@@ -46,30 +46,30 @@
 cd aristotle
 PLATO_LIBS_ONLY=1 tools/build-plato.sh
 tools/build-render.sh device</code></pre>
-    <p>The app bundle is written to <code>$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz</code>.</p>
+    <p>The app bundle is written to <code>$ARISTOTLE_CACHE/render/aristotle-device.tar.gz</code>.</p>
 
     <h2 id="copy">Copy it over</h2>
     <p>Create the SSH key the Kindle will accept and add a NetworkManager profile for the USB network. Then connect the Kindle as a USB drive and install.</p>
-<pre><code>. devloop/env.sh        # sets ARISTOTLE_CACHE, the cache directory
+<pre><code>. tools/env.sh        # sets ARISTOTLE_CACHE, the cache directory
 mkdir -p "$ARISTOTLE_CACHE/ssh"
 ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
-devloop/host/setup-host-net.sh
-devloop/host/install-extensions.sh</code></pre>
+tools/host/setup-host-net.sh
+tools/host/install-extensions.sh</code></pre>
     <p>If the Kindle is not mounted at <code>/run/media/$USER/Kindle</code>, set <code>KINDLE_MOUNT</code>. The script copies the app to <code>aristotle/</code> on the Kindle with its licences and <code>SOURCE.txt</code>, adds two KUAL extensions and ejects the Kindle.</p>
 
     <h2 id="agent">Start the agent</h2>
     <p>On the Kindle, open <strong>KUAL › Aristotle › Install agent</strong>. After that you can reach the Kindle over SSH whenever the cable is connected:</p>
-<pre><code>ssh -F devloop/host/ssh_config kindle</code></pre>
+<pre><code>ssh -F tools/host/ssh_config kindle</code></pre>
     <p class="note">For SSH without installing the agent, use KUAL › Aristotle › Start USB network once. It lasts until the next reboot.</p>
 
     <h2 id="run">Run</h2>
-<pre><code>ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh</code></pre>
+<pre><code>ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh</code></pre>
     <p>Aristotle stops the stock interface while it runs. To quit, hold the "Library" title for a second. The stock interface returns after its boot splash, in 30 to 60 seconds. A reboot also brings it back.</p>
 
     <h2 id="uninstall">Uninstall</h2>
     <ol>
       <li>On the Kindle, open <strong>KUAL › Aristotle › Remove agent completely</strong>. This removes everything the agent put on the device, its SSH key included. The agent's log is saved to the Kindle's storage as <code>aristotle-agent.log</code>.</li>
-      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots) and <code>extensions/aristotle-*</code> from the Kindle's storage.</li>
+      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots), <code>extensions/aristotle/</code> and <code>extensions/aristotle-probe/</code> from the Kindle's storage. Older installs have <code>extensions/aristotle-usbnet/</code> instead of <code>extensions/aristotle/</code>.</li>
     </ol>
     <p>Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>
     <p>If you cannot reach the Kindle over SSH, open <strong>KUAL › Aristotle › USB drive mode for 10 minutes</strong> and connect the Kindle to a computer. Create an empty file named <code>aristotle-disable</code> at the root of the drive, then restart the Kindle. The agent will not start, and the Kindle runs the stock system.</p>

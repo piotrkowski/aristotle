@@ -429,7 +429,7 @@ pub fn single(damage: &[Damage]) -> Vec<Damage> {
 /// Merges damage rectangles with the same waveform when they overlap or
 /// when their union wastes little area (at most 25 % more than the two
 /// parts). Fewer, slightly larger updates beat many small ones because the
-/// driver runs one update at a time (`docs/eink-rendering.md`). Rectangles
+/// driver runs one update at a time (`docs/ui-framework.md`, "E-ink rendering"). Rectangles
 /// with different waveforms stay apart, so a fast A2 highlight is never
 /// slowed down by a GL16 neighbour.
 pub fn merge(mut damage: Vec<Damage>) -> Vec<Damage> {
