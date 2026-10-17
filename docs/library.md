@@ -12,14 +12,14 @@ The device book root is `/mnt/us/documents`. Detection uses file contents, not j
 
 | Format | Detection | Metadata | Cover |
 | --- | --- | --- | --- |
-| [EPUB](glossary.md#epub) | ZIP with EPUB mimetype or `META-INF/container.xml` | [OPF](glossary.md#opf) | Embedded cover |
+| EPUB | ZIP with EPUB mimetype or `META-INF/container.xml` | OPF | Embedded cover |
 | [MOBI](glossary.md#mobi), [AZW3](glossary.md#azw3) | PalmDB `BOOKMOBI` | Record 0 and [EXTH](glossary.md#exth) | EXTH 201 |
 | [PalmDOC](glossary.md#palmdoc) | `TEXtREAd` | Database name | None |
 | PDF | `%PDF-` in the first 1 KiB | Info dictionary and page count | None |
-| [CBZ](glossary.md#cbz) | `.cbz` or `.zip` with at least half its entries images | `ComicInfo.xml` and page count | First image |
-| TXT | `.txt` with text bytes or UTF-16 [BOM](glossary.md#bom) | File and folder names | None |
+| CBZ | `.cbz` or `.zip` with at least half its entries images | `ComicInfo.xml` and page count | First image |
+| TXT | `.txt` with text bytes or UTF-16 BOM | File and folder names | None |
 
-The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, [`My Clippings.txt`](glossary.md#my-clippingstxt), and directory symlinks. Kindle dictionaries stay out of the library. [DRM](glossary.md#drm)-encrypted MOBI is listed with `drm: true` but cannot be read.
+The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, [`My Clippings.txt`](glossary.md#my-clippingstxt), and directory symlinks. Kindle dictionaries stay out of the library. DRM-encrypted MOBI is listed with `drm: true` but cannot be read.
 
 [KFX](glossary.md#kfx), CBR and CB7 comic archives, FB2 (FictionBook), DjVu scanned documents, and Kindle Topaz books are unsupported. Index support does not imply reader support ([Reader formats](reader.md#formats-and-positions)).
 
@@ -47,15 +47,15 @@ Status is `unread`, `reading`, or `finished`. Opening a book sets `reading`, whi
 
 | Locator | Position |
 | --- | --- |
-| `epub` | [Spine](glossary.md#spine) index and character offset |
+| `epub` | Spine index and character offset |
 | `kindle` | MOBI or AZW3 byte position |
 | `page` | PDF or CBZ page index |
 | `text` | TXT byte offset |
-| `xpointer` | [KOReader position](glossary.md#xpointer), kept verbatim |
+| `xpointer` | KOReader position, kept verbatim |
 
 Unchanged size and mtime avoid reopening a file. State follows the ID across moves, or the path when file contents change. Up to 500 removed records preserve progress for books copied back. A damaged file does not stop the scan.
 
-Covers are grayscale PGM image thumbnails in `<data>/covers/`, keyed by the cover bytes' MD5. They are 200 px wide, at most 320 px high, and [dithered](glossary.md#dithering) to 16 grays.
+Covers are grayscale PGM image thumbnails in `<data>/covers/`, keyed by the cover bytes' MD5. They are 200 px wide, at most 320 px high, and dithered to 16 grays.
 
 ## Shelves, folders and series
 
@@ -108,7 +108,7 @@ Scans import sidecars for new books, while `aristotle-library-cli import-sidecar
 
 ### My Clippings.txt [fw]
 
-The stock format is UTF-8 with CRLF line endings, a carriage return followed by a line feed, and a [BOM](glossary.md#bom) on creation:
+The stock format is UTF-8 with CRLF line endings, a carriage return followed by a line feed, and a BOM on creation:
 
 ```text
 {title} ({author})
@@ -168,7 +168,7 @@ There is no on-screen keyboard, so you configure accounts in `sync.json` and `ca
 
 On import, the app removes password fields from these [userstore](glossary.md#userstore) files. Credentials go to `/var/local/aristotle/accounts.json`, mode `0600`, in a root-owned directory with mode `000`. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device.[^2] `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
 
-Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for [Basic](glossary.md#basic-auth) and [Digest authentication](glossary.md#digest-auth). Catalog imports match by name and keep a stored password when no replacement is supplied.
+Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for Basic and Digest authentication. Catalog imports match by name and keep a stored password when no replacement is supplied.
 
 ### Progress sync (KOSync)
 
@@ -180,17 +180,17 @@ Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatibl
 | PDF, CBZ | 1-based page | Page |
 | MOBI, AZW3, TXT | No position | Percentage |
 
-`Fragments` maps EPUB spine items between [Plato](glossary.md#plato) and KOReader's [`DocFragment`](glossary.md#docfragment) chapter numbers. It does not resolve element paths after `DocFragment[N]`.
+`Fragments` maps EPUB spine items between [Plato](glossary.md#plato) and KOReader's `DocFragment` chapter numbers. It does not resolve element paths after `DocFragment[N]`.
 
 Automatic sync fetches progress on open with a 5-second timeout. A newer position on another page needs confirmation before a jump. Closing a book sends changed progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
 
 ### Catalogs (OPDS 1.2)
 
-[OPDS](glossary.md#opds) catalogs support [Atom](glossary.md#atom) navigation, acquisition, paging, and [OpenSearch](glossary.md#opensearch) or `{searchTerms}` search. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
+OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
 
 Downloads go to `documents/<catalog name>/<title> - <author>.<ext>`. Each is limited to 200 MiB and leaves at least 20 MiB free. A hidden `.part` file is synced and renamed on success. Failure or cancellation removes it. Existing files are not replaced. The library scans after download.
 
-HTTPS uses [TLS](glossary.md#tls) through the `tls` feature, enabled in release bundles by `APP_FEATURES` in `tools/build-render.sh`. Certificate-time errors ask the user to check the date and time.
+HTTPS uses TLS through the `tls` feature, enabled in release bundles by `APP_FEATURES` in `tools/build-render.sh`. Certificate-time errors ask the user to check the date and time.
 
 ## Known limitations
 

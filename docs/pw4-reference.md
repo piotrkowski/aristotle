@@ -4,7 +4,7 @@ This reference records device and stock-firmware facts for contributors. Source 
 
 ## Device
 
-[Device trees](glossary.md#device-tree), abbreviated DT, describe the board hardware. DTBs are compiled trees, and SoC means system on a chip. NEON is Arm's vector instruction set, and VFPv3 is its floating-point hardware interface.
+Device trees, abbreviated DT, describe the board hardware. DTBs are compiled trees, and SoC means system on a chip. NEON is Arm's vector instruction set, and VFPv3 is its floating-point hardware interface.
 
 | Property | Value |
 | --- | --- |
@@ -24,7 +24,7 @@ The update package `update_kindle_all_new_paperwhite_v2_5.13.6.bin`, unpacked wi
 | --- | --- |
 | `imx6sll_rex/u-boot.bin` | [U-Boot](glossary.md#u-boot) |
 | `imx6sll_rex/bios.bin`, `s-bios.bin` | Resident Falcon BIOS |
-| `imx6sll_rex/boot.img` | Kernel, [initramfs](glossary.md#initramfs), and board device trees |
+| `imx6sll_rex/boot.img` | Kernel, initramfs, and board device trees |
 | `rootfs.img.gz` | ext3 [root filesystem](glossary.md#rootfs) |
 
 Components have `.sig` signatures.[^1] A [MobileRead serial-log report](https://www.mobileread.com/forums/showthread.php?t=354311) shows `secure_cpu: 1, production: 1, unlocked: 0` and blocked fastboot writes.[^4] Signed boot-image enforcement remains an inference.[^5] Treat boot partitions as read-only.
@@ -61,7 +61,7 @@ The config is embedded in the kernel and at `/proc/config.gz` on the device.[^1]
 
 ## Display
 
-From [FBInk](glossary.md#fbink) and [sysfs](glossary.md#sysfs) on the device.[^2] The framebuffer stores pixels, with a row [stride](glossary.md#stride) that can exceed the visible width:
+From [FBInk](glossary.md#fbink) and sysfs on the device.[^2] The framebuffer stores pixels, with a row stride that can exceed the visible width:
 
 | Property | Value |
 | --- | --- |
@@ -73,11 +73,11 @@ From [FBInk](glossary.md#fbink) and [sysfs](glossary.md#sysfs) on the device.[^2
 | Offsets | `xoffset=0`, `yoffset=0` from `FBIOGET_VSCREENINFO`. FBInk's `viewVertOrigin=4` is its own view adjustment |
 | Night mode | hardware inversion available (`canHWInvert=1`) |
 
-The EPDC driver loads [waveforms](glossary.md#waveform) with `request_firmware("eink/waveform")` from `/mnt/wfm/waveform_to_use/`, a partition managed by the [Upstart](glossary.md#upstart) jobs `wfmupdate` and `wfmdelete`.[^1] It picks a [LUT](glossary.md#lut) by the temperature from the FP9929 or BD71827, which sysfs can override. The update [ioctl](glossary.md#ioctl) is [Lab126](glossary.md#lab126)'s variant of `MXCFB_SEND_UPDATE`, and FBInk's Kindle headers are the reference for its layout.
+The EPDC driver loads [waveforms](glossary.md#waveform) with `request_firmware("eink/waveform")` from `/mnt/wfm/waveform_to_use/`, a partition managed by the [Upstart](glossary.md#upstart) jobs `wfmupdate` and `wfmdelete`.[^1] It picks a LUT by the temperature from the FP9929 or BD71827, which sysfs can override. The update ioctl is [Lab126](glossary.md#lab126)'s variant of `MXCFB_SEND_UPDATE`, and FBInk's Kindle headers are the reference for its layout.
 
 ### Waveform modes and timings
 
-The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where [A2](glossary.md#a2) is mode 6. The PW2 numbering does not apply. [DU](glossary.md#du) and [DU4](glossary.md#du4) use fewer shades than [GC16](glossary.md#gc16) and [GL16](glossary.md#gl16). [REAGL](glossary.md#reagl) includes GLR16 and its [dithered](glossary.md#dithering) variant GLD16, while [GCK16](glossary.md#gck16) and [GLKW16](glossary.md#glkw16) are the modes FBInk labels for night use.
+The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where [A2](glossary.md#a2) is mode 6. The PW2 numbering does not apply. [DU](glossary.md#du) and [DU4](glossary.md#du4) use fewer shades than [GC16](glossary.md#gc16) and [GL16](glossary.md#gl16). [REAGL](glossary.md#reagl) includes GLR16 and its dithered variant GLD16, while [GCK16](glossary.md#gck16) and [GLKW16](glossary.md#glkw16) are the modes FBInk labels for night use.
 
 Times were measured with `aristotle-observe bench latency` on a 120 × 120 region toggling black and white, median of 6, on an idle panel:[^2]
 
@@ -108,7 +108,7 @@ The driver runs one update at a time, even for non-overlapping regions.[^2] Use 
 - `/etc/upstart/touch` probes Parade and Goodix controllers and loads the matching driver.[^1]
 - Our Goodix `goodix-ts` uses framebuffer coordinates.[^2] Event numbers vary, including on LTE units.[^3] Find touch by name in `/proc/bus/input/devices`.
 - The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y`.[^2] [`benchmarks.md`](benchmarks.md#method) lists what an injected contact needs.
-- The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. [musl](glossary.md#musl)'s time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
+- The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. musl's time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
 
 ## Power and light
 
@@ -123,7 +123,7 @@ The driver runs one update at a time, even for non-overlapping regions.[^2] Use 
 
 ## Filesystems
 
-[tmpfs](glossary.md#tmpfs) is volatile storage. The [userstore](glossary.md#userstore) is the book storage exposed over USB.
+tmpfs is volatile storage. The [userstore](glossary.md#userstore) is the book storage exposed over USB.
 
 | Mount | Type | Notes |
 | --- | --- | --- |
@@ -135,7 +135,7 @@ The driver runs one update at a time, even for non-overlapping regions.[^2] Use 
 
 ## Stock userspace
 
-The C library is [glibc](glossary.md#glibc) 2.20 with [softfp](glossary.md#softfp) ARM EABI5, the embedded [ABI](glossary.md#abi) in version 5: soft-float calling convention, VFPv3 and NEON code, `/lib/ld-linux.so.3`.[^1] [Static](glossary.md#static-binary) musl binaries targeting `armv7-unknown-linux-musleabihf` use [hard-float](glossary.md#hard-float) calls internally and run on it.[^2]
+The C library is glibc 2.20 with [softfp](glossary.md#softfp) ARM EABI5, the embedded ABI in version 5: soft-float calling convention, VFPv3 and NEON code, `/lib/ld-linux.so.3`.[^1] Static musl binaries targeting `armv7-unknown-linux-musleabihf` use hard-float calls internally and run on it.[^2]
 
 Key jobs:[^1]
 
@@ -147,7 +147,7 @@ Key jobs:[^1]
 | `x`, `framework`, `pillow`, `kb` | Window system, Java framework, UI, and keyboard |
 | `otaupd`, `otav3` | Firmware updates |
 
-Upstart 0.6.6[^2] supports neither `.override` files nor `manual`.[^1] A job using `on starting X` completes before X starts. The agent uses this ordering to [bind-mount](glossary.md#bind-mount) over `/usr/bin/otav3`.[^6]
+Upstart 0.6.6[^2] supports neither `.override` files nor `manual`.[^1] A job using `on starting X` completes before X starts. The agent uses this ordering to bind-mount over `/usr/bin/otav3`.[^6]
 
 `stored` reboots after more than five starts lasting under 10 seconds.[^1] `takeover.sh stop` leaves it and related jobs to `framework_ready`.
 
@@ -161,7 +161,7 @@ The stock reader stores state in `<book>.sdr/` and highlights in [`My Clippings.
 
 By default the port runs `g_mass_storage`, and `volumd` exports the userstore.[^2] While it is exported, the device cannot write `/mnt/us`. `g_mass_storage` unloads only after the host has ejected the drive.[^2]
 
-The Aristotle agent and *[KUAL](glossary.md#kual) › Aristotle › Start USB network* replace it with [`g_ether`](glossary.md#g_ether) and use [Dropbear](glossary.md#dropbear) for SSH.[^2] The link uses fixed addresses without [DHCP](glossary.md#dhcp), and [iptables](glossary.md#iptables) controls access:
+The Aristotle agent and *[KUAL](glossary.md#kual) › Aristotle › Start USB network* replace it with [`g_ether`](glossary.md#g_ether) and use [Dropbear](glossary.md#dropbear) for SSH.[^2] The link uses fixed addresses without DHCP, and iptables controls access:
 
 | Property | Value |
 | --- | --- |
@@ -178,7 +178,7 @@ The Aristotle agent and *[KUAL](glossary.md#kual) › Aristotle › Start USB ne
 
 - `stop lab126_gui` stops `cvm`, Pillow, and the keyboard. The script also stops cloud and telemetry jobs. Available RAM rises from 236 MB to 392 MB.
 - Xorg, `awesome`, `lxinit`, and `blanket` remain running.
-- `SIGSTOP` is not a substitute, because the [watchdog](glossary.md#watchdog) killed the frozen framework.
+- `SIGSTOP` is not a substitute, because the watchdog killed the frozen framework.
 - Restarting the GUI takes 30 to 60 seconds of boot splash.
 
 KOReader uses `stop lab126_gui` or disables Pillow and freezes `awesome`.[^3] KOReader reports that `powerd` continues suspend and screensaver control, and `volumd` owns USB export.[^3] These services remain necessary when the stock GUI is stopped.

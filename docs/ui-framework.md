@@ -39,9 +39,9 @@ flowchart TD
 | `canvas` | Gray pixels, clipping, pixel differences, and 16-level quantization |
 | `geom` | `Rect`, `Size`, `Insets`, and units at 300 DPI |
 | `waveform` | [`A2`](glossary.md#a2), [`DU`](glossary.md#du), [`GL16`](glossary.md#gl16), `GLKW16`, [`GC16`](glossary.md#gc16), with Zelda mode numbers 6, 1, 3, 9, 2 |
-| `text` | Fonts, [shaping](glossary.md#shaping), [rasterization](glossary.md#rasterization), and line breaks |
+| `text` | Fonts, shaping, rasterization, and line breaks |
 | `tree` | Nodes, layout, painting, hit tests, and changes |
-| `ui` | Tree, canvas, previous pixels, [damage](glossary.md#damage), and gesture dispatch |
+| `ui` | Tree, canvas, previous pixels, damage, and gesture dispatch |
 | `icons`, `widgets`, `theme` | Icons, controls, and style constants |
 | `screens` | Library, settings, network, sleep, and reader menu |
 
@@ -111,7 +111,7 @@ The app draws a complete frame before it submits an update.
 
 `App::set_night` updates both `Panel` and `Ui`. Software inversion is the default: `Ui::set_night` inverts UI pixels, and `Framebuffer::blit_inverted` inverts book pages in the [framebuffer](glossary.md#framebuffer). `--night-method hardware` uses `EPDC_FLAG_ENABLE_INVERSION` instead. Software inversion keeps screenshots consistent with the panel.
 
-[Snapshots](glossary.md#snapshot) and page caches store day pixels. [EPUB](glossary.md#epub) images keep their day colors through `Page::images` and `panel::night_page`. [MuPDF](glossary.md#mupdf) pages, including PDF, invert as a whole.
+Snapshots and page caches store day pixels. EPUB images keep their day colors through `Page::images` and `panel::night_page`. MuPDF pages, including PDF, invert as a whole.
 
 Turns stay full mode 9 and flashes full mode 8, while partial gray UI updates use [GLKW16](glossary.md#glkw16) instead of GL16 at night.
 
@@ -121,9 +121,9 @@ Turns stay full mode 9 and flashes full mode 8, while partial gray UI updates us
 
 Literata is the default font. The `embedded-fonts` feature compiles it into the UI. The app disables that feature and loads Literata from `data/serif/`.
 
-`text::layout_paragraph` uses Unicode line-break rules. Justified text uses [Knuth-Plass](glossary.md#knuth-plass), which chooses breaks across a paragraph, with simpler fallbacks. Ragged text uses first fit. Soft hyphens mark possible breaks. A one-letter word or initial does not end a line. `max_lines` truncates with an ellipsis.
+`text::layout_paragraph` uses Unicode line-break rules. Justified text uses Knuth-Plass, which chooses breaks across a paragraph, with simpler fallbacks. Ragged text uses first fit. Soft hyphens mark possible breaks. A one-letter word or initial does not end a line. `max_lines` truncates with an ellipsis.
 
-The UI's `Hyphenator` supports Polish syllable rules. Book pages use [Plato](glossary.md#plato)'s [Liang hyphenation patterns](glossary.md#liang-hyphenation-patterns) ([Hyphenation](reader.md#hyphenation)). There is no bidirectional text support, and shaping uses the Latin script.
+The UI's `Hyphenator` supports Polish syllable rules. Book pages use [Plato](glossary.md#plato)'s Liang hyphenation patterns ([Hyphenation](reader.md#hyphenation)). There is no bidirectional text support, and shaping uses the Latin script.
 
 ## Design system
 

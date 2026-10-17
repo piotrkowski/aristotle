@@ -6,9 +6,9 @@ Device results use a PW4 on firmware 5.13.6 unless marked otherwise. These numbe
 
 `aristotle-observe` measures both interfaces with the same method:
 
-- It enables [EPDC](glossary.md#epdc) debug logging through `mxc_epdc_debug` in [sysfs](glossary.md#sysfs). The log records update regions, [waveforms](glossary.md#waveform), and completion times.
+- It enables [EPDC](glossary.md#epdc) debug logging through `mxc_epdc_debug` in sysfs. The log records update regions, [waveforms](glossary.md#waveform), and completion times.
 - It reads `/dev/kmsg` and touch events, pairing touches with updates until none arrive for 1.5 s.
-- It injects [evdev](glossary.md#evdev) touches into the real touchscreen node.
+- It injects evdev touches into the real touchscreen node.
 
 `tools/scenarios/` contains `tap`, `hold`, `swipe`, `wait`, `label`, `go-home`, and `snap` commands. Start from `go-home` and verify steps with screenshots.
 
@@ -36,7 +36,7 @@ The Goodix touchscreen accepts multi-touch axes only. Inject a slot, tracking ID
 | Reader: toolbar | 239 to 264 ms | 748 to 780 ms | 2 | |
 
 - After 8 forward turns, some back turns, and toolbar use, `pmond` reported `processTooLarge` at the 49 MB heap cap (`alloc=51642368` of `max=51642368`). The framework restarted and lost some turns.
-- The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB [RSS](glossary.md#rss).
+- The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS.
 - Stock has no Polish hyphenation, page header, or progress display.
 - Home includes store and reading-list promotions.
 
@@ -73,7 +73,7 @@ Rendering the next page takes about 106 ms on the device, inside the panel time.
 
 Page turns use the mode-9 update with a prerendered page. That is 11 % faster than stock to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 remains a setting, about 1.8 times faster than stock but with fewer gray levels. A2 previews are off.
 
-A long [MOBI](glossary.md#mobi) took 2.9 s to open before [snapshots](glossary.md#snapshot).[^1] A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
+A long [MOBI](glossary.md#mobi) took 2.9 s to open before snapshots.[^1] A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
 
 ## Transitions in the Aristotle app
 
@@ -135,7 +135,7 @@ On a PC (`x86_64`, release build) with the same code and library versions as the
 
 ### Opening a book from a snapshot
 
-`aristotle --bench-open`, 6 runs on one CPU, with a 379-page stand-in novel in a single [spine](glossary.md#spine) item and page numbers cached.
+`aristotle --bench-open`, 6 runs on one CPU, with a 379-page stand-in novel in a single spine item and page numbers cached.
 
 | Step | Old path | New path |
 | --- | --- | --- |
@@ -145,7 +145,7 @@ On a PC (`x86_64`, release build) with the same code and library versions as the
 
 ### Typesetting
 
-`aristotle-render bench` with [Plato](glossary.md#plato) rendering [EPUB](glossary.md#epub) books in Literata at 10 pt.
+`aristotle-render bench` with [Plato](glossary.md#plato) rendering EPUB books in Literata at 10 pt.
 
 - Plato, *Phaedo*, EPUB, 341 pages: open 1.1 ms, first page 0.6 ms, render per page 2.1 / 2.4 ms (median / p90), paginate all 211 ms, max RSS 32 MiB.
 - Polish non-fiction, EPUB, 269 pages: open 10 ms, first page 1.9 ms, render per page 4.6 / 5.2 ms (median / p90), paginate all 241 ms, max RSS 26 MiB.

@@ -1,6 +1,6 @@
 # Architecture
 
-Aristotle is a Rust workspace with [static binaries](glossary.md#static-binary) for the Paperwhite 4 (PW4) and shell scripts for the device. The UI and library run on the host too. The reader uses [Plato](glossary.md#plato)'s document engine, not its Kobo interface.
+Aristotle is a Rust workspace with static binaries for the Paperwhite 4 (PW4) and shell scripts for the device. The UI and library run on the host too. The reader uses [Plato](glossary.md#plato)'s document engine, not its Kobo interface.
 
 See the [glossary](glossary.md) for hardware, rendering, and device terms.
 
@@ -15,11 +15,11 @@ See the [glossary](glossary.md) for hardware, rendering, and device terms.
 
 | Path | Contents |
 | --- | --- |
-| `Cargo.toml`, `.cargo/config.toml` | Workspace, release settings, and static [musl](glossary.md#musl) targets |
+| `Cargo.toml`, `.cargo/config.toml` | Workspace, release settings, and static musl targets |
 | `crates/` | Rust crates |
 | `device/` | [KUAL](glossary.md#kual) launcher extension, agent, launch scripts, read-only probe, and script tests |
 | `tools/` | Builds, packaging, host tools, emulator setup, scenarios, and firmware probes |
-| `third_party/plato` | Plato fork, [submodule](glossary.md#submodule) on branch `aristotle` |
+| `third_party/plato` | Plato fork, submodule on branch `aristotle` |
 | `docs/`, `site/` | Documentation and project site |
 
 ## Crates
@@ -31,13 +31,13 @@ See the [glossary](glossary.md) for hardware, rendering, and device terms.
 | `aristotle-i18n` | Translations, plurals, dates, and numbers |
 | `aristotle-library` | Book index, metadata, covers, reading state, clippings, and CLI ([Library](library.md)) |
 | `aristotle-net` | HTTP, authentication, progress sync, and catalogs ([Network](library.md#network-progress-sync-and-catalogs)) |
-| `aristotle-render` | Plato and [MuPDF](glossary.md#mupdf), pagination, page rendering, and footnotes ([Reader](reader.md)) |
-| `aristotle` | App event loop, screens, reading sessions, [snapshots](glossary.md#snapshot), and dictionaries |
+| `aristotle-render` | Plato and MuPDF, pagination, page rendering, and footnotes ([Reader](reader.md)) |
+| `aristotle` | App event loop, screens, reading sessions, snapshots, and dictionaries |
 | `aristotle-observe` | Touch injection, panel logs, and latency benchmarks |
 
 `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n`, not the [HAL](glossary.md#hal), the hardware layer. The renderer uses the HAL and `plato-core`. The app combines these crates, while `aristotle-observe` runs as a separate tool.
 
-Plain `cargo build`, `cargo test`, and `cargo clippy` omit `aristotle-render` and `aristotle`, which link C libraries. Cargo still needs the Plato submodule checked out. The network crate's optional [TLS](glossary.md#tls) feature, `tls`, also builds C through `ring`, its cryptography library.
+Plain `cargo build`, `cargo test`, and `cargo clippy` omit `aristotle-render` and `aristotle`, which link C libraries. Cargo still needs the Plato submodule checked out. The network crate's optional TLS feature, `tls`, also builds C through `ring`, its cryptography library.
 
 The build scripts have separate roles:
 
@@ -47,7 +47,7 @@ The build scripts have separate roles:
 
 See [Building](../.github/CONTRIBUTING.md#building).
 
-The release profile uses `opt-level = "s"`, [LTO](glossary.md#lto), one codegen unit, stripped symbols, and `panic = "abort"`. The layout crates use level 3 ([Size budget](reader.md#size-budget)).
+The release profile uses `opt-level = "s"`, LTO, one codegen unit, stripped symbols, and `panic = "abort"`. The layout crates use level 3 ([Size budget](reader.md#size-budget)).
 
 ## On the device
 
@@ -74,7 +74,7 @@ These are source-code changes, not runtime plugins.
 | Language | `crates/aristotle-i18n/locales/` ([Adding a language](ui-framework.md#adding-a-language)) |
 | Format detection | `aristotle_library::format` |
 | [MOBI](glossary.md#mobi) conversion | `crates/aristotle-render/src/mobi.rs` |
-| Dictionaries | `crates/aristotle/src/dict/`, [StarDict](glossary.md#stardict) files on the device |
+| Dictionaries | `crates/aristotle/src/dict/`, StarDict files on the device |
 | Refresh policy | `aristotle_ui::ui` and the app's `panel::plan` ([Transitions](ui-framework.md#transitions)) |
 
 The HAL supports only the PW4.
