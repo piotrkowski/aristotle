@@ -6,7 +6,7 @@ Aristotle reads whatever lands in `/mnt/us/documents`, and the USB network gives
 
 Turn Hacker News and your RSS feeds into one clean EPUB a day and copy it into `documents/Gazeta/`. The library shows it like any folder.
 
-- `aristotle-press`, a small separate tool, does this: reader-mode extraction, photos redrawn as minimal outline sketches (or described in one line by an LLM), the top HN comments, and a sync script that keeps the last few issues.
+- A small script can do this: reader-mode extraction of each article, photos redrawn as simple line drawings or described in one line, the top comments of each Hacker News story, and a sync step that keeps the last few issues on the device.
 - Calibre's **Fetch news** does much the same with its built-in recipes. Save the result as EPUB and copy it over.
 
 ## Send a web page to the Kindle
