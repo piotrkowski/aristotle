@@ -33,14 +33,14 @@ The stock interface uses about 200 MB of RAM, and Aristotle uses 14.5 MB. While 
 ## Features
 
 - Pages turn with one full-screen update and the stock reader's [waveform](docs/glossary.md#waveform), so they don't ghost.
-- The library shows `documents/` with shelves, folders, series and the current book. It opens [EPUB](docs/glossary.md#epub), DRM-free [MOBI](docs/glossary.md#mobi), PDF and TXT.
-- Text is set in Literata with [Knuth-Plass](docs/glossary.md#knuth-plass) justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
+- The library shows `documents/` with shelves, folders, series and the current book. It opens EPUB, DRM-free [MOBI](docs/glossary.md#mobi), PDF and TXT.
+- Text is set in Literata with Knuth-Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
 - Add your own fonts: copy TTF or OTF files into `fonts/` on the Kindle and pick one in the reader's menu ([how](docs/install.md#your-own-fonts)).
-- Hold a word to look it up in offline [StarDict](docs/glossary.md#stardict) dictionaries. Inflected forms work too.
+- Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
 - On the first scan, it imports stock MOBI reading positions [without changing stock files](docs/library.md#stock-files-sidecars-and-my-clippingstxt). New highlights go to [`My Clippings.txt`](docs/glossary.md#my-clippingstxt) and Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
 - Reading positions sync with [KOReader](docs/glossary.md#koreader) through a [KOSync](docs/glossary.md#kosync) server (EPUB chapters, PDF pages).
-- Books download from [OPDS](docs/glossary.md#opds) catalogs, such as calibre's content server, into the library.
+- Books download from OPDS catalogs, such as calibre's content server, into the library.
 
 A page turn takes 0.57 s from release in stock and 0.44 s in Aristotle. Opening a book takes 0.8 s in stock and 0.56 s in Aristotle, from its saved page.
 
@@ -95,7 +95,7 @@ GNU AGPL 3.0 or later, like Plato. See [LICENSE](LICENSE). [THIRD_PARTY.md](THIR
 - [Plato](https://github.com/baskerville/plato) by Bastien Dejean, with [MuPDF](https://mupdf.com), [FreeType](https://freetype.org) and [HarfBuzz](https://harfbuzz.github.io)
 - [KOReader](https://github.com/koreader/koreader), for Kindle know-how and the SSH server
 - [FBInk](https://github.com/NiLuJe/FBInk), for the e-ink display interface
-- katadelos' [eink-emulator](https://github.com/katadelos/eink-emulator), the Paperwhite 4 in [QEMU](docs/glossary.md#qemu)
+- katadelos' [eink-emulator](https://github.com/katadelos/eink-emulator), the Paperwhite 4 in QEMU
 - [KindleModding](https://kindlemodding.org) and [MobileRead](https://www.mobileread.com), for KUAL, [MRPI](docs/glossary.md#mrpi) and the Kindle guides
 - [Literata](https://www.type-together.com/literata-font) by TypeTogether
 - [hyph-utf8](https://github.com/hyphenation/tex-hyphen) hyphenation patterns

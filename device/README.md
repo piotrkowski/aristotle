@@ -146,10 +146,10 @@ stock file is changed. The agent job starts on `started lab126` and runs
 - brings up the USB network and key-only SSH whenever the USB mode is `net`,
   the default;
 - switches to USB drive mode for a limited time on request, then back to `net`;
-- runs a [watchdog](../docs/glossary.md#watchdog) that restarts the stock GUI if it stays dead for 5 minutes, and reboots at most
+- runs a watchdog that restarts the stock GUI if it stays dead for 5 minutes, and reboots at most
   once an hour if that does not help. It stays out of the way while
   `/var/run/aristotle-takeover` exists (`takeover.sh start` creates it on the
-  `/var` [tmpfs](../docs/glossary.md#tmpfs), so a reboot clears it);
+  `/var` tmpfs, so a reboot clears it);
 - applies the [Wi-Fi policy](#network).
 
 State and logs live in `/var/local/aristotle` (persistent ext3). Deleting
@@ -215,7 +215,7 @@ checked.
 ### Amazon's updates
 
 `aristotle-ota.conf` handles `starting otaupd` and `starting otav3`: it
-[bind-mounts](../docs/glossary.md#bind-mount) `/var/local/aristotle/ota-stub`, which only sleeps, read-only
+bind-mounts `/var/local/aristotle/ota-stub`, which only sleeps, read-only
 over `/usr/bin/otaupd` and `/usr/bin/otav3` before upstart runs them. The real
 daemons never run and `com.lab126.ota` never appears. No stock file changes;
 the mounts end at the next reboot, and without the job they do not come
@@ -366,7 +366,7 @@ the expected files.
 ## Network
 
 The reader listens on no port. Its outbound requests serve the configured
-progress-sync server, [OPDS](../docs/glossary.md#opds) catalogs, and their acquisition links.
+progress-sync server, OPDS catalogs, and their acquisition links.
 [Network setup](../docs/network.md) covers account imports and a first
 connection. [The USB link](#the-usb-link) is separate, for development and SSH.
 Wi-Fi stays with the stock system unless you switch on the `scoped` policy,
@@ -379,7 +379,7 @@ once* (`bin/start.sh`) give `usb0` the address `192.168.15.244/24`, and
 `dropbear` listens there only. On the computer,
 `tools/host/setup-host-net.sh` creates a NetworkManager network profile for the
 gadget's fixed MAC with `192.168.15.201/24` and no default route. There is no
-gateway or [DHCP](../docs/glossary.md#dhcp).
+gateway or DHCP.
 
 If your own network also uses `192.168.15.0/24`, the two routes clash while
 the Kindle is plugged in. Move the USB link to a private `/24` that nothing
@@ -460,7 +460,7 @@ of a timeout.
 
 ### How it works
 
-[iptables](../docs/glossary.md#iptables) rules are grouped into chains. `net.sh` adds two chains and jumps to them from the top of `INPUT` and
+iptables rules are grouped into chains. `net.sh` adds two chains and jumps to them from the top of `INPUT` and
 `OUTPUT` for `wlan0` only. `ARISTOTLE_OUT` accepts DHCP (`udp 68 → 67`), DNS
 (`udp` and `tcp` 53) to each resolver and each allowed address, port and
 protocol, then drops the rest. `ARISTOTLE_IN` accepts `ESTABLISHED,RELATED`
@@ -476,7 +476,7 @@ The generated commands are kept in `/var/local/aristotle/net-rules.sh` and
 run with `sh -e`. CI checks them with `device/tests/net.sh`, against
 expected files and a model of `iptables`.
 
-`iptables` matches addresses, so `net.sh` resolves each host ([glibc](../docs/glossary.md#glibc)'s
+`iptables` matches addresses, so `net.sh` resolves each host (glibc's
 `getent ahostsv4`[^1] or `busybox nslookup`) when the policy is applied,
 every 15 minutes after that, and whenever `wlan0`'s address, the resolvers or
 `net-allow` change. The agent checks for changes every 15 s, and allows DNS to
@@ -489,7 +489,7 @@ keeps its previous addresses.
   an allowed address, which on a shared content delivery network (CDN) can be many unrelated sites.
 - A host whose addresses rotate faster than the 15-minute refresh can fail in
   between. Prefer stable addresses, ideally a server on your local network.
-- [TLS](../docs/glossary.md#tls) Server Name Indication (SNI) and the HTTP `Host` header are not checked.
+- TLS Server Name Indication (SNI) and the HTTP `Host` header are not checked.
 - Domain Name System (DNS) queries to the configured resolvers are unrestricted, so data could leak out in DNS
   queries.
 - Until the agent's first tick after `started lab126`, the stock firewall

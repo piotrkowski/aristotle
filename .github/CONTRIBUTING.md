@@ -22,7 +22,7 @@ native members, `crates/aristotle-render` and the reader app
 `tools/build-plato.sh` builds. CI checks those members too, with the libraries cached.
 
 Plato comes from our fork in the `third_party/plato`
-[submodule](../docs/glossary.md#submodule). See the
+submodule. See the
 [fork workflow](../docs/reader.md#plato-fork). Cargo needs it even for
 the default members, so clone with `--recurse-submodules`, and run
 `git submodule sync && git submodule update --init` when the submodule
@@ -45,7 +45,7 @@ C libraries also need:
 - `bash`
 - A host C compiler.
 
-`tools/build-plato.sh` downloads a pinned [Zig](../docs/glossary.md#zig) toolchain.
+`tools/build-plato.sh` downloads a pinned Zig toolchain.
 
 Builds go to `$ARISTOTLE_CACHE` (default `~/.cache/aristotle`), since `/tmp`
 is a small RAM disk on many hosts. Do the same for your own `cargo` runs:
@@ -71,8 +71,8 @@ tools/package.sh zip     # $ARISTOTLE_CACHE/dist/aristotle-VERSION.zip
 ```
 
 Each compiled Aristotle program for the Kindle is a
-[static binary](../docs/glossary.md#static-binary) for
-`armv7-unknown-linux-musleabihf`, with the [musl](../docs/glossary.md#musl)
+static binary for
+`armv7-unknown-linux-musleabihf`, with the musl
 C library linked in. `tools/package.sh` defines what goes
 on the Kindle's USB drive: `aristotle/` (the app bundle with its licences and
 `SOURCE.txt`) and `extensions/aristotle/` (the [KUAL](../docs/glossary.md#kual) launcher extension). Unzip the zip
