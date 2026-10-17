@@ -286,6 +286,18 @@ pub struct Library {
 const ROW_COVER: (i32, i32) = (72, 106);
 const HERO_COVER: (i32, i32) = (156, 234);
 
+/// Touch-down feedback for a book row or the book to continue. Inverting
+/// is the clearest signal and suits text and typographic cards (a card
+/// simply shows its inverse binding), but it would turn a cover photo into
+/// a negative; with photos the row gets a heavy frame instead.
+fn press_feedback(covers: CoverMode) -> Feedback {
+    if covers == CoverMode::Photos {
+        Feedback::Outline
+    } else {
+        Feedback::Invert
+    }
+}
+
 /// "Strona 2 z 5": the pager and reader position label.
 pub fn page_of(page: usize, count: usize) -> String {
     format!("Strona {page} z {count}")
@@ -649,7 +661,7 @@ impl Library {
         t.add(
             Node::new(Kind::Padding(Insets::all(0)))
                 .action(action::RESUME)
-                .feedback(Feedback::Invert),
+                .feedback(press_feedback(covers)),
             [row],
         )
     }
@@ -710,7 +722,7 @@ impl Library {
             let cover = t.fixed(Some(ROW_COVER.0), Some(ROW_COVER.1), Some(cover));
             t.add(Node::row(Space::M), [cover, info])
         };
-        Self::list_item(t, row, id)
+        Self::list_item(t, row, id, press_feedback(covers))
     }
 
     fn shelf_row(
@@ -730,18 +742,18 @@ impl Library {
         let chevron = t.icon(Icon::ChevronRight, IconSize::SMALL, INK_3);
         let row = t.add(Node::row(Space::M), [icon, words, chevron]);
         let row = t.fixed(None, Some(MIN_TARGET + 6), Some(row));
-        Self::list_item(t, row, id)
+        Self::list_item(t, row, id, Feedback::Invert)
     }
 
     /// A row with its padding and hairline, the whole of it one target.
-    fn list_item(t: &mut Tree, row: NodeId, id: ActionId) -> NodeId {
+    fn list_item(t: &mut Tree, row: NodeId, id: ActionId, feedback: Feedback) -> NodeId {
         let row = t.pad(Insets::vh(Space::S - 2, 0), row);
         let line = t.rule(1, RULE);
         let item = t.add(Node::column(0), [row, line]);
         t.add(
             Node::new(Kind::MinSize(crate::geom::Size::new(0, MIN_TARGET)))
                 .action(id)
-                .feedback(Feedback::Invert),
+                .feedback(feedback),
             [item],
         )
     }

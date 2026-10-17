@@ -302,6 +302,14 @@ pub struct Updater {
 }
 
 impl Updater {
+    /// Count this handle's update markers from `base`, so two updaters on
+    /// two threads never hand out the same marker (a waiter would then wake
+    /// for the wrong update). The default base is `0x8000_0000`.
+    pub fn with_marker_base(mut self, base: u32) -> Self {
+        self.next_marker = base;
+        self
+    }
+
     /// Same contract as [`Framebuffer::update`]. Blocks while the driver is
     /// still busy with an earlier update (about one waveform duration,
     /// measured: 120 ms for A2).

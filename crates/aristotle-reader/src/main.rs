@@ -56,7 +56,9 @@ use aristotle_render::style::Style;
 use aristotle_ui::geom::{Rect, Size, MIN_TARGET};
 use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{self as ui_lib, CoverMode, Filter, View};
-use aristotle_ui::screens::reader::{action as menu_action, build_menu, Menu, MenuSpec, Settings};
+use aristotle_ui::screens::reader::{
+    action as menu_action, build_menu, mask_extents, Menu, MenuSpec, Settings,
+};
 use aristotle_ui::screens::settings::{self as set_ui, SystemView, LIGHT_PRESETS, SLEEP_MINUTES};
 use aristotle_ui::screens::sleep;
 use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
@@ -1059,18 +1061,29 @@ impl App {
                     return Ok(false);
                 };
                 o.menu_open = true;
-                let info = o.shown().0.clone();
+                o.settings.light = light;
+                let (info, page) = o.shown().clone();
+                fit_menu(
+                    &mut self.ui,
+                    &self.styles,
+                    &o.title,
+                    &o.settings,
+                    &page,
+                    &mut o.menu,
+                    &mut o.page_node,
+                );
                 self.ui.tree.set_text(o.menu.chapter_label, &info.chapter);
                 self.ui.tree.set_text(o.menu.page_label, &info.label);
                 self.ui.tree.set_progress(o.menu.progress, info.fraction);
-                o.settings.light = light;
                 if let Some(w) = self.ui.tree.widget_mut::<Slider>(o.menu.light) {
                     w.value = light;
                 }
                 self.ui.tree.invalidate(o.menu.light, Refresh::Auto);
-                self.ui.tree.set_hidden(o.menu.root, false);
                 self.ui.reset_gestures();
-                self.render_ui()?;
+                self.ui.layout();
+                let parts = menu_parts(&self.ui, &o.menu);
+                self.ui.render();
+                self.panel.present_overlay(&self.ui, &parts);
                 Ok(true)
             }
         }
@@ -1359,16 +1372,29 @@ impl App {
             return Ok(());
         };
         r.menu_open = true;
-        update_menu_labels(&mut self.ui, r);
         r.settings.light = light;
         r.settings.night = night;
+        let page = r.session.page(r.session.current)?;
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &r.settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
+        update_menu_labels(&mut self.ui, r);
         if let Some(w) = self.ui.tree.widget_mut::<Slider>(r.menu.light) {
             w.value = light;
         }
         self.ui.tree.invalidate(r.menu.light, Refresh::Auto);
-        self.ui.tree.set_hidden(r.menu.root, false);
         self.ui.reset_gestures();
-        self.render_ui()
+        self.ui.layout();
+        let parts = menu_parts(&self.ui, &r.menu);
+        self.ui.render();
+        self.panel.present_overlay(&self.ui, &parts);
+        Ok(())
     }
 
     /// Close the menu: the page comes back with a full mode-9 update of the
@@ -1473,9 +1499,18 @@ impl App {
         r.session.current = location;
         let page = r.session.page(location)?;
         if let Some(w) = self.ui.tree.widget_mut::<PageView>(r.page_node) {
-            w.page = page;
+            w.page = page.clone();
         }
         self.ui.tree.invalidate(r.page_node, Refresh::Auto);
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &r.settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
         update_menu_labels(&mut self.ui, r);
         let now = aristotle_library::library::now();
         self.lib
@@ -1506,11 +1541,20 @@ impl App {
         let page = r.session.page(r.session.current)?;
         let t_layout = t.elapsed();
         r.settings = settings;
-        let (tree, menu, page_node) = reader_tree(&self.styles, &r.session.title, &settings, page);
+        let (tree, menu, page_node) =
+            reader_tree(&self.styles, &r.session.title, &settings, page.clone());
         r.menu = menu;
         r.page_node = page_node;
         self.ui.set_tree_with(tree, Refresh::Auto);
-        self.ui.tree.set_hidden(r.menu.root, false);
+        fit_menu(
+            &mut self.ui,
+            &self.styles,
+            &r.session.title,
+            &settings,
+            &page,
+            &mut r.menu,
+            &mut r.page_node,
+        );
         update_menu_labels(&mut self.ui, r);
         perf!(
             "restyle: {} pt, line height {}, margin {} mm: layout and page {:.0} ms",
@@ -1571,6 +1615,18 @@ fn reader_tree(
     settings: &Settings,
     page: Rc<Page>,
 ) -> (Tree, Menu, NodeId) {
+    reader_tree_with(styles, title, settings, page, (0, 0))
+}
+
+/// [`reader_tree`] with the menu's edges moved by `extents` (see
+/// [`fit_menu`]).
+fn reader_tree_with(
+    styles: &Styles,
+    title: &str,
+    settings: &Settings,
+    page: Rc<Page>,
+    extents: (i32, i32),
+) -> (Tree, Menu, NodeId) {
     let mut t = Tree::new();
     let page_node = t.custom(PageView { page });
     let spec = MenuSpec {
@@ -1578,11 +1634,54 @@ fn reader_tree(
         // Only Literata ships with the renderer, so there is no font row.
         families: None,
         night: true,
+        top_extra: extents.0,
+        bottom_extra: extents.1,
     };
     let menu = build_menu(&mut t, styles, &spec, settings);
     let root = t.add(Node::new(Kind::Stack), [page_node, menu.root]);
     t.set_root(root);
     (t, menu, page_node)
+}
+
+/// Show the menu over `page` with its edges in the white between two lines
+/// of text, never through them: the bars hide whole lines. Rebuilds the
+/// reader tree when the edges have to move (the menu's labels are then
+/// fresh: set them after this).
+fn fit_menu(
+    ui: &mut Ui,
+    styles: &Styles,
+    title: &str,
+    settings: &Settings,
+    page: &Rc<Page>,
+    menu: &mut Menu,
+    page_node: &mut NodeId,
+) {
+    ui.tree.set_hidden(menu.root, false);
+    ui.layout();
+    let top = ui.tree.rect(menu.top).bottom() - menu.top_extra;
+    let sheet = ui.tree.rect(menu.sheet).y + menu.bottom_extra;
+    let extents = mask_extents(
+        &page.data,
+        page.stride,
+        page.width as usize,
+        page.height as usize,
+        top,
+        sheet,
+        120,
+    );
+    if extents != (menu.top_extra, menu.bottom_extra) {
+        let (tree, m, pn) = reader_tree_with(styles, title, settings, page.clone(), extents);
+        ui.set_tree_with(tree, Refresh::Auto);
+        ui.tree.set_hidden(m.root, false);
+        ui.layout();
+        *menu = m;
+        *page_node = pn;
+    }
+}
+
+/// The two opaque parts of the menu, for [`Panel::present_overlay`].
+fn menu_parts(ui: &Ui, menu: &Menu) -> [Rect; 2] {
+    [ui.tree.rect(menu.top), ui.tree.rect(menu.sheet)]
 }
 
 fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {

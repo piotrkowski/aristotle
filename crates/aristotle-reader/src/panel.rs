@@ -27,7 +27,9 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -144,10 +146,61 @@ struct InFlight {
     label: String,
 }
 
+/// Submits short fixed sequences of updates, in order, on a thread of its
+/// own: the driver blocks a submit while the previous update is on the
+/// panel, and the input loop must never wait for that.
+struct Sequencer {
+    jobs: Sender<Vec<(FbRect, FbWaveform, bool)>>,
+    pending: Arc<AtomicUsize>,
+}
+
+impl Sequencer {
+    fn new(fb: &Framebuffer) -> io::Result<Sequencer> {
+        // Markers apart from the display thread's (which count from
+        // 0x8000_0000) and the page path's (from 1).
+        let mut updater = fb.updater()?.with_marker_base(0xc000_0000);
+        let waiter = fb.waiter()?;
+        let (jobs, rx) = mpsc::channel::<Vec<(FbRect, FbWaveform, bool)>>();
+        let pending = Arc::new(AtomicUsize::new(0));
+        let left = pending.clone();
+        thread::Builder::new()
+            .name("panel-sequence".into())
+            .spawn(move || {
+                for job in rx {
+                    let mut last = None;
+                    for (rect, wf, full) in job {
+                        match updater.update(rect, wf, full) {
+                            Ok(Some(m)) => last = Some(m),
+                            Ok(None) => {}
+                            Err(e) => eprintln!("aristotle: panel sequence: {e}"),
+                        }
+                    }
+                    if let Some(m) = last {
+                        let _ = waiter.wait(m);
+                    }
+                    left.fetch_sub(1, Ordering::SeqCst);
+                }
+            })?;
+        Ok(Sequencer { jobs, pending })
+    }
+
+    fn submit(&self, job: Vec<(FbRect, FbWaveform, bool)>) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self.jobs.send(job).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    fn busy(&self) -> bool {
+        self.pending.load(Ordering::SeqCst) > 0
+    }
+}
+
 pub struct Panel {
     fb: Framebuffer,
     display: Display,
     completions: Completions,
+    sequencer: Sequencer,
     page: Option<InFlight>,
     /// Waveform for page turns.
     pub turn: FbWaveform,
@@ -169,10 +222,12 @@ impl Panel {
         let fb = Framebuffer::open("/dev/fb0")?;
         let display = Display::new(&fb)?;
         let completions = Completions::new(&fb)?;
+        let sequencer = Sequencer::new(&fb)?;
         Ok(Panel {
             fb,
             display,
             completions,
+            sequencer,
             page: None,
             turn: FbWaveform(turn_mode),
             night: None,
@@ -229,6 +284,39 @@ impl Panel {
         Ok(())
     }
 
+    /// Show an overlay that just appeared over the page, such as the reader
+    /// menu's top bar and bottom sheet (`parts`), in two steps that never
+    /// touch the page between the parts:
+    ///
+    /// 1. one A2 update over the parts, partial, so only pixels that
+    ///    changed move: the menu is there in about 150 ms, in black and
+    ///    white;
+    /// 2. one full-mode gray update of each part alone (GL16, GLKW16 at
+    ///    night), which brings the grays and clears what A2 left; full
+    ///    mode because a partial update would skip the pixels A2 already
+    ///    moved.
+    ///
+    /// A single gray update over the bounding box of both parts would cover
+    /// almost the whole page and show nothing for a full waveform.
+    pub fn present_overlay(&mut self, ui: &Ui, parts: &[Rect]) {
+        let parts: Vec<Rect> = parts.iter().copied().filter(|r| !r.is_empty()).collect();
+        let Some(union) = parts.iter().copied().reduce(|a, b| a.union(&b)) else {
+            return;
+        };
+        self.wait_idle();
+        for p in &parts {
+            self.blit_ui(ui, *p);
+        }
+        let gray = if self.night.is_some() {
+            FbWaveform::GLKW16
+        } else {
+            FbWaveform::GL16
+        };
+        let mut job = vec![(fb_rect(union), FbWaveform::A2, false)];
+        job.extend(parts.iter().map(|p| (fb_rect(*p), gray, true)));
+        self.sequencer.submit(job);
+    }
+
     /// Show a book page: one full update of the whole screen with the turn
     /// waveform (`flash` uses mode 8 instead, for a screen switch). Returns
     /// once submitted; the panel works on while the caller prerenders.
@@ -264,7 +352,7 @@ impl Panel {
         self.finish_page();
         self.display.sync();
         let deadline = t + Duration::from_secs(3);
-        while self.display.busy() && Instant::now() < deadline {
+        while (self.display.busy() || self.sequencer.busy()) && Instant::now() < deadline {
             self.display.drain_shown();
             thread::sleep(Duration::from_millis(2));
         }
