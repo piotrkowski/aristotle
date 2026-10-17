@@ -11,7 +11,7 @@
 //! aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode N]
 //!           [--night-method software|hardware] [--no-scan] [--bench-open TITLE]
 //!           [--open TITLE] [--dict DIR]... [--index-dicts] [--test-clippings PATH]
-//!           [--preview OUT BOOK]
+//!           [--wifi-read-only] [--preview OUT BOOK]
 //!
 //!   --data DIR      renderer data (fonts/, css/, hyphenation-patterns/,
 //!                   serif/); default: data/ next to the binary
@@ -37,6 +37,9 @@
 //!                   runs must not reach the user's own clippings); PATH
 //!                   is written even when the setting "Save highlights to
 //!                   My Clippings.txt" is off
+//!   --wifi-read-only  the Wi-Fi screen switches, scans and shows, but
+//!                   never connects to or forgets a network (device tests
+//!                   on a Kindle whose networks are not yours)
 //!   --preview OUT BOOK  drive the reading interactions on BOOK with
 //!                   synthetic touches on an in-memory panel and write PNGs
 //!                   to OUT (host; see preview.rs)
@@ -46,6 +49,7 @@
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
+mod ask;
 mod device;
 mod dict;
 mod marks;
@@ -64,6 +68,7 @@ mod shelf;
 mod snapshot;
 mod speed;
 mod turns;
+mod wifi;
 
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
@@ -150,13 +155,15 @@ struct Args {
     test_clippings: Option<PathBuf>,
     /// `--lang CODE`: the UI language, stored in the preferences.
     lang: Option<String>,
+    /// `--wifi-read-only`: never create, use or delete Wi-Fi profiles.
+    wifi_read_only: bool,
 }
 
 fn usage() -> &'static str {
     "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] \
      [--night-method software|hardware] [--no-scan] [--bench-open TITLE] [--open TITLE] \
      [--dict DIR]... [--index-dicts] [--test-clippings PATH] [--lang en|pl] \
-     [--preview OUT BOOK]"
+     [--wifi-read-only] [--preview OUT BOOK]"
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -180,6 +187,7 @@ fn parse_args() -> Result<Args, Error> {
         index_dicts: false,
         test_clippings: None,
         lang: None,
+        wifi_read_only: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -207,6 +215,7 @@ fn parse_args() -> Result<Args, Error> {
                 let book = cwd.join(value("--preview")?);
                 a.preview = Some((out, book));
             }
+            "--wifi-read-only" => a.wifi_read_only = true,
             "--lang" => {
                 let code = value("--lang")?;
                 if !aristotle_i18n::locales().iter().any(|l| l.code == code) {
@@ -422,6 +431,9 @@ fn build_app(
         dict: Some(dict),
         speed: Speed::load(&args.library),
         exports: export_paths(args),
+        wifi: None,
+        wifi_model: wifi::Model::default(),
+        wifi_read_only: args.wifi_read_only,
     };
     app.apply_night();
     app.show_library(Refresh::Full)?;
@@ -475,6 +487,14 @@ enum Screen {
         ids: Option<set_ui::Settings>,
         page: usize,
     },
+    Wifi {
+        view: aristotle_ui::screens::wifi::WifiScreen,
+    },
+    /// The keyboard, asking for text for `done` (`ask.rs`).
+    TextInput {
+        input: Box<aristotle_ui::screens::text_input::TextInput>,
+        done: Option<ask::TextDone>,
+    },
 }
 
 struct App {
@@ -514,6 +534,12 @@ struct App {
     speed: Speed,
     /// Where highlights are exported.
     exports: ExportPaths,
+    /// The Wi-Fi worker, started when the Wi-Fi screen first needs it.
+    wifi: Option<wifi::Worker>,
+    /// What the Wi-Fi screen shows; kept while other screens are up, so
+    /// a connection can finish meanwhile.
+    wifi_model: wifi::Model,
+    wifi_read_only: bool,
 }
 
 /// What a handler wants the loop to do next.
@@ -694,6 +720,7 @@ impl App {
         match &self.screen {
             Screen::Library { view, .. } => self.ui.tree.page(view.list).0,
             Screen::Settings { ids: Some(ids), .. } => self.ui.tree.page(ids.list).0,
+            Screen::Wifi { view } => self.ui.tree.page(view.list).0,
             _ => 0,
         }
     }
@@ -740,6 +767,12 @@ impl App {
     fn show_settings(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
         let facts = Facts::read(&self.battery, &self.root);
         self.clock = facts.clock.clone();
+        // Entering the settings: the Wi-Fi state fresh (about 10 ms when
+        // off); rebuilds keep the last one.
+        if refresh == Refresh::Full && !self.wifi_busy() {
+            self.refresh_wifi_status();
+        }
+        let wifi_summary = self.wifi_model.summary();
         let light = self
             .light
             .as_ref()
@@ -757,6 +790,7 @@ impl App {
             time: &facts.clock,
             usb: facts.usb,
             about: &facts.about,
+            wifi: Some(&wifi_summary),
         };
         let (tree, ids) = set_ui::Settings::build(&mut self.ui.text, &self.styles, &view);
         self.ui.set_tree_with(tree, refresh);
@@ -806,6 +840,7 @@ impl App {
                 self.set_light_step(step);
             }
             a::NIGHT => self.set_night(!self.prefs.night),
+            a::WIFI => return self.open_wifi(page).map(|_| Flow::Continue),
             a::CLIPPINGS => {
                 self.prefs.clippings = !self.prefs.clippings;
                 self.save_prefs();
@@ -913,6 +948,10 @@ impl App {
                 let page = *page;
                 self.show_settings(Refresh::Full, page)
             }
+            Screen::Wifi { .. } => self.show_wifi(Refresh::Full),
+            // A half-typed text is not kept across the screensaver: the
+            // request is cancelled and shows its previous screen.
+            Screen::TextInput { .. } => self.cancel_text(),
             // (A book still opening was finished before the screensaver.)
             Screen::Reader(_) | Screen::Opening => self.reader_after_sleep(),
         }
@@ -951,6 +990,9 @@ impl App {
             if self.opening.is_some() || self.pending.is_some() {
                 timeout = timeout.min(Duration::from_millis(10));
             }
+            if self.wifi_busy() {
+                timeout = timeout.min(Duration::from_millis(50));
+            }
             if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
                 timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
@@ -987,7 +1029,10 @@ impl App {
     /// Whether the UI tree (not the page-turn path) owns input right now.
     fn ui_driven(&self) -> bool {
         match &self.screen {
-            Screen::Library { .. } | Screen::Settings { .. } => true,
+            Screen::Library { .. }
+            | Screen::Settings { .. }
+            | Screen::Wifi { .. }
+            | Screen::TextInput { .. } => true,
             Screen::Reader(r) => r.menu_open || !r.overlay.is_none(),
             Screen::Opening => self.opening.as_ref().is_some_and(|o| o.menu_open),
         }
@@ -1003,6 +1048,9 @@ impl App {
             self.finish_pending(result)?;
         }
         self.poll_lookup()?;
+        if self.asleep.is_none() {
+            self.poll_wifi()?;
+        }
         // Snapshots ahead of time: only on the library screen (not the
         // settings), with no book opening and no screensaver.
         if matches!(self.screen, Screen::Library { .. })
@@ -1035,7 +1083,12 @@ impl App {
                 match &self.screen {
                     Screen::Library { .. } => self.show_library_at(Refresh::Auto, page)?,
                     Screen::Settings { .. } => self.show_settings(Refresh::Auto, page)?,
-                    Screen::Reader(_) | Screen::Opening => self.clock = clock,
+                    Screen::Wifi { .. } => self.show_wifi(Refresh::Auto)?,
+                    // The keyboard's status line keeps its time: a rebuild
+                    // would cost the typed text.
+                    Screen::Reader(_) | Screen::Opening | Screen::TextInput { .. } => {
+                        self.clock = clock
+                    }
                 }
             }
         }
@@ -1090,6 +1143,8 @@ impl App {
         match &self.screen {
             Screen::Library { .. } => self.on_library_event(ev),
             Screen::Settings { .. } => self.on_settings_event(ev),
+            Screen::Wifi { .. } => self.on_wifi_event(ev),
+            Screen::TextInput { .. } => self.on_text_event(ev),
             Screen::Reader(r) => {
                 let reading_action =
                     matches!(ev, UiEvent::Action { id, .. } if id >= overlay::FIRST_ACTION);
