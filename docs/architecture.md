@@ -47,7 +47,7 @@ The app bundle unpacks into `/mnt/us/aristotle/`: the `aristotle` binary, `data/
 
 `powerd`, `volumd`, `wifid` and `lipcd` keep running. The app sets `preventScreenSaver` so `powerd` does not draw the stock screensaver, and draws its own.
 
-The device agent is a separate upstart job (`aristotle-agent.conf`), installed from `devloop/kindle/aristotle-usbnet/agent/`. It brings up the USB network and SSH at boot. `aristotlectl` switches between network and drive mode, and the settings screen calls it through `aristotle_hal::system::set_usb_mode`.
+The device agent is a separate upstart job (`aristotle-agent.conf`), installed from `device/extension/agent/`. It brings up the USB network and SSH at boot. `aristotlectl` switches between network and drive mode, and the settings screen calls it through `aristotle_hal::system::set_usb_mode`.
 
 Books are read from `/mnt/us/documents`. The app keeps its index, covers, page cache, snapshots and `reader.json` in `/mnt/us/.aristotle`.
 

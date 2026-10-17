@@ -3,11 +3,11 @@
 # Reversible takeover of the Kindle: stop Amazon's GUI stack so Aristotle owns
 # the screen and most of the RAM, and bring it back afterwards.
 #
-#   ssh kindle sh -s start < devloop/kindle/takeover.sh
-#   ssh kindle sh -s stop  < devloop/kindle/takeover.sh
-#   ssh kindle sh -s status < devloop/kindle/takeover.sh
-#   ssh kindle sh -s pause  < devloop/kindle/takeover.sh
-#   ssh kindle sh -s resume < devloop/kindle/takeover.sh
+#   ssh kindle sh -s start < device/app/takeover.sh
+#   ssh kindle sh -s stop  < device/app/takeover.sh
+#   ssh kindle sh -s status < device/app/takeover.sh
+#   ssh kindle sh -s pause  < device/app/takeover.sh
+#   ssh kindle sh -s resume < device/app/takeover.sh
 #
 # start/stop take the stock GUI down and bring it back: most RAM is freed, and
 # the way back shows the boot splash for 30-60 s while Java restarts. This is
@@ -28,12 +28,12 @@
 # dbus, plus our USB network and SSH.
 #
 # start and pause refuse to run, and change nothing, unless the device is a
-# Kindle Paperwhite 4 (2018) on firmware 5.13.x (aristotle-usbnet/guard.sh,
-# looked for next to this script, then in the installed KUAL extension).
+# Kindle Paperwhite 4 (2018) on firmware 5.13.x (the KUAL extension's guard.sh,
+# looked for next to this script, then in the installed extension).
 # ARISTOTLE_FORCE=1 skips that check, for developers trying another model or
 # firmware on purpose, at their own risk. stop, resume and status always run.
 
-# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
 
@@ -45,14 +45,14 @@ GUI=lab126_gui
 EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
 TAKEOVER=$R/var/run/aristotle-takeover
 # The device guard: beside this script in the app bundle and the KUAL
-# extension, one level down in the repository, or in the installed extension
-# when the script comes on stdin (sh -s).
+# extension, in ../extension/ in the repository (device/app/), or in the
+# installed extension when the script comes on stdin (sh -s).
 guard() {
     [ "${ARISTOTLE_FORCE:-}" = 1 ] && return 0
     here=
     case "$0" in */takeover.sh) here=${0%/*} ;; takeover.sh) here=. ;; esac
-    for g in ${here:+"$here/guard.sh" "$here/aristotle-usbnet/guard.sh"} \
-        "$R/mnt/us/extensions/aristotle-usbnet/guard.sh"; do
+    for g in ${here:+"$here/guard.sh" "$here/../extension/guard.sh"} \
+        "$R/mnt/us/extensions/aristotle/guard.sh"; do
         if [ -f "$g" ]; then
             . "$g"
             device_guard

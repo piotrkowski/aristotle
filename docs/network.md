@@ -21,8 +21,8 @@ address appears in these files:
 
 | File | Side | What to change |
 |------|------|----------------|
-| `devloop/kindle/aristotle-usbnet/agent/boot.sh` | device, agent | `DEV_IP`; the `netmask` in `net_up` if the prefix is not `/24` |
-| `devloop/kindle/aristotle-usbnet/bin/start.sh` | device, KUAL | `DEV_IP`; the `netmask` of its `ifconfig` line likewise |
+| `device/extension/agent/boot.sh` | device, agent | `DEV_IP`; the `netmask` in `net_up` if the prefix is not `/24` |
+| `device/extension/bin/start.sh` | device, KUAL | `DEV_IP`; the `netmask` of its `ifconfig` line likewise |
 | `devloop/host/setup-host-net.sh` | computer | the address in `ipv4.addresses` |
 | `devloop/host/ssh_config` | computer | `HostName` |
 
@@ -95,7 +95,7 @@ memory; after a reboot the stock firewall applies until the agent's first
 tick.
 
 The generated commands are kept in `/var/local/aristotle/net-rules.sh` and
-run with `sh -e`. CI checks them with `devloop/kindle/tests/net.sh`, against
+run with `sh -e`. CI checks them with `device/tests/net.sh`, against
 expected files and a model of iptables.
 
 iptables matches addresses, so `net.sh` resolves each host (glibc's

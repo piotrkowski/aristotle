@@ -1,5 +1,5 @@
 /target/
 *.pyc
 __pycache__/
-devloop/kindle/aristotle-usbnet/authorized_keys
+device/extension/authorized_keys
 /.claude/

@@ -14,7 +14,7 @@
 #   aristotlectl log [N]           last N log lines (default 40)
 #   aristotlectl reboot            reboot; the agent brings SSH back on boot
 set -u
-# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
 S=$R/var/local/aristotle

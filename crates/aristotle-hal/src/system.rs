@@ -3,7 +3,7 @@
 //! time, and the USB mode of the device agent.
 //!
 //! Everything here is read-only except [`set_usb_mode`], which asks the
-//! agent (`devloop/kindle/aristotle-usbnet/agent/`) to switch through its own
+//! agent (`device/extension/agent/`) to switch through its own
 //! `aristotlectl`, the same command a developer runs over SSH.
 
 use std::fs;

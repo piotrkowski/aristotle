@@ -11,7 +11,7 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 EXT=$(dirname "$HERE")
-# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
 S=$R/var/local/aristotle

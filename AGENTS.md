@@ -25,13 +25,13 @@ Aristotle replaces the Kindle Paperwhite 4's interface. This file lists what you
 ## Running code on the device
 
 - Try anything that could hang boot, touch the stock framework or kexec in the emulator first. `devloop/emulator/setup.sh` builds katadelos' QEMU fork and a jailbroken stock PW4 5.13.6 instance under `$ARISTOTLE_CACHE/emulator`. Start it from `eink-emulator/` with `./eink run pw4 --headless --qmp-socket --serial-socket`. SSH (`ssh -i build/ssh/id_ed25519 -p 2222 root@127.0.0.1`) is up after about 30 s, Home after about 2.5 min. Under QEMU the on-screen keyboard has one language, because a second `kb` plugin crashes the guest.
-- Dev loop: run KUAL › Aristotle › Start USB network once (`devloop/kindle/aristotle-usbnet`). It puts the Kindle at `192.168.15.244` on a USB network and starts KOReader's dropbear, key-only. Stop, or a reboot, undoes it. On the host, run `devloop/host/setup-host-net.sh` once. Then `devloop/host/run.sh [crate]` builds, copies to `/var/tmp`, runs and saves a framebuffer PNG, and `ssh -F devloop/host/ssh_config kindle` gives a shell. The key is `$ARISTOTLE_CACHE/ssh/kindle_ed25519`.
+- Dev loop: run KUAL › Aristotle › Start USB network once (`device/extension`). It puts the Kindle at `192.168.15.244` on a USB network and starts KOReader's dropbear, key-only. Stop, or a reboot, undoes it. On the host, run `devloop/host/setup-host-net.sh` once. Then `devloop/host/run.sh [crate]` builds, copies to `/var/tmp`, runs and saves a framebuffer PNG, and `ssh -F devloop/host/ssh_config kindle` gives a shell. The key is `$ARISTOTLE_CACHE/ssh/kindle_ed25519`.
 - Run `devloop/host/install-extensions.sh` whenever the device is in drive mode.
-- `agent/install.sh`, `bin/start.sh` and `takeover.sh start` refuse to run unless the device is a PW4 on 5.13.x (`aristotle-usbnet/guard.sh`). `ARISTOTLE_FORCE=1` overrides this, which the emulator may need. After changing these scripts, run the tests in `devloop/kindle/tests/`.
+- `agent/install.sh`, `bin/start.sh` and `takeover.sh start` refuse to run unless the device is a PW4 on 5.13.x (`device/extension/guard.sh`). `ARISTOTLE_FORCE=1` overrides this, which the emulator may need. After changing these scripts, run the tests in `device/tests/`.
 - `/mnt/us/aristotle-disable` keeps the agent from starting at boot. `agent/uninstall.sh` removes the agent and its SSH key.
 - Eject with `udisksctl unmount -b /dev/sda`. `udisksctl power-off` drops the device from the bus until a physical replug.
 - Drive mode is one-shot. After an eject the host sees a 0-byte `sda`, and only a replug brings the drive back. While the userstore is exported, the device cannot write `/mnt/us`.
-- Without the network: copy a KUAL extension to `/mnt/us/extensions/<id>/` (`config.xml`, `menu.json`, `bin/*.sh`), eject, run it from KUAL (as root), replug and read the output from `/mnt/us`. `probe/device/aristotle-probe` is a template.
+- Without the network: copy a KUAL extension to `/mnt/us/extensions/<id>/` (`config.xml`, `menu.json`, `bin/*.sh`), eject, run it from KUAL (as root), replug and read the output from `/mnt/us`. `device/probe` is a template.
 - `eips` (stock) or `/mnt/us/libkh/bin/fbink` print status on screen.
 
 ## Device facts that break naive code
@@ -51,4 +51,4 @@ Aristotle replaces the Kindle Paperwhite 4's interface. This file lists what you
 
 - Check `docs/related-projects.md` before building something that may already exist.
 - Answer static questions from the firmware image in `$ARISTOTLE_CACHE/probe/static/` before touching the device.
-- For runtime questions, extend `probe/device/aristotle-probe/bin/probe.sh`. It must stay read-only outside its output directory. Copy results to `$ARISTOTLE_CACHE/probe/device/` and record lasting findings in `docs/pw4-reference.md`.
+- For runtime questions, extend `device/probe/bin/probe.sh`. It must stay read-only outside its output directory. Copy results to `$ARISTOTLE_CACHE/probe/device/` and record lasting findings in `docs/pw4-reference.md`.

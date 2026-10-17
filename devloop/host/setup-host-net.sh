@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # One-time host setup: a NetworkManager profile that gives the Kindle's USB
 # network interface (matched by the fixed MAC that
-# devloop/kindle/aristotle-usbnet/agent/boot.sh sets) the address
+# device/extension/agent/boot.sh sets) the address
 # 192.168.15.201/24. Safe to re-run: it replaces every profile bound to that
 # MAC, whatever its name, and nothing else.
 set -eu

@@ -69,7 +69,7 @@ devloop/host/install-extensions.sh</code></pre>
     <h2 id="uninstall">Uninstall</h2>
     <ol>
       <li>On the Kindle, open <strong>KUAL › Aristotle › Remove agent completely</strong>. This removes everything the agent put on the device, its SSH key included. The agent's log is saved to the Kindle's storage as <code>aristotle-agent.log</code>.</li>
-      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots) and <code>extensions/aristotle-*</code> from the Kindle's storage.</li>
+      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots), <code>extensions/aristotle/</code> and <code>extensions/aristotle-probe/</code> from the Kindle's storage. Older installs have <code>extensions/aristotle-usbnet/</code> instead of <code>extensions/aristotle/</code>.</li>
     </ol>
     <p>Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>
     <p>If you cannot reach the Kindle over SSH, open <strong>KUAL › Aristotle › USB drive mode for 10 minutes</strong> and connect the Kindle to a computer. Create an empty file named <code>aristotle-disable</code> at the root of the drive, then restart the Kindle. The agent will not start, and the Kindle runs the stock system.</p>

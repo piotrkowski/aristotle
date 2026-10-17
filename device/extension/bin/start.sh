@@ -11,10 +11,10 @@
 set -u
 umask 022
 
-# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
-BASE=$R/mnt/us/extensions/aristotle-usbnet
+BASE=$R/mnt/us/extensions/aristotle
 KO=$R/mnt/us/koreader
 PIDFILE=$R/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244

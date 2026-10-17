@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <extension>
   <information>
-    <name>Aristotle USB network</name>
+    <name>Aristotle</name>
     <version>0.1</version>
     <author>Aristotle</author>
-    <id>aristotle-usbnet</id>
+    <id>aristotle</id>
   </information>
   <menus>
     <menu type="json" dynamic="true">menu.json</menu>

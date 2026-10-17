@@ -22,7 +22,7 @@
 # on our device. Only the code is ever printed, never the serial.
 # The firmware: the first line of /etc/prettyversion.txt, "Kindle 5.13.6 (...)".
 #
-# AGENT_TEST_ROOT stands in for / in the host-side tests (devloop/kindle/tests/).
+# AGENT_TEST_ROOT stands in for / in the host-side tests (device/tests/).
 
 PW4_CODES="0PP 0T1 0T2 0T3 0T4 0T5 0T6 0T7 0TJ 0TK 0TL 0TM 0TN 102 103 16Q 16R 16S 16T 16U 16V"
 

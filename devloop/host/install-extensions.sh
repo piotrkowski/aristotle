@@ -30,10 +30,15 @@ if findmnt -no OPTIONS "$KINDLE" | grep -q '^ro'; then
     udisksctl mount -b "$dev" > /dev/null
 fi
 
-cp -r "$REPO/probe/device/aristotle-probe" "$KINDLE/extensions/"
-cp -r "$REPO/devloop/kindle/aristotle-usbnet" "$KINDLE/extensions/"
-cp "$REPO/devloop/kindle/takeover.sh" "$KINDLE/extensions/aristotle-usbnet/"
-cp "$PUBKEY" "$KINDLE/extensions/aristotle-usbnet/authorized_keys"
+EXT="$KINDLE/extensions/aristotle"
+mkdir -p "$KINDLE/extensions/aristotle-probe" "$EXT"
+cp -r "$REPO/device/probe/." "$KINDLE/extensions/aristotle-probe/"
+cp -r "$REPO/device/extension/." "$EXT/"
+cp "$REPO/device/app/takeover.sh" "$EXT/"
+cp "$PUBKEY" "$EXT/authorized_keys"
+# The extension's folder before it was renamed: KUAL would show both menus,
+# and it may hold an older copy of the key.
+rm -rf "$KINDLE/extensions/aristotle-usbnet"
 if [ -s "$APP_BUNDLE" ]; then
     tar -xzf "$APP_BUNDLE" -C "$KINDLE"
     echo "Unpacked the reader app to $KINDLE/aristotle"

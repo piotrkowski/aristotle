@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Host-side test of the agent's Wi-Fi policy generator (agent/net.sh).
 #
-#   sh devloop/kindle/tests/net.sh          compare with net/expected-*
-#   UPDATE=1 sh devloop/kindle/tests/net.sh write net/expected-* instead
+#   sh device/tests/net.sh          compare with net/expected-*
+#   UPDATE=1 sh device/tests/net.sh write net/expected-* instead
 #
 # Runs the pure stages on fixtures, with a stub getent on PATH: the allowlist
 # parser, resolution, and the iptables commands for "scoped" (with
@@ -12,7 +12,7 @@
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-NET="sh $HERE/../aristotle-usbnet/agent/net.sh"
+NET="sh $HERE/../extension/agent/net.sh"
 FIX=$HERE/net
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aristotle-net-test.XXXXXX")
 PATH="$FIX:$PATH"

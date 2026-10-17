@@ -10,7 +10,8 @@
 #  - /var/local/aristotle-migrate, if an earlier version of the agent left
 #    one: backups from moving an older install over, with copies of the key;
 #  - the agent's keys from KOReader's settings/SSH/authorized_keys (other keys
-#    there stay) and the extension's authorized_keys;
+#    there stay) and the extension's authorized_keys (also under the
+#    extension's earlier name, aristotle-usbnet);
 #  - the runtime state: dropbear, usb0 and g_ether, the usb0 firewall rules,
 #    the Wi-Fi policy chains.
 #
@@ -21,14 +22,16 @@ set -u
 # Keep going if the SSH session that started us goes away.
 trap '' HUP PIPE
 
-# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
 S=$R/var/local/aristotle
 BACKUPS=$R/var/local/aristotle-migrate
 JOB=$R/etc/upstart/aristotle-agent.conf
 PIDFILE=$R/var/run/aristotle-dropbear.pid
-EXT=$R/mnt/us/extensions/aristotle-usbnet
+EXT=$R/mnt/us/extensions/aristotle
+# The extension's folder before it was renamed.
+OLD_EXT=$R/mnt/us/extensions/aristotle-usbnet
 KO_KEYS=$R/mnt/us/koreader/settings/SSH/authorized_keys
 USB_LOG=$R/mnt/us/aristotle-agent.log
 
@@ -70,7 +73,7 @@ fi
 # The agent's keys, wherever it put them. KOReader's file may hold keys of
 # the owner's own; only lines equal to one of ours go.
 keys=$R/var/run/aristotle-uninstall-keys
-cat "$S/authorized_keys" "$EXT/authorized_keys" 2> /dev/null | grep . > "$keys"
+cat "$S/authorized_keys" "$EXT/authorized_keys" "$OLD_EXT/authorized_keys" 2> /dev/null | grep . > "$keys"
 if [ -s "$keys" ] && [ -f "$KO_KEYS" ]; then
     grep -v -x -F -f "$keys" "$KO_KEYS" > "$KO_KEYS.new"
     if grep -q . "$KO_KEYS.new"; then
@@ -79,7 +82,7 @@ if [ -s "$keys" ] && [ -f "$KO_KEYS" ]; then
         rm -f "$KO_KEYS.new" "$KO_KEYS"
     fi
 fi
-rm -f "$keys" "$EXT/authorized_keys"
+rm -f "$keys" "$EXT/authorized_keys" "$OLD_EXT/authorized_keys"
 
 rm -rf "$S" "$BACKUPS"
 

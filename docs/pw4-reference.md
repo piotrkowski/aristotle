@@ -17,7 +17,7 @@ Each fact is marked by its source:
 | SoC | NXP i.MX6 SoloLite-Lite (imx6sll), one Cortex-A9 core with NEON and VFPv3, PL310 L2 cache [fw] |
 | RAM | 512 MB. The DT `memory` node says 2 GB at `0x80000000`, and the bootloader fixes it up [fw] |
 | Firmware | 5.13.6 (373198 038), jailbroken, with KUAL, MRPI and KOReader [dev]. `/etc/prettyversion.txt` starts with `Kindle 5.13.6` [dev] |
-| Identification | `/proc/usid` holds the serial number. Unless it starts with `B` or `9`, characters 4–6 are the device code, `0PP` on ours [dev]. KOReader lists 21 PW4 codes [ko], which `devloop/kindle/aristotle-usbnet/guard.sh` checks along with the firmware |
+| Identification | `/proc/usid` holds the serial number. Unless it starts with `B` or `9`, characters 4–6 are the device code, `0PP` on ours [dev]. KOReader lists 21 PW4 codes [ko], which `device/extension/guard.sh` checks along with the firmware |
 | Kernel | `Linux 4.1.15-lab126 #1 SMP PREEMPT Thu Apr 8 09:28:53 UTC 2021`, gcc 4.9.1, `HZ=100` [fw][dev] |
 
 ## Boot chain
@@ -169,7 +169,7 @@ Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the devi
 
 KOReader's `koreader.sh` either runs `stop lab126_gui` and restarts it on exit, or disables Pillow (`lipc-set-prop com.lab126.pillow disableEnablePillow disable`) and sends `SIGSTOP` to `awesome`. It also stops several cloud jobs to free RAM [ko].
 
-The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `devloop/kindle/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
+The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `device/app/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
 
 - `stop lab126_gui` takes down the framework (`cvm`), Pillow and the keyboard. The script also stops 12 cloud and telemetry jobs (`stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd`). Available RAM goes from 236 MB to 392 MB.
 - `x` (Xorg, awesome, `lxinit`, `blanket`, about 22 MB) keeps running, because its job stops only on `stopping dbus or stop_x`. Judging by its command line, `blanket` draws the screensaver when `powerd` suspends, so `x` stays until we own power management. This is not tested.

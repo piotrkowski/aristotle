@@ -4,7 +4,7 @@
 # Replug the cable (or reboot) to get USB drive mode back.
 set -u
 
-BASE=/mnt/us/extensions/aristotle-usbnet
+BASE=/mnt/us/extensions/aristotle
 PIDFILE=/var/run/aristotle-dropbear.pid
 
 exec >> "$BASE/usbnet.log" 2>&1

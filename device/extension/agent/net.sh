@@ -20,7 +20,7 @@
 #   net.sh status         mode, what the hosts resolved to, the chains with
 #                         their packet counters
 #
-# Pure pieces, also run by the host-side test (devloop/kindle/tests/net.sh):
+# Pure pieces, also run by the host-side test (device/tests/net.sh):
 #
 #   net.sh parse          net-allow on stdin -> "HOST PORT PROTO" lines
 #   net.sh resolve        "HOST PORT PROTO" lines on stdin -> "allow IP PORT

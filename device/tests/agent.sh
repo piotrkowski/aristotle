@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Host-side test of the device scripts: the device guard
-# (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and takeover.sh,
+# (device/extension/guard.sh) in install.sh, bin/start.sh and takeover.sh,
 # uninstall.sh, the kill switch in boot.sh, and the takeover flag.
 #
-#   sh devloop/kindle/tests/agent.sh
+#   sh device/tests/agent.sh
 #
 # Each case builds a fake device root in a fresh directory under $TMPDIR: the
 # KUAL extension copied to mnt/us/extensions/ as install-extensions.sh does,
@@ -14,7 +14,7 @@
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-KINDLE=$(cd "$HERE/.." && pwd)
+DEVICE=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aristotle-agent-test.XXXXXX")
 failures=0
 
@@ -103,9 +103,9 @@ device() {
     [ -n "$2" ] && printf '%s\n' "$2" > "$r/proc/usid"
     [ -n "$3" ] && printf 'Kindle %s (~~otaVersion~~)\n\n\n\n' "$3" > "$r/etc/prettyversion.txt"
     printf '10.00 5.00\n' > "$r/proc/uptime"
-    cp -R "$KINDLE/aristotle-usbnet" "$r/mnt/us/extensions/"
-    cp "$KINDLE/takeover.sh" "$r/mnt/us/extensions/aristotle-usbnet/"
-    printf 'ssh-ed25519 AAAA test\n' > "$r/mnt/us/extensions/aristotle-usbnet/authorized_keys"
+    cp -R "$DEVICE/extension" "$r/mnt/us/extensions/aristotle"
+    cp "$DEVICE/app/takeover.sh" "$r/mnt/us/extensions/aristotle/"
+    printf 'ssh-ed25519 AAAA test\n' > "$r/mnt/us/extensions/aristotle/authorized_keys"
     cat > "$r/mnt/us/koreader/dropbear" << 'EOF'
 #!/bin/sh
 echo "dropbear $*" >> "$AGENT_TEST_ROOT/calls"
@@ -123,7 +123,7 @@ run() {
     s=$2
     shift 2
     AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" \
-        sh "$r/mnt/us/extensions/aristotle-usbnet/$s" "$@" > "$r.out" 2>&1
+        sh "$r/mnt/us/extensions/aristotle/$s" "$@" > "$r.out" 2>&1
 }
 
 running() {
@@ -171,18 +171,25 @@ echo "guard: bin/start.sh on a PW4 with 5.16.2"
 r=$(device start "$PW4_SN" 5.16.2)
 run "$r" bin/start.sh
 check "exit status 1" "[ $? = 1 ]"
-check "says why in its log" "grep -q 'firmware 5.16.2' $r/mnt/us/extensions/aristotle-usbnet/usbnet.log"
+check "says why in its log" "grep -q 'firmware 5.16.2' $r/mnt/us/extensions/aristotle/usbnet.log"
 check "no module, firewall or dropbear" "! grep -q -e '^modprobe' -e '^rmmod' -e '^iptables' -e '^dropbear' $r/calls"
 echo "guard: takeover.sh start on a PW5"
 refused takeover "$PW5_SN" 5.13.6 "takeover.sh start" "not a Kindle Paperwhite 4"
 check "stock GUI not stopped" "! called $r 'stop lab126_gui'"
 echo "guard: takeover.sh on stdin finds the installed extension's guard"
 r=$(device stdin "$PW5_SN" 5.13.6)
-AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh -s start < "$KINDLE/takeover.sh" > "$r.out" 2>&1
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh -s start < "$DEVICE/app/takeover.sh" > "$r.out" 2>&1
 check "exit status 1" "[ $? = 1 ]"
 check "stock GUI not stopped" "! called $r 'stop lab126_gui'"
 run "$r" takeover.sh stop
 check "stop always runs" "[ $? = 0 ] && called $r 'start lab126_gui'"
+echo "guard: takeover.sh in the repository finds ../extension/guard.sh"
+r=$(device repo "$PW5_SN" 5.13.6)
+rm "$r/mnt/us/extensions/aristotle/guard.sh"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh "$DEVICE/app/takeover.sh" start > "$r.out" 2>&1
+check "exit status 1" "[ $? = 1 ]"
+check "says why" "grep -q 'not a Kindle Paperwhite 4' $r.out"
+check "stock GUI not stopped" "! called $r 'stop lab126_gui'"
 echo "guard: ARISTOTLE_FORCE=1 overrides"
 r=$(device force "$PW5_SN" 5.16.2)
 ARISTOTLE_FORCE=1 run "$r" agent/install.sh
@@ -214,6 +221,9 @@ installed() {
 echo "uninstall removes everything"
 r=$(installed uninstall)
 dropbear=$(cat "$r/var/run/aristotle-dropbear.pid")
+# The extension under its earlier name, as an older install left it.
+mkdir -p "$r/mnt/us/extensions/aristotle-usbnet"
+printf 'ssh-ed25519 AAAA test\n' > "$r/mnt/us/extensions/aristotle-usbnet/authorized_keys"
 run "$r" agent/uninstall.sh
 check "exit status 0" "[ $? = 0 ]"
 check "job file removed" "[ ! -e $r/etc/upstart/aristotle-agent.conf ] && [ \"\$(grep '^mntroot' $r/calls | tail -n 2 | tr '\n' ' ')\" = 'mntroot rw mntroot ro ' ]"
@@ -223,7 +233,8 @@ check "state directory removed, key included" "[ ! -e $r/var/local/aristotle ]"
 check "migration backups removed" "[ ! -e $r/var/local/aristotle-migrate ]"
 check "log saved to the USB drive" "grep -q 'agent: boot' $r/mnt/us/aristotle-agent.log && grep -q 'older lines' $r/mnt/us/aristotle-agent.log && grep -q migrated $r/mnt/us/aristotle-agent.log"
 check "agent key gone from KOReader, the owner's kept" "[ \"\$(cat $r/mnt/us/koreader/settings/SSH/authorized_keys)\" = 'ssh-ed25519 OWNER own' ]"
-check "extension key removed" "[ ! -e $r/mnt/us/extensions/aristotle-usbnet/authorized_keys ]"
+check "extension key removed" "[ ! -e $r/mnt/us/extensions/aristotle/authorized_keys ]"
+check "earlier extension's key removed" "[ ! -e $r/mnt/us/extensions/aristotle-usbnet/authorized_keys ]"
 check "dropbear stopped" "! kill -0 $dropbear 2> /dev/null && [ ! -e $r/var/run/aristotle-dropbear.pid ]"
 check "USB back to volumd" "called $r 'lipc-set-prop com.lab126.volumd useUsbForNetwork 0' && called $r 'rmmod g_ether'"
 check "usb0 firewall holes closed" "called $r 'iptables -D INPUT -i usb0 -j ACCEPT' && called $r 'iptables -D OUTPUT -o usb0 -j ACCEPT'"

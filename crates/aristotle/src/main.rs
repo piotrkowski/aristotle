@@ -42,7 +42,7 @@
 //!                   to OUT (host; see preview.rs)
 //! ```
 //!
-//! Run it with the stock GUI stopped: `devloop/kindle/run-aristotle.sh`.
+//! Run it with the stock GUI stopped: `device/app/run-aristotle.sh`.
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
