@@ -5,6 +5,11 @@ Small fixes can go straight to a pull request. For anything larger, open an
 approach. Before you touch the display or input code, read
 [`AGENTS.md`](../AGENTS.md).
 
+The [documentation index](../docs/README.md) separates user guides from
+implementation references. Keep behavior and limitations consistent across
+both. For bug reports, include the details in
+[Report a bug](../docs/troubleshooting.md#report-a-bug).
+
 The [glossary](../docs/glossary.md) explains device and book-format terms.
 
 ## Workspace
@@ -71,12 +76,12 @@ static binary for
 C library linked in. `tools/package.sh` defines what goes
 on the Kindle's USB drive: `aristotle/` (the app bundle with its licences and
 `SOURCE.txt`) and `extensions/aristotle/` (the [KUAL](../docs/glossary.md#kual) launcher extension). Unzip the zip
-to the root of the drive, as users do, or, with the Kindle mounted, run
-`tools/host/install-extensions.sh`, which copies the same tree plus the
-read-only probe and your dev-loop SSH key and ejects the Kindle. For SSH over
-USB, run `tools/host/setup-host-net.sh` once on the computer, then choose
-*KUAL › Aristotle › Install agent*. See the [device guide](../device/README.md)
-for details.
+to the root of the drive, as users do. For development access, follow
+[Host setup](../device/README.md#host-setup) for the dedicated key,
+NetworkManager profile, and SSH connection. After creating the key, you can
+also use `tools/host/install-extensions.sh` with the Kindle mounted. It
+copies the same tree plus the read-only probe and your dev-loop public key,
+then ejects the Kindle.
 
 ## Trying changes
 

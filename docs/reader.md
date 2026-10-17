@@ -4,6 +4,8 @@
 
 `crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens EPUB, DRM-free [MOBI](glossary.md#mobi) 7, PDF, and TXT. Measurements are from the host unless marked otherwise. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
 
+For daily use, start with [Your first book](first-book.md). See [Format support](formats.md) for the default bundle's capabilities and [Back up and update](maintenance.md) for state and cache handling.
+
 <p align="center">
   <img src="images/gallery/reading-light.png#gh-light-mode-only" alt="A page of Chase's English translation of the Nicomachean Ethics, and the opening of Book I in Bywater's Greek">
   <img src="images/gallery/reading-dark.png#gh-dark-mode-only" alt="The same English and Greek pages in night mode">
@@ -111,7 +113,7 @@ ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh
 
 The bundle lives in `/mnt/us/aristotle/`, while `/var/tmp` is a 64 MB tmpfs cleared on reboot.[^1] The launcher stops the stock GUI, then restores it on exit with 30 to 60 seconds of boot splash.[^1] It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
 
-Hold the *Library* title for one second to quit, or run `killall aristotle`. Logs go to `/var/tmp/aristotle.log`. The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
+Hold the **Library** title for one second to quit, or run `killall aristotle`. This SSH launch logs to `/var/tmp/aristotle.log`. KUAL and boot launches use different paths ([Log locations](troubleshooting.md#find-the-right-log)). The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
 
 ## Typesetting
 
@@ -170,7 +172,7 @@ For books declaring several languages, `lang.rs` samples 192 KiB of text and com
 
 ## Formats and positions
 
-`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles [PalmDOC](glossary.md#palmdoc), UTF-8, CP1252, images, page breaks, and `filepos` links. [HUFF/CDIC](glossary.md#huffcdic) and [KF8](glossary.md#kf8)-only files fall back to MuPDF. `--no-convert` forces MuPDF. Encrypted books are not readable.
+`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles [PalmDOC](glossary.md#palmdoc) compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but [HUFF/CDIC](glossary.md#huffcdic) is unsupported by both engines and [KF8](glossary.md#kf8)-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for extension-dependent routing.
 
 Plato locations are byte offsets in book text. MuPDF locations are page indices. Saved EPUB positions use a spine item and offset. Converted MOBI uses Kindle byte positions and a `.posmap` beside the cached EPUB. `PosMap::position_at_or_after` saves page starts without rounding back a page.
 
@@ -264,13 +266,15 @@ Transient selection feedback uses A2. Completed popups with grays use a full-scr
 ### Dictionary
 
 <p align="center">
-  <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek–English dictionary, and science in an English–Polish dictionary">
+  <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek-English dictionary, and science in an English-Polish dictionary">
   <img src="images/gallery/dictionary-dark.png#gh-dark-mode-only" alt="The same dictionary popups in night mode">
 </p>
 
 StarDict dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict`, or `--dict DIR`. File names such as `grc-pl.ifo` identify language pairs.
 
-`dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries; other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
+See [Install offline dictionaries](dictionaries.md) for the required file set, folder layout, and a first lookup.
+
+`dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries, Cyrillic text selects Russian, and other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
 
 Lookups try listed forms, related headwords, guessed suffix rules, and nearby entries. Guesses are labeled. *Translate* looks up each selected word. Popups show senses first and expand with *More*.
 
@@ -294,7 +298,7 @@ Device index builds reached 66 MB.[^1] Build large indexes on the host with `ari
 
 Annotations in `library.json` have source `aristotle`. They store positions that survive font-size changes, plus chapter and time.
 
-New highlights append to [`My Clippings.txt`](glossary.md#my-clippingstxt) in `/mnt/us/documents/` in the stock `en_GB` format. The *Save highlights to My Clippings.txt* setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. Deleting a highlight does not remove its clippings entry.
+New highlights append to [`My Clippings.txt`](glossary.md#my-clippingstxt) in `/mnt/us/documents/` in the stock `en_GB` format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` export Aristotle highlights and attached notes, not bookmarks or imported highlights. Deleting a highlight does not remove its clippings entry. Removing the last Aristotle highlight leaves an existing Markdown file unchanged.
 
 Tests and scenarios must use `--test-clippings PATH`, never the user's clippings file. The app has no keyboard for adding annotation notes.
 
@@ -331,7 +335,7 @@ The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR
 
 ## Timing log
 
-The app writes `[perf <ms since start>]` lines to stderr. The launcher sends them to `/var/tmp/aristotle.log`.
+The app writes `[perf <ms since start>]` lines to stderr. Direct `run-aristotle.sh` launches use `/var/tmp/aristotle.log` by default. KUAL uses `/mnt/us/.aristotle/app.log`, and boot startup uses `/var/local/aristotle/app.log`. See [Log locations](troubleshooting.md#find-the-right-log) for launcher and agent logs.
 
 | Prefix | Measures |
 | --- | --- |

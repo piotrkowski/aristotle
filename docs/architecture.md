@@ -53,7 +53,7 @@ The release profile uses `opt-level = "s"`, LTO, one codegen unit, stripped symb
 
 ### Processes
 
-The bundle lives in `/mnt/us/aristotle/`. `run-aristotle.sh` stops the stock graphical interface through [`takeover.sh`](glossary.md#takeover), runs the app, and restores the interface on exit. Logs go to `/var/tmp/aristotle.log`.
+The bundle lives in `/mnt/us/aristotle/`. `run-aristotle.sh` stops the stock graphical interface through [`takeover.sh`](glossary.md#takeover), runs the app, and restores the interface on exit. Direct SSH launches log to `/var/tmp/aristotle.log`; KUAL launches use `/mnt/us/.aristotle/app.log`. The boot copy logs to `/var/local/aristotle/app.log` ([Log locations](troubleshooting.md#find-the-right-log)).
 
 The optional agent provides USB networking, [drive mode](glossary.md#drive-mode), and boot startup. See the [device guide](../device/README.md) for its files and jobs, or [Installing Aristotle](install.md) for setup.
 
