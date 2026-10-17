@@ -2,13 +2,13 @@
 //! The network settings on disk, and reading them from files the reader
 //! writes by hand.
 //!
-//! Everything lives in one file, `accounts.json` in the app's state folder,
-//! created owner-only (mode 0600). On the device that folder is on the FAT
-//! userstore, which has no permissions, so anyone holding the device over
-//! USB can read it; that is why the sync password is never stored, only
-//! its MD5 key (which still works as a password for that one server).
-//! Catalog passwords are stored as given, because Basic and Digest need
-//! them.
+//! Everything lives in one file, `accounts.json`, owner-only (mode 0600) in
+//! a folder only the app's user owns and may write ([`private_dir`]): on
+//! the device `/var/local/aristotle`, root's, on the ext3 partition, never
+//! the FAT userstore, which has no permissions and is readable by anyone
+//! with a USB cable. The sync password is not stored, only its MD5 key
+//! (which still works as a password for that one server). Catalog
+//! passwords are stored as given, because Basic and Digest need them.
 //!
 //! Until the on-screen keyboard lands, settings come from two files next to
 //! the app, `sync.json` and `catalogs.json` (formats in `docs/library.md`).
@@ -166,6 +166,35 @@ struct CatalogsFile {
     catalogs: Vec<CatalogSettings>,
 }
 
+/// Make sure `dir` can hold secrets: create it (mode 0700) if missing, and
+/// refuse it unless it is a real directory (not a symlink) owned by this
+/// process's user and not writable by anyone else.
+pub fn private_dir(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    if !dir.exists() {
+        fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
+    }
+    let m = fs::symlink_metadata(dir)?;
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let me = unsafe { libc::geteuid() };
+    let bad = |why: &str| {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{}: {why}; not storing passwords there", dir.display()),
+        ))
+    };
+    if !m.file_type().is_dir() {
+        return bad("not a directory");
+    }
+    if m.uid() != me {
+        return bad("owned by another user");
+    }
+    if m.mode() & 0o022 != 0 {
+        return bad("writable by other users");
+    }
+    Ok(())
+}
+
 /// Write `data` to `path` owner-only, through a synced temporary file.
 pub fn write_private(path: &Path, data: &[u8]) -> io::Result<()> {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -201,8 +230,9 @@ impl Accounts {
             .unwrap_or_default()
     }
 
+    /// Save into `dir`, which [`private_dir`] must accept.
     pub fn save(&self, dir: &Path) -> io::Result<()> {
-        fs::create_dir_all(dir)?;
+        private_dir(dir)?;
         let data = serde_json::to_vec_pretty(self).map_err(io::Error::other)?;
         write_private(&dir.join(FILE), &data)
     }
@@ -517,6 +547,34 @@ mod tests {
                 "m.gutenberg.org:443 opds"
             ]
         );
+    }
+
+    #[test]
+    fn secrets_go_only_to_a_private_folder() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = testdir("private");
+        // Created owner-only when missing.
+        let dir = base.join("var-local-aristotle");
+        private_dir(&dir).unwrap();
+        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        let a = Accounts {
+            device_id: "X".into(),
+            ..Accounts::default()
+        };
+        a.save(&dir).unwrap();
+        // A folder others may write (as FAT shows itself, 0777) is refused,
+        // and nothing is written into it.
+        let open = base.join("userstore");
+        fs::create_dir_all(&open).unwrap();
+        fs::set_permissions(&open, fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(
+            a.save(&open).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        assert!(!open.join(FILE).exists());
+        // So is a symlink to a good folder.
+        std::os::unix::fs::symlink(&dir, base.join("link")).unwrap();
+        assert!(private_dir(&base.join("link")).is_err());
     }
 
     #[test]

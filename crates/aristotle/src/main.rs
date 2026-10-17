@@ -431,7 +431,7 @@ fn build_app(
         speed: Speed::load(&args.library),
         exports: export_paths(args),
         net: net::Net::new(net::Paths {
-            state: args.library.clone(),
+            state: net::accounts_dir(),
             import: args.bundle.clone(),
         }),
         sync: sync::SyncState::default(),

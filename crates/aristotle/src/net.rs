@@ -3,9 +3,11 @@
 //! threads for requests, the device's allowlist, typed text, and errors in
 //! the reader's language.
 //!
-//! - Settings live in `<library>/accounts.json` (`aristotle_net::store`).
-//!   `sync.json` and `catalogs.json` next to the binary are read at start
-//!   and on request, until the on-screen keyboard can type them.
+//! - Settings, passwords included, live in `/var/local/aristotle/accounts.json`
+//!   (root's folder on the ext3 partition, never the FAT userstore;
+//!   `aristotle_net::store`). `sync.json` and `catalogs.json` next to the
+//!   binary are read at start and on request, until the on-screen keyboard
+//!   can type them, and lose their passwords once read.
 //! - Every request runs on a thread of its own and reports a [`Done`]
 //!   through a channel the main loop polls ([`Net::poll`]); the UI never
 //!   waits for the network.
@@ -65,9 +67,17 @@ pub enum Done {
     },
 }
 
+/// Where `accounts.json` goes: `/var/local/aristotle`, the agent's folder,
+/// or `$ARISTOTLE_ACCOUNTS_DIR` (development). It must be a folder only
+/// this user owns and writes (`aristotle_net::store::private_dir`).
+pub fn accounts_dir() -> PathBuf {
+    std::env::var_os("ARISTOTLE_ACCOUNTS_DIR")
+        .map_or_else(|| PathBuf::from(system::AGENT_DIR), PathBuf::from)
+}
+
 /// Where the network features keep and find things.
 pub struct Paths {
-    /// The app's state folder (`--library`): `accounts.json`.
+    /// The private folder for `accounts.json` ([`accounts_dir`]).
     pub state: PathBuf,
     /// Where `sync.json` and `catalogs.json` are read from.
     pub import: PathBuf,
@@ -85,7 +95,15 @@ impl Net {
     /// The settings, with any changed import file read in.
     pub fn new(paths: Paths) -> Net {
         let (tx, rx) = mpsc::channel();
-        let accounts = Accounts::load(&paths.state);
+        // A folder that could leak passwords is not read either: settings
+        // then last for this run only, and saving reports why.
+        let accounts = match aristotle_net::store::private_dir(&paths.state) {
+            Ok(()) => Accounts::load(&paths.state),
+            Err(e) => {
+                eprintln!("aristotle: {e}");
+                Accounts::default()
+            }
+        };
         let mut net = Net {
             paths,
             accounts,
