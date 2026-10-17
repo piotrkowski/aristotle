@@ -15,10 +15,12 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
-# The root workspace only: the pure-Rust crates, which build and test on any
-# host. The native workspace (crates/aristotle-render and the reader app) needs
-# the C libraries from tools/build-plato.sh and is checked locally; see
-# .github/CONTRIBUTING.md.
+# The workspace's default members: the pure-Rust crates, which build and test
+# on any host. The two members that link Plato (crates/aristotle-render and the
+# reader app) need the C libraries from tools/build-plato.sh and are checked
+# locally; see .github/CONTRIBUTING.md. Cargo still reads plato-core's manifest
+# from the submodule, hence the recursive checkout. `cargo fmt` without --all
+# checks every member, the native ones included, but not Plato's crates.
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -26,9 +28,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: recursive
       - run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo fmt --all --check
+      - run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - run: cargo test --all-features --locked
       - name: Shell scripts parse

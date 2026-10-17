@@ -13,15 +13,14 @@ This is the target structure of Aristotle and the plan for getting there. Parts 
 ## Repository
 
 ```
-Cargo.toml          root workspace: the pure-Rust crates and xtask; `cargo test` works on a fresh clone
+Cargo.toml          the workspace: every crate and xtask; the default members leave out the two that link C
 .cargo/config.toml  the `cargo xtask` alias and the armv7 musl target settings
 crates/             every Rust crate, flat; the directory name is the package name
-native/             second workspace: the C-linked crates, Plato's patches, the C cross-build
 xtask/              build, check, run, screenshot, scenario and release commands, in Rust
 device/             what runs on the Kindle, as busybox shell: KUAL extensions, the upstart agent, launch scripts
-tools/              host-side tools that aren't Rust: emulator setup, firmware unpacking, ssh_config
+tools/              host-side tools that aren't Rust: the C cross-build, emulator setup, firmware unpacking, ssh_config
 docs/               developer documents; docs/guide/ is the user guide
-third_party/plato   upstream Plato (git submodule), read-only reference
+third_party/plato   our Plato fork (git submodule, branch aristotle): upstream plus one commit per change
 ```
 
 ```
@@ -38,24 +37,21 @@ crates/
   aristotle-testkit   test-only (publish = false): sample books, libraries and dictionaries, headless device, image comparison
   aristotle-render    [native] Engine, Layout and Converter traits over Plato and MuPDF; the render CLI
   aristotle           [native] the app: event loop, navigation, controllers, jobs, snapshots, settings, dashboards
-native/
-  Cargo.toml          virtual manifest: members ../crates/aristotle-render and ../crates/aristotle; size profile
-  patches/            plato-*.patch and mupdf-*.patch, applied in order
-  build.sh            cross-builds MuPDF and the other C libraries; called by xtask
-  plato/              the patched Plato source, generated, gitignored
 device/
   kual/aristotle/     KUAL extension: start Aristotle, USB network on and off
   kual/probe/         KUAL extension: the read-only device probe
   agent/              the upstart job and aristotlectl, installed with an automatic rollback
   bin/                run-aristotle.sh, takeover.sh
 tools/
+  build-plato.sh      cross-builds MuPDF and the other C libraries; called by xtask
+  mupdf-patches/      our MuPDF patches, applied by build-plato.sh
   emulator/           the PW4 QEMU setup and its patch
   re/                 fetch-tools.sh (Ghidra, JADX), firmware unpackers in Python
 ```
 
-**Two workspaces, on purpose.** Cargo reads every member's path dependencies, so one workspace would fail on a fresh clone without the generated Plato source, and its tests would need the C libraries. The root workspace stays pure Rust; `native/` holds the two crates that link C, with its own lock file and the size profile (`opt-level = 3` for the layout crates). `cargo xtask check` runs fmt, clippy and the tests in both and checks that shared dependencies agree.
+**One workspace, two kinds of members.** Every crate is a member, with one lock file and one release profile (`opt-level = "s"`, 3 for the layout crates). The two crates that link C, `aristotle-render` and the app, are left out of `default-members`, so a plain `cargo build`, `cargo test` or `cargo clippy` stays pure Rust and works on a fresh `git clone --recursive` without the C libraries; Cargo reads `plato-core`'s manifest from the submodule but builds nothing from it. `cargo xtask check` runs fmt, clippy and the tests on the default members, then on the native ones after the C build.
 
-**xtask, not shell, for host tooling.** Host commands are one Rust binary with std and `xshell` only: `check`, `build [--device]` (runs `native/build.sh` when the C libraries are stale, assembles `data/`), `dist` (the bundle and the size report against the budget), `run PKG[:BIN]` (copy over USB network, run, screenshot), `screenshot`, `scenario NAME`, `preview` (screens and dashboards to PNG, compared with the last accepted images) and `install` (copy `device/` to a mounted userstore). Shell stays where it is the native tongue: the C cross-build, the QEMU setup, and everything under `device/`, which runs on the Kindle's busybox.
+**xtask, not shell, for host tooling.** Host commands are one Rust binary with std and `xshell` only: `check`, `build [--device]` (runs `tools/build-plato.sh` when the C libraries are stale, assembles `data/`), `dist` (the bundle and the size report against the budget), `run PKG[:BIN]` (copy over USB network, run, screenshot), `screenshot`, `scenario NAME`, `preview` (screens and dashboards to PNG, compared with the last accepted images) and `install` (copy `device/` to a mounted userstore). Shell stays where it is the native tongue: the C cross-build, the QEMU setup, and everything under `device/`, which runs on the Kindle's busybox.
 
 **Examples and benches.** `examples/` belong to the crate they demonstrate and double as templates: `aristotle-ui` (a screen, render timing), `aristotle-dash` (a weather and calendar dashboard). There is no `benches/` and no criterion: host timings come from examples and the `perf!` macro; device timings come from `aristotle-devtools` and the scenarios, because only the panel tells the truth.
 
@@ -132,11 +128,11 @@ Leptos and Topcoat render HTML for a browser, and Topcoat's interactivity runs a
 
 ## Migration
 
-The steps land one at a time, each verified the same way: `cargo xtask check` (until it exists, fmt, clippy and the tests in both workspaces by hand), identical preview images unless the step changes visuals on purpose, the device scenarios (same updates, modes and flashes as before, latency within 10 %), the binary size (budget: +50 KB per step) and peak RAM.
+The steps land one at a time, each verified the same way: `cargo xtask check` (until it exists, fmt, clippy and the tests by hand, for the default members and the native ones), identical preview images unless the step changes visuals on purpose, the device scenarios (same updates, modes and flashes as before, latency within 10 %), the binary size (budget: +50 KB per step) and peak RAM.
 
 1. **Merge the feature work in flight**, one branch at a time, then record the baselines.
 2. **Rename** the project from its working name, aristotle, to Aristotle: host scripts and docs, the cache directory, the KUAL extension, and the device agent. The agent's upstart job lives on the root filesystem, so its migration is a script with an automatic rollback, rehearsed in the emulator first.
-3. **Repository**, mechanical moves with no behaviour change: `xtask` with `check`, `run` and `screenshot` first, then the rest of `devloop/host`; `native/` as the second workspace root (its lock file, profile, patches and C build move out of `crates/aristotle-render` and `tools/`); `devloop/` and `probe/` split into `device/` and `tools/`; `aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen` and `aristotle-observe` merged into `aristotle-devtools` (one binary each, the pen record format as a module, the scenarios beside them); `aristotle-reader` renamed `aristotle`; `aristotle-app` deleted, since the reader app runs the same screens on the device.
+3. **Repository**, mechanical moves with no behaviour change: `xtask` with `check`, `run` and `screenshot` first, then the rest of `devloop/host`; `devloop/` and `probe/` split into `device/` and `tools/`; `aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen` and `aristotle-observe` merged into `aristotle-devtools` (one binary each, the pen record format as a module, the scenarios beside them); `aristotle-reader` renamed `aristotle`; `aristotle-app` deleted, since the reader app runs the same screens on the device.
 4. **Structure**, in order: `aristotle-core`; then, in parallel, the hal `Device` trait and `WaveTable`, the i18n crate, `aristotle-dict` (out of the app's `dict` module), `aristotle-testkit`, and inbox folders; then the refresh policy, `aristotle-screens` with typed actions and translated strings (out of `aristotle-ui`, with the preview binary), the app shell with the `Screen` trait, the settings registry, and finally the render traits.
 5. **Frontends:** `aristotle-dash` and its host preview; the dashboards app with folder delivery; RTC sleep; Wi-Fi and HTTP fetch; external apps. `aristotle-sdk` follows once the `Screen` trait has gone a release without changes.
 
