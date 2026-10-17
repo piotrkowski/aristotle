@@ -1,25 +1,31 @@
-//! Desktop preview: renders the prototype screens to PNG.
+//! Desktop preview: renders every screen to PNG, in day and night mode.
 //!
-//! Every screen goes through the same `Ui` the device will run, including
+//! Every screen goes through the same `Ui` the device runs, including
 //! simulated touches, so the damage overlays show the real update
 //! rectangles and waveforms. Images are quantized to the 16 gray levels the
-//! panel can show.
+//! panel can show. Night images are `Ui::set_night`, the same inversion the
+//! device applies.
 //!
-//! Usage: `aristotle-ui-preview [OUT_DIR]`, default `~/.cache/aristotle/ui-preview`.
+//! Usage: `aristotle-ui-preview [OUT_DIR]`, default `~/.cache/aristotle/ui-preview/v2`.
 
 use aristotle_ui::canvas::{Canvas, Painter};
 use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};
+use aristotle_ui::icons::{self, Icon};
 use aristotle_ui::input::{Phase, TouchEvent};
-use aristotle_ui::screens::library::{self, Library};
+use aristotle_ui::screens::library::{
+    self, sample_items, CoverMode, Filter, Item, Library, Place, Shelf, StatusLine, View,
+};
 use aristotle_ui::screens::reader::{self, Reader, Settings, Zone};
+use aristotle_ui::screens::settings::{self as settings_screen, BatteryInfo, SystemView, Usb};
+use aristotle_ui::screens::sleep;
 use aristotle_ui::text::{
     layout_paragraph, Align, FamilyId, Fonts, NoHyphenation, Paragraph, ParagraphLayout,
     TextEngine, TextStyle,
 };
 use aristotle_ui::theme::Styles;
-use aristotle_ui::tree::Hit;
+use aristotle_ui::tree::{Hit, Node, Tree};
 use aristotle_ui::ui::{Damage, Ui, UiEvent};
-use aristotle_ui::widgets::dashed_rect;
+use aristotle_ui::widgets::{dashed_rect, Cover, CoverMark};
 use std::path::{Path, PathBuf};
 
 const W: u32 = SCREEN_WIDTH as u32;
@@ -36,6 +42,25 @@ fn save(c: &Canvas, path: &Path) {
         .and_then(|mut w| w.write_image_data(&q.packed()))
         .expect("png encoding");
     println!("wrote {}", path.display());
+}
+
+/// The screen as it is, then the same screen in night mode.
+fn day_night(ui: &mut Ui, out: &Path, name: &str) {
+    ui.render();
+    save(ui.screen(), &out.join(format!("{name}.png")));
+    ui.set_night(true);
+    ui.render();
+    save(ui.screen(), &out.join(format!("{name}-night.png")));
+    ui.set_night(false);
+    ui.render();
+}
+
+fn invert(c: &Canvas) -> Canvas {
+    let mut n = c.clone();
+    for p in n.pixels.iter_mut() {
+        *p = 255 - *p;
+    }
+    n
 }
 
 fn load_gray(path: &Path) -> Option<Canvas> {
@@ -153,21 +178,47 @@ fn engine(fonts_dir: &Path) -> (TextEngine, [FamilyId; 3]) {
     (TextEngine::new(fonts), [lit, charis, gentium])
 }
 
-fn library_screens(out: &Path, fonts_dir: &Path) {
-    let (mut text, _) = engine(fonts_dir);
+const STATUS: StatusLine<'static> = StatusLine {
+    clock: "21:38",
+    battery: Some(0.82),
+    charging: false,
+};
+
+/// A library screen in a fresh `Ui`, laid out and synced.
+fn shelf_ui(shelf: &Shelf) -> (Ui, Library) {
+    let mut text = TextEngine::new(Fonts::embedded());
     let styles = Styles::new(FamilyId(0));
-    let books = library::sample_books();
-    let (tree, mut lib) = Library::build(&mut text, &styles, &books, library::Filter::All);
+    let (tree, lib) = Library::build_shelf(&mut text, &styles, shelf);
     let mut ui = Ui::new(tree, text, W, H);
     ui.layout();
     lib.sync(&mut ui.tree);
+    (ui, lib)
+}
+
+fn library_screens(out: &Path) {
+    let books = library::sample_books();
+    let hero = &books[0];
+    let rest = &books[1..];
+    let home = |view, filter, covers, items: &[Item]| -> (Ui, Library) {
+        shelf_ui(&Shelf {
+            place: Place::Home { view, filter },
+            hero: Some(hero),
+            items,
+            sort: "Ostatnie",
+            status: STATUS,
+            covers,
+        })
+    };
+
+    let all = sample_items(rest, View::Books);
+    let (mut ui, mut lib) = home(View::Books, Filter::All, CoverMode::None, &all);
     {
         let d = ui.render();
         log("library: first frame", &ui, &d)
     };
-    save(ui.screen(), &out.join("library.png"));
+    day_night(&mut ui, out, "library");
 
-    // Finger down on the second shelf row: an instant A2 outline.
+    // Finger down on the second row: an instant A2 outline.
     let c = ui.tree.rect(lib.rows[1]).center();
     touch(&mut ui, Phase::Down, c.x, c.y, 0);
     let d = ui.render();
@@ -179,15 +230,11 @@ fn library_screens(out: &Path, fonts_dir: &Path) {
         "Touch-down on a row: only the outline goes out, with A2",
     );
     save(&o, &out.join("library-pressed-damage.png"));
-    // Slide away: the press is cancelled and the row restored.
     touch(&mut ui, Phase::Move, c.x + 200, c.y, 40);
     touch(&mut ui, Phase::Up, c.x + 200, c.y, 80);
-    {
-        let d = ui.render();
-        log("library: press cancelled", &ui, &d)
-    };
+    ui.render();
 
-    // Next shelf page.
+    // Next page of the list.
     let next = ui.tree.rect(lib.next).center();
     for ev in tap(&mut ui, next, 1000) {
         if let UiEvent::Action { id, .. } = ev {
@@ -197,21 +244,82 @@ fn library_screens(out: &Path, fonts_dir: &Path) {
     ui.layout();
     lib.sync(&mut ui.tree);
     let d = ui.render();
-    log("library: shelf page 2", &ui, &d);
-    save(ui.screen(), &out.join("library-page2.png"));
-    let o = damage_overlay(&mut ui, &d, "Shelf page turn: the list and the pager only");
+    log("library: page 2", &ui, &d);
+    day_night(&mut ui, out, "library-page2");
+    let o = damage_overlay(&mut ui, &d, "List page turn: the list and the pager only");
     save(&o, &out.join("library-page2-damage.png"));
 
-    // Side by side with the stock home screen, if its screenshot exists.
-    let home = std::env::var_os("HOME")
+    let (mut ui, _) = home(View::Books, Filter::All, CoverMode::Cards, &all);
+    day_night(&mut ui, out, "library-cards");
+    let (mut ui, _) = home(View::Books, Filter::Reading, CoverMode::None, &all);
+    day_night(&mut ui, out, "library-reading");
+    let (mut ui, _) = home(View::Books, Filter::New, CoverMode::Cards, &all);
+    day_night(&mut ui, out, "library-new-cards");
+    let folders = sample_items(&books, View::Folders);
+    let (mut ui, _) = home(View::Folders, Filter::All, CoverMode::None, &folders);
+    day_night(&mut ui, out, "library-folders");
+    let series = sample_items(&books, View::Series);
+    let (mut ui, _) = home(View::Series, Filter::All, CoverMode::None, &series);
+    day_night(&mut ui, out, "library-series");
+
+    // One folder and one series as their own shelves.
+    let platon: Vec<Item> = books
+        .iter()
+        .filter(|b| b.folder.as_deref() == Some("Platon"))
+        .cloned()
+        .map(Item::Book)
+        .collect();
+    let (mut ui, _) = shelf_ui(&Shelf {
+        place: Place::Folder { name: "Platon" },
+        hero: None,
+        items: &platon,
+        sort: "Tytuł",
+        status: STATUS,
+        covers: CoverMode::Cards,
+    });
+    day_night(&mut ui, out, "folder");
+    let witcher: Vec<Item> = books
+        .iter()
+        .filter(|b| b.series.is_some())
+        .cloned()
+        .map(Item::Book)
+        .collect();
+    let (mut ui, _) = shelf_ui(&Shelf {
+        place: Place::Series { name: "Trylogia" },
+        hero: None,
+        items: &witcher,
+        sort: "Seria",
+        status: STATUS,
+        covers: CoverMode::None,
+    });
+    day_night(&mut ui, out, "series");
+
+    // A library with no books yet.
+    let (mut ui, _) = shelf_ui(&Shelf {
+        place: Place::Home {
+            view: View::Books,
+            filter: Filter::All,
+        },
+        hero: None,
+        items: &[],
+        sort: "Ostatnie",
+        status: STATUS,
+        covers: CoverMode::None,
+    });
+    day_night(&mut ui, out, "library-empty");
+
+    // Side by side with the stock home screen.
+    let home_dir = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
-    let stock = home.join(".cache/aristotle/screens/stock-home.png");
-    if let Some(s) = load_gray(&stock) {
-        let (tree, lib) = Library::build(&mut ui.text, &styles, &books, library::Filter::All);
-        ui.set_tree(tree);
-        ui.layout();
-        lib.sync(&mut ui.tree);
+    let stock = [
+        ".cache/aristotle/screens/stock-home.png",
+        ".cache/aristotle/screens/reader-20261017T094535Z.png",
+    ]
+    .iter()
+    .find_map(|p| load_gray(&home_dir.join(p)));
+    if let Some(s) = stock {
+        let (mut ui, _) = home(View::Books, Filter::All, CoverMode::None, &all);
         ui.render();
         let gap = 40;
         let mut both = Canvas::new(W * 2 + gap, H);
@@ -229,6 +337,201 @@ fn library_screens(out: &Path, fonts_dir: &Path) {
     }
 }
 
+fn settings_screens(out: &Path) {
+    let about = settings_screen::sample_about();
+    let view = SystemView {
+        status: STATUS,
+        light: Some((2, 24)),
+        night: false,
+        covers: CoverMode::None,
+        sleep_minutes: Some(15),
+        battery: Some(BatteryInfo {
+            level: 0.82,
+            charging: false,
+            state: "Rozładowuje się",
+            voltage_mv: 3980,
+            temperature_c: 26,
+        }),
+        storage: Some((4_100_000_000, 6_200_000_000)),
+        date: "sobota, 17 października 2026",
+        time: "21:38",
+        usb: Some(Usb::Network),
+        about: &about,
+    };
+    let mut text = TextEngine::new(Fonts::embedded());
+    let styles = Styles::new(FamilyId(0));
+    let (tree, ids) = settings_screen::Settings::build(&mut text, &styles, &view);
+    let mut ui = Ui::new(tree, text, W, H);
+    ui.layout();
+    ids.sync(&mut ui.tree);
+    day_night(&mut ui, out, "settings");
+    let mut page = 1;
+    loop {
+        let (p, count) = ui.tree.page(ids.list);
+        if p + 1 >= count {
+            break;
+        }
+        ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+        ui.layout();
+        ids.sync(&mut ui.tree);
+        page += 1;
+        let d = ui.render();
+        log(&format!("settings: page {page}"), &ui, &d);
+        day_night(&mut ui, out, &format!("settings-page{page}"));
+    }
+    // Night mode on, as the toggle shows it, and charging in drive mode.
+    let view = SystemView {
+        night: true,
+        light: Some((10, 24)),
+        battery: Some(BatteryInfo {
+            level: 0.47,
+            charging: true,
+            state: "Ładuje się",
+            voltage_mv: 4105,
+            temperature_c: 28,
+        }),
+        status: StatusLine {
+            charging: true,
+            battery: Some(0.47),
+            ..STATUS
+        },
+        usb: Some(Usb::Storage { minutes_left: 9 }),
+        ..view
+    };
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, ids) = settings_screen::Settings::build(&mut text, &styles, &view);
+    let mut ui = Ui::new(tree, text, W, H);
+    ui.layout();
+    ids.sync(&mut ui.tree);
+    ui.set_night(true);
+    ui.render();
+    save(ui.screen(), &out.join("settings-on-night.png"));
+    ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+    ui.layout();
+    ids.sync(&mut ui.tree);
+    ui.render();
+    save(ui.screen(), &out.join("settings-page2-charging-night.png"));
+}
+
+fn sleep_screens(out: &Path) {
+    let books = library::sample_books();
+    let styles = Styles::new(FamilyId(0));
+    let mut ui = Ui::new(
+        sleep::build(&styles, Some(&books[0]), false),
+        TextEngine::new(Fonts::embedded()),
+        W,
+        H,
+    );
+    day_night(&mut ui, out, "screensaver");
+}
+
+/// Every icon at 72, 48 and 32 px with its name.
+fn icons_sheet(out: &Path) {
+    let mut text = TextEngine::new(Fonts::embedded());
+    let mut c = Canvas::new(W, H);
+    let all = Rect::new(0, 0, W as i32, H as i32);
+    let cols = 6;
+    let cell_w = W as i32 / cols;
+    let cell_h = 196;
+    let top = 60;
+    let label = TextStyle::new(FamilyId(0), 24.0).gray(0x44);
+    let head = TextStyle::new(FamilyId(0), 34.0).bold();
+    {
+        let l = set(
+            &mut text,
+            "Aristotle icons · 24-unit grid · 72, 48 and 32 px",
+            head,
+            W as f32,
+        );
+        let mut p = Painter::new(&mut c, all);
+        l.draw(&mut text, &mut p, 40.0, 12.0);
+    }
+    for (i, icon) in Icon::ALL.iter().enumerate() {
+        let (col, row) = (i as i32 % cols, i as i32 / cols);
+        let x = col * cell_w;
+        let y = top + row * cell_h;
+        let mut p = Painter::new(&mut c, all);
+        icons::draw(
+            &mut p,
+            *icon,
+            Rect::new(x + (cell_w - 72) / 2, y + 8, 72, 72),
+            0,
+            0.0,
+        );
+        let base = y + 96;
+        icons::draw(
+            &mut p,
+            *icon,
+            Rect::new(x + cell_w / 2 - 56, base, 48, 48),
+            0,
+            0.0,
+        );
+        icons::draw(
+            &mut p,
+            *icon,
+            Rect::new(x + cell_w / 2 + 16, base + 8, 32, 32),
+            0,
+            0.0,
+        );
+        let l = set(&mut text, icon.name(), label.clone(), cell_w as f32);
+        let lx = x as f32 + (cell_w as f32 - l.width) / 2.0;
+        l.draw(&mut text, &mut p, lx, (base + 54) as f32);
+    }
+    save(&c, &out.join("icons.png"));
+    save(&invert(&c), &out.join("icons-night.png"));
+}
+
+/// The typographic cards: four bindings, a series, and list sizes.
+fn covers_sheet(out: &Path) {
+    let styles = Styles::new(FamilyId(0));
+    let fam = styles.family;
+    let books = library::sample_books();
+    let mut t = Tree::new();
+    let mut large = Vec::new();
+    // Pick one book per binding so the sheet shows all four.
+    let mut seen = Vec::new();
+    for b in &books {
+        let cover = Cover::new(&b.title, &b.author, fam).with_mark(b.mark());
+        let binding = cover.binding();
+        if !seen.contains(&binding) && seen.len() < 4 {
+            seen.push(binding);
+            let n = t.custom(cover);
+            large.push(t.fixed(Some(220), Some(330), Some(n)));
+        }
+    }
+    let large = t.add(Node::row(24), large);
+    let mut series = Vec::new();
+    for b in books.iter().filter(|b| b.series.is_some()) {
+        let n = t.custom(Cover::new(&b.title, &b.author, fam).with_mark(b.mark()));
+        series.push(t.fixed(Some(220), Some(330), Some(n)));
+    }
+    let n = t.custom(
+        Cover::new(
+            "Bardzo długi tytuł, który się nie mieści",
+            "Ktoś Nieznany",
+            fam,
+        )
+        .with_mark(CoverMark::default()),
+    );
+    series.push(t.fixed(Some(220), Some(330), Some(n)));
+    let series = t.add(Node::row(24), series);
+    let mut small = Vec::new();
+    for b in &books {
+        let n = t.custom(Cover::new(&b.title, &b.author, fam).with_mark(b.mark()));
+        small.push(t.fixed(Some(72), Some(106), Some(n)));
+    }
+    let small = t.add(Node::row(16), small);
+    let caption = t.label(
+        "Typographic cards: binding by folder or series, Tom n for series",
+        styles.small(),
+    );
+    let col = t.add(Node::column(40), [caption, large, series, small]);
+    let root = t.pad(aristotle_ui::Insets::all(40), col);
+    t.set_root(root);
+    let mut ui = Ui::new(t, TextEngine::new(Fonts::embedded()), W, H);
+    day_night(&mut ui, out, "covers");
+}
+
 fn reader_screens(out: &Path, fonts_dir: &Path) {
     let (mut text, families) = engine(fonts_dir);
     let styles = Styles::new(FamilyId(0));
@@ -239,7 +542,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
         log("reader: first frame", &ui, &d)
     };
     println!("  chapter set in {} pages", r.page_count());
-    save(ui.screen(), &out.join("reader.png"));
+    day_night(&mut ui, out, "reader");
 
     // Tap zones overlay.
     let mut z = ui.screen().clone();
@@ -280,7 +583,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     let o = damage_overlay(
         &mut ui,
         &d,
-        "Page turn: text and footer with GL16; the running head is not refreshed",
+        "Page turn: text and footer; on the device one full mode-9 update",
     );
     save(&o, &out.join("reader-turn-damage.png"));
 
@@ -294,10 +597,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
             r.handle(&mut ui, ev);
         }
     }
-    {
-        let d = ui.render();
-        log("reader: swipe back", &ui, &d)
-    };
+    ui.render();
 
     // Open the menu from the top band.
     for ev in tap(&mut ui, Point { x: 536, y: 70 }, 3000) {
@@ -305,7 +605,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     }
     let d = ui.render();
     log("reader: open menu", &ui, &d);
-    save(ui.screen(), &out.join("reader-menu.png"));
+    day_night(&mut ui, out, "reader-menu");
     let o = damage_overlay(
         &mut ui,
         &d,
@@ -327,10 +627,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
         save(ui.screen(), &out.join("reader-menu-pressed.png"));
         touch(&mut ui, Phase::Move, c.x, c.y + 300, 4040);
         touch(&mut ui, Phase::Up, c.x, c.y + 300, 4080);
-        {
-            let d = ui.render();
-            log("reader menu: press cancelled", &ui, &d)
-        };
+        ui.render();
     }
 
     // Night mode with the menu toggle, then close the menu.
@@ -340,17 +637,13 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     }
     {
         let d = ui.render();
-        log("reader: night mode", &ui, &d)
+        log("reader: night mode from the menu", &ui, &d)
     };
-    save(ui.screen(), &out.join("reader-menu-night.png"));
+    save(ui.screen(), &out.join("reader-menu-night-on.png"));
     for ev in tap(&mut ui, Point { x: 700, y: 400 }, 6000) {
         r.handle(&mut ui, ev);
     }
-    {
-        let d = ui.render();
-        log("reader: close menu", &ui, &d)
-    };
-    save(ui.screen(), &out.join("reader-night.png"));
+    ui.render();
 
     // Alternative typography: Charis, one size up, loose spacing.
     let (mut text, families) = engine(fonts_dir);
@@ -362,8 +655,7 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     };
     let (tree, _) = Reader::build(&mut text, &styles, families, s);
     let mut ui = Ui::new(tree, text, W, H);
-    ui.render();
-    save(ui.screen(), &out.join("reader-charis.png"));
+    day_night(&mut ui, out, "reader-charis");
 }
 
 fn main() {
@@ -372,10 +664,14 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             let home = std::env::var_os("HOME").expect("HOME is set");
-            PathBuf::from(home).join(".cache/aristotle/ui-preview")
+            PathBuf::from(home).join(".cache/aristotle/ui-preview/v2")
         });
     std::fs::create_dir_all(&out).expect("output directory");
     let fonts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts");
-    library_screens(&out, &fonts_dir);
+    icons_sheet(&out);
+    covers_sheet(&out);
+    library_screens(&out);
+    settings_screens(&out);
+    sleep_screens(&out);
     reader_screens(&out, &fonts_dir);
 }
