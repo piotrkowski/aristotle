@@ -1,0 +1,46 @@
+# Stock reader page turns. Start with a book open in the stock reader.
+# Goes forward and back by the same count so the reading position is kept.
+
+label next-page
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+
+label prev-page
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+
+label open-menu
+tap 536 60
+wait 2500
+
+label close-menu
+tap 536 800
+wait 2500

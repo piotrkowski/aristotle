@@ -24,6 +24,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aristotle-observe"
+version = "0.1.0"
+dependencies = [
+ "aristotle-hal",
+ "libc",
+]
+
+[[package]]
 name = "aristotle-pen"
 version = "0.1.0"
 dependencies = [

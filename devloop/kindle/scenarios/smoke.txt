@@ -1,0 +1,8 @@
+# Smallest observable interaction on the stock Home screen: open the
+# toolbar's overflow menu and close it again.
+label menu
+tap 1015 110
+wait 2500
+label close
+tap 536 1300
+wait 2500

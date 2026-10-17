@@ -1,0 +1,64 @@
+# Stock reader baseline on the PW4. Start on the stock Home screen with
+# "Pan Tadeusz" as the most recent book: the large first cover on the left.
+# Pages go forward and back by the same count, so the owner's reading
+# position ends where it started.
+
+go-home
+label open-book
+tap 220 540
+wait 5000
+snap stock-opened
+
+label next-page
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+tap 950 800
+wait 1500
+
+snap stock-after-next
+label prev-page
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+tap 100 800
+wait 1500
+
+label open-menu
+tap 536 60
+wait 2500
+
+label close-menu
+tap 536 800
+wait 2000
+
+label menu-again
+tap 536 60
+wait 2500
+
+label home
+tap 75 110
+wait 5000
+snap stock-final
