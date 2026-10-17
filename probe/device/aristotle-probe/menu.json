@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "name": "Aristotle",
+      "items": [
+        {
+          "name": "Run read-only probe (about 30 s)",
+          "action": "sh ./bin/probe.sh",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Probe running; result shown at top of screen"
+        }
+      ]
+    }
+  ]
+}
