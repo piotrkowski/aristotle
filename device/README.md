@@ -68,8 +68,10 @@ the boot job; it saves first) and brings back what the takeover stopped. On
 the device [dev, 2026-10-17]: an app started this way kept running after
 the stand-in for KUAL's process group was killed with SIGKILL, and Return
 stopped it (`=== exit 0`) and brought the stock GUI back. Started from
-KUAL's own menu by tapping, it has not been tried yet. From inside
-Aristotle, holding the "Library" title for a second also returns.
+KUAL's own menu by tapping, it has not been tried yet: taps injected with
+`aristotle-observe tap` reached the touchscreen node (`aristotle-observe
+raw` showed them) but KUAL did not react to them. From inside Aristotle,
+holding the "Library" title for a second also returns.
 
 `bin/start.sh` is the dev loop without the agent: it swaps the USB mass
 storage gadget for `g_ether`, gives `usb0` the address `192.168.15.244`, opens
@@ -148,10 +150,13 @@ It logs to `ui.log`, the app to `app.log`. Measured on our PW4 [dev,
 39.6 s, the app started at 39.8 s and submitted the library's first frame
 1.0 s later, so about 41 s from power-on to the library, without Java
 (`framework`, `pillow` and `lab126_gui` stopped, `x` and `powerd` running).
-382 MB of 490 MB were available. In the emulator the crash fallback (three
-failed launches, then stock, and stock again on the next boot) and
-`app stop`/`app start` were also checked; on the device only one boot,
-`app stop` and autostart off were.
+382 MB of 490 MB were available. The crash fallback was checked on the
+device too, with a copy of the app that exits 1: launches 1 to 3 at 39.8,
+42.0 and 44.1 s of uptime, then "3 failed launches in a row" and the stock
+GUI; after the real binary was back and autostart was turned on again, the
+next boot reached the library 41 s after power-on. In the emulator
+`app start` and a boot that stays stock after three failures were also
+checked.
 
 ### Amazon's updates
 
@@ -211,7 +216,11 @@ its job says. With the agent unreachable, put a script there that undoes
 what is needed, for example `sh /mnt/us/extensions/aristotle/agent/uninstall.sh`,
 eject and reboot; delete the script afterwards. It runs only on a boot that
 reaches the stock framework, so with Aristotle at boot it needs the kill
-switch, a fallback or Return first.
+switch, a fallback or Return first. It also needs `/mnt/us` mounted at that
+moment: with the cable in and the agent idle (the kill switch), the Kindle
+showed up on the computer as a USB drive about a minute after the reboot
+[dev], before the framework was ready, so a script dropped there could not
+run while the drive was exported. Unplug the cable before rebooting.
 
 ### Kill switch
 
@@ -221,7 +230,12 @@ boot: no USB network, no SSH, no watchdog, no Wi-Fi policy, and USB stays with
 `volumd`. It is the way out without SSH. While the agent runs, the USB port is
 a network link, so switch to drive mode first (KUAL › Aristotle › USB drive
 mode for 10 minutes, or the app's settings), create the file, eject and
-reboot. Delete the file and reboot to have the agent back.
+reboot. Delete the file and reboot to have the agent back. The file also
+keeps Aristotle at boot from starting (`ui-boot.sh` checks it first; host
+test and emulator). On the device the reboot with the file present came up
+as the stock system in USB drive mode on the computer, as expected with the
+agent idle; the rest of that test (the next boot without the file) was not
+finished.
 
 ### Uninstall
 
@@ -242,8 +256,12 @@ KUAL › Aristotle › Remove agent completely, or `agent/uninstall.sh` over SSH
 - the runtime state: `dropbear`, `usb0` and `g_ether`, the `usb0` firewall
   rules and the Wi-Fi policy chains.
 
-Tested on the host only (`device/tests/agent.sh`); on the device it would
-drop the SSH link it is run over. It appends the logs to `/mnt/us/aristotle-agent.log` first, for diagnosis. It
+Checked on the device [dev, 2026-10-17] by running it, then `install.sh`,
+from a detached script, as KUAL would: everything above was gone, the real
+`otav3` and `otaupd` ran again, the reinstall brought back the three jobs,
+the mode-000 directory, the OTA stubs and SSH within seconds. The first run
+found a bug (the OTA job bound the stubs again when uninstall restarted the
+daemons); the stub file now goes first. It appends the logs to `/mnt/us/aristotle-agent.log` first, for diagnosis. It
 is not guarded, and running it twice is harmless. The app, the extensions and
 `/mnt/us/.aristotle` stay on the USB drive until you delete them.
 

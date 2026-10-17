@@ -61,7 +61,10 @@ if [ -f "$S/net.sh" ]; then
     sh "$S/net.sh" apply
 fi
 # The OTA block: the stubs go, and the daemons that ran (as stubs) run again
-# for real.
+# for real. The stub file goes first: starting a daemon runs the OTA job,
+# still installed at this point, which would bind it again (seen on the
+# device).
+rm -f "$S/ota-stub"
 for b in otaupd otav3; do
     grep -q " $R/usr/bin/$b " "$R/proc/mounts" 2> /dev/null || continue
     was=0
