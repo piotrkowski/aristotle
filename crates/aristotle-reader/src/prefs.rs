@@ -1,6 +1,7 @@
 //! Preferences: the menu's typography steps (mapped onto aristotle-render's
 //! [`Style`]), the page-turn waveform, night mode, library covers and view,
-//! the screensaver delay and the UI language.
+//! the screensaver delay, the UI language and whether highlights go to
+//! `My Clippings.txt`.
 //!
 //! Stored as `reader.json` in the library data directory. They are global,
 //! not per book: a reader sets a comfortable size once. Unknown or missing
@@ -93,6 +94,10 @@ pub struct Prefs {
     pub sort: usize,
     /// The UI language, a locale code of `aristotle-i18n` ("en", "pl").
     pub language: String,
+    /// Append new highlights to the library root's `My Clippings.txt`, as
+    /// the stock reader does. Off, highlights stay in the library index and
+    /// the Markdown notes, and the user's file is never written.
+    pub clippings: bool,
 }
 
 impl Default for Prefs {
@@ -109,6 +114,7 @@ impl Default for Prefs {
             library_view: 0,
             sort: 0,
             language: "en".into(),
+            clippings: true,
         }
     }
 }
@@ -213,6 +219,10 @@ mod tests {
         assert_eq!(p.turn_mode, 9);
         assert!(!p.night);
         assert_eq!(p.covers, Covers::None, "covers are off by default");
+        assert!(
+            p.clippings,
+            "highlights go to My Clippings.txt, as on stock"
+        );
         assert!(offered_sleep(p.sleep()));
     }
 
@@ -251,6 +261,7 @@ mod tests {
             library_view: 1,
             sort: 2,
             language: "pl".into(),
+            clippings: false,
         };
         p.save(&dir).unwrap();
         assert_eq!(Prefs::load(&dir), p);
@@ -279,6 +290,7 @@ mod tests {
         assert!(text.contains(r#""night": true"#), "{text}");
         assert!(text.contains(r#""night_method": "software""#), "{text}");
         assert!(text.contains(r#""covers": "photos""#), "{text}");
+        assert!(text.contains(r#""clippings": true"#), "{text}");
         let q = Prefs::load(&dir);
         assert_eq!(q.sleep(), None, "never is kept");
         assert_eq!(q.covers.mode(), CoverMode::Photos);
@@ -293,6 +305,7 @@ mod tests {
         assert_eq!((old.size, old.turn_mode), (3, 7));
         assert_eq!(old.sleep_minutes, Prefs::default().sleep_minutes);
         assert_eq!(old.night_method, NightMethod::Software);
+        assert!(old.clippings, "a file from before the switch keeps writing");
         // Out-of-range library choices are clamped.
         std::fs::write(dir.join(Prefs::FILE), br#"{"library_view": 9, "sort": 9}"#).unwrap();
         let q = Prefs::load(&dir);

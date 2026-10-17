@@ -12,7 +12,8 @@
 //! - `chapter`, `created` (local time), `text`.
 //!
 //! Every new highlight is appended to `My Clippings.txt` at once (as the
-//! stock reader does) and the book's Markdown file is rewritten
+//! stock reader does, unless the setting "Save highlights to My
+//! Clippings.txt" is off) and the book's Markdown file is rewritten
 //! ([`aristotle_library::export`]).
 
 use std::path::{Path, PathBuf};
@@ -146,6 +147,9 @@ pub fn ours(book: &BookRecord, kind: AnnotationKind) -> Vec<(usize, Position, Po
 pub struct ExportPaths {
     pub clippings: PathBuf,
     pub notes: PathBuf,
+    /// `clippings` is a test file (`--test-clippings`, the preview), not
+    /// the user's: it is written whatever the setting says.
+    pub test: bool,
 }
 
 impl ExportPaths {
@@ -153,16 +157,22 @@ impl ExportPaths {
         ExportPaths {
             clippings: root.join("My Clippings.txt"),
             notes: root.parent().unwrap_or(root).join("aristotle-notes"),
+            test: false,
         }
     }
 }
 
 /// Export the book's highlights; errors are logged, never fatal.
-pub fn export(paths: &ExportPaths, book: &BookRecord) {
-    match export::append_clippings(&paths.clippings, book) {
-        Ok(n) if n > 0 => crate::perf!("export: {n} clippings appended"),
-        Ok(_) => {}
-        Err(e) => eprintln!("aristotle: {}: {e}", paths.clippings.display()),
+/// `clippings` is the setting "Save highlights to My Clippings.txt": off,
+/// only the Markdown notes are rewritten and the user's `My Clippings.txt`
+/// is not touched (a test file still gets the clippings).
+pub fn export(paths: &ExportPaths, book: &BookRecord, clippings: bool) {
+    if clippings || paths.test {
+        match export::append_clippings(&paths.clippings, book) {
+            Ok(n) if n > 0 => crate::perf!("export: {n} clippings appended"),
+            Ok(_) => {}
+            Err(e) => eprintln!("aristotle: {}: {e}", paths.clippings.display()),
+        }
     }
     if let Err(e) = export::write_markdown(&paths.notes, book) {
         eprintln!("aristotle: {}: {e}", paths.notes.display());
@@ -367,8 +377,8 @@ mod tests {
         let dir = crate::testdir("marks-export");
         let paths = ExportPaths::for_root(&dir.join("documents"));
         std::fs::create_dir_all(dir.join("documents")).unwrap();
-        export(&paths, &b);
-        export(&paths, &b); // idempotent
+        export(&paths, &b, true);
+        export(&paths, &b, true); // idempotent
         let raw = std::fs::read_to_string(&paths.clippings).unwrap();
         let items = pipeline_parse(&raw);
         assert_eq!(
@@ -401,6 +411,41 @@ mod tests {
         assert!(md.contains("> Kto się naprawdę oddaje filozofii, ten się sposobi do śmierci.\n\n— Fedon · loc. 301 · 2026-10-17\n"), "{md}");
     }
 
+    #[test]
+    fn clippings_setting_off_leaves_my_clippings_alone() {
+        let mut b = book();
+        b.annotations.push(highlight(NewHighlight {
+            text: "Dusza jest nieśmiertelna.".into(),
+            start: Position::Spine { item: 2, offset: 1 },
+            end: Position::Spine {
+                item: 2,
+                offset: 20,
+            },
+            start_bytes: 1500,
+            end_bytes: 1520,
+            page: None,
+            chapter: None,
+            created: "2026-10-17 09:00:00".into(),
+        }));
+        let dir = crate::testdir("marks-no-clippings");
+        std::fs::create_dir_all(dir.join("documents")).unwrap();
+        let paths = ExportPaths::for_root(&dir.join("documents"));
+        export(&paths, &b, false);
+        assert!(!paths.clippings.exists(), "My Clippings.txt was written");
+        // The highlight still reaches Aristotle's own notes.
+        let md = std::fs::read_dir(&paths.notes).unwrap().count();
+        assert_eq!(md, 1);
+        // A test file (`--test-clippings`) is written whatever the setting.
+        let test = ExportPaths {
+            clippings: dir.join("test-clippings.txt"),
+            notes: dir.join("test-notes"),
+            test: true,
+        };
+        export(&test, &b, false);
+        let raw = std::fs::read_to_string(&test.clippings).unwrap();
+        assert!(raw.contains("Dusza jest nieśmiertelna."), "{raw}");
+    }
+
     /// A real pipeline script, when given: run its parser on our export.
     /// The script is a Python module with `clippings(path)`:
     /// `ARISTOTLE_CLIPPINGS_SCRIPT=path cargo test ... clippings_script -- --ignored`.
@@ -426,7 +471,7 @@ mod tests {
         }));
         let dir = crate::testdir("marks-script");
         let paths = ExportPaths::for_root(&dir);
-        export(&paths, &b);
+        export(&paths, &b, true);
         let code = "import importlib.machinery as m, importlib.util as u, sys, json\n\
             from pathlib import Path\n\
             l = m.SourceFileLoader('kz', sys.argv[1]); s = u.spec_from_loader('kz', l)\n\

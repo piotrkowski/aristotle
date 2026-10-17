@@ -318,6 +318,7 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     app.exports = ExportPaths {
         clippings: export_root.join("test-clippings.txt"),
         notes: export_root.join("aristotle-notes"),
+        test: true,
     };
 
     let mut d = Driver {
