@@ -692,13 +692,34 @@ pub fn load_posmap(epub: &Path) -> Option<PosMap> {
         .and_then(|t| PosMap::from_text(&t).ok())
 }
 
+/// The PalmDB header and record 0 of the MOBI at `src`: everything
+/// [`parse_with`] reads without the text. A few kilobytes instead of the
+/// whole file, which can be megabytes of images.
+fn read_head(src: &Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut f = File::open(src)?;
+    let mut head = Vec::with_capacity(8192);
+    (&mut f).take(4096).read_to_end(&mut head)?;
+    let records = u16_at(&head, 76).unwrap_or(0);
+    // Record 1 starts where record 0 ends; one record means read it all.
+    let end = match (records, u32_at(&head, 78 + 8)) {
+        (2.., Some(off)) => off as u64,
+        _ => u64::MAX,
+    };
+    if end > head.len() as u64 {
+        (&mut f)
+            .take(end - head.len() as u64)
+            .read_to_end(&mut head)?;
+    }
+    Ok(head)
+}
+
 /// The cached EPUB for the MOBI at `src`, converting it if the cache has
 /// none for this file's path, size and modification time. Returns the EPUB
 /// path, the book's MOBI header information, and whether it was converted
 /// now.
 pub fn cached_epub(src: &Path, cache_dir: &Path) -> Result<(PathBuf, MobiInfo, bool), Error> {
-    let data = fs::read(src).with_context(|| format!("can't read {}", src.display()))?;
-    let meta = fs::metadata(src)?;
+    let meta = fs::metadata(src).with_context(|| format!("can't read {}", src.display()))?;
     let mut h = DefaultHasher::new();
     CONVERTER_VERSION.hash(&mut h);
     src.hash(&mut h);
@@ -718,10 +739,13 @@ pub fn cached_epub(src: &Path, cache_dir: &Path) -> Result<(PathBuf, MobiInfo, b
         .collect();
     let out = cache_dir.join(format!("{}-{:016x}.epub", stem.trim(), h.finish()));
     if out.exists() && posmap_path(&out).exists() {
-        // Only the headers: decompressing the text again would cost a
-        // noticeable part of opening the book on the device.
-        return Ok((out, parse_with(&data, false)?.info, false));
+        // Only the headers: reading the whole file and decompressing the
+        // text again would cost a noticeable part of opening the book on
+        // the device.
+        let head = read_head(src).with_context(|| format!("can't read {}", src.display()))?;
+        return Ok((out, parse_with(&head, false)?.info, false));
     }
+    let data = fs::read(src).with_context(|| format!("can't read {}", src.display()))?;
     let mobi = parse(&data)?;
     fs::create_dir_all(cache_dir)
         .with_context(|| format!("can't create {}", cache_dir.display()))?;
@@ -814,6 +838,56 @@ mod tests {
             html,
             images: Vec::new(),
         }
+    }
+
+    /// A PalmDB file: a MOBI header with a title in record 0, then
+    /// uncompressed text records and a large fake image record.
+    fn mobi_file(title: &str, text: &[u8]) -> Vec<u8> {
+        let mut r0 = vec![0u8; 16 + 0xe8];
+        r0[0..2].copy_from_slice(&COMPRESSION_NONE.to_be_bytes());
+        r0[4..8].copy_from_slice(&(text.len() as u32).to_be_bytes());
+        r0[8..10].copy_from_slice(&1u16.to_be_bytes());
+        r0[16..20].copy_from_slice(b"MOBI");
+        r0[20..24].copy_from_slice(&0xe8u32.to_be_bytes());
+        r0[28..32].copy_from_slice(&65001u32.to_be_bytes());
+        r0[36..40].copy_from_slice(&6u32.to_be_bytes());
+        let title_at = r0.len() as u32;
+        r0[84..88].copy_from_slice(&title_at.to_be_bytes());
+        r0[88..92].copy_from_slice(&(title.len() as u32).to_be_bytes());
+        r0.extend_from_slice(title.as_bytes());
+        let records = [r0, text.to_vec(), vec![0xff; 100_000]];
+        let mut out = vec![0u8; 78 + 8 * records.len() + 2];
+        out[60..68].copy_from_slice(b"BOOKMOBI");
+        out[76..78].copy_from_slice(&(records.len() as u16).to_be_bytes());
+        for (i, r) in records.iter().enumerate() {
+            let at = 78 + 8 * i;
+            let offset = out.len() as u32;
+            out[at..at + 4].copy_from_slice(&offset.to_be_bytes());
+            out.extend_from_slice(r);
+        }
+        out
+    }
+
+    #[test]
+    fn header_only_read_matches_the_whole_file() {
+        let data = mobi_file("Pan Tadeusz", b"<p>Tekst.</p>");
+        let path = testdir("head").join("book.mobi");
+        fs::write(&path, &data).unwrap();
+        let head = read_head(&path).unwrap();
+        assert!(head.len() < 5000, "{} bytes", head.len());
+        let (a, b) = (
+            parse_with(&head, false).unwrap().info,
+            parse_with(&data, false).unwrap().info,
+        );
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
+        assert_eq!(a.title.as_deref(), Some("Pan Tadeusz"));
+        // And the cache path is the same with or without the conversion.
+        let cache = testdir("head-cache");
+        let (epub, _, now) = cached_epub(&path, &cache).unwrap();
+        assert!(now);
+        let (again, info, now) = cached_epub(&path, &cache).unwrap();
+        assert_eq!((again, now), (epub, false));
+        assert_eq!(info.title.as_deref(), Some("Pan Tadeusz"));
     }
 
     /// Stock Kindle positions (bytes of MOBI text) must land on the same
