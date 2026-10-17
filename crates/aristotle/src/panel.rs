@@ -20,12 +20,15 @@
 //!   night waveforms). Gray chrome updates switch from GL16 to GLKW16
 //!   (mode 9, partial). Pages are inverted in the copy to the framebuffer
 //!   (software night) or by the EPDC (hardware night, [`Panel::set_night`]).
+//!   The book's images are inverted beforehand ([`night_page`]), so they
+//!   show as they are by day rather than as negatives.
 //!
 //! The driver runs one update at a time and reads the framebuffer when it
 //! processes an update, so a new page is only blitted once the previous
 //! page update has finished and the display thread is idle. That is the
 //! only place the input loop waits for the panel.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,6 +44,19 @@ use aristotle_ui::ui::{Damage, Ui};
 use aristotle_ui::{Rect, Waveform};
 
 use crate::prefs::NightMethod;
+
+/// `page` as it goes to the panel: in night mode, either method, with its
+/// images inverted, so the inversion of the whole page brings them back to
+/// their day look. Pages without images are not copied.
+pub fn night_page(page: &Page, night: bool) -> Cow<'_, Page> {
+    if night && !page.images.is_empty() {
+        let mut p = page.clone();
+        p.invert_images();
+        Cow::Owned(p)
+    } else {
+        Cow::Borrowed(page)
+    }
+}
 
 /// The stock UI's full flashing refresh (GC16 equivalent on the PW4).
 pub const FLASH: FbWaveform = FbWaveform::GCK16;
@@ -327,6 +343,7 @@ impl Device {
     /// waveform (`flash` uses mode 8 instead, for a screen switch). Returns
     /// once submitted; the panel works on while the caller prerenders.
     pub fn show_page(&mut self, page: &Page, flash: bool, label: &str) -> io::Result<Duration> {
+        let page = night_page(page, self.night.is_some());
         let waited = self.wait_idle();
         let rect = self.fb.full_screen();
         if self.inverts_pixels() {
@@ -518,6 +535,7 @@ impl Memory {
     }
 
     fn show_page(&mut self, page: &Page, flash: bool, label: &str) {
+        let page = night_page(page, self.night.is_some());
         let invert = self.night == Some(NightMethod::Software);
         for y in 0..self.height as usize {
             let src = y * page.stride;
@@ -675,5 +693,51 @@ mod tests {
             p(Waveform::GL16, true),
             Request::Partial(FbWaveform::GLKW16)
         );
+    }
+
+    #[test]
+    fn night_shows_images_as_by_day() {
+        use aristotle_render::book::Bounds;
+        use aristotle_render::style::Style;
+        let mut page = Page::white(&Style::pw4());
+        // Black text at the top, a gray image below it.
+        page.data[100 * page.stride + 100] = 0x00;
+        let image = Bounds {
+            x0: 200,
+            y0: 400,
+            x1: 600,
+            y1: 700,
+        };
+        for y in image.y0..image.y1 {
+            let row = y as usize * page.stride;
+            page.data[row + image.x0 as usize..row + image.x1 as usize].fill(0x40);
+        }
+        page.images.push(image);
+        let at = |m: &Memory, x: usize, y: usize| m.pixels[y * m.stride + x];
+        for (night, hw_inverted) in [
+            (NightMethod::Software, false),
+            (NightMethod::Hardware, true),
+        ] {
+            let mut m = Memory::new(1072, 1448, 9);
+            m.night = Some(night);
+            m.show_page(&page, false, "turn");
+            // What the panel shows: the framebuffer, inverted by the EPDC
+            // in hardware night.
+            let shown = |x, y| {
+                let p = at(&m, x, y);
+                if hw_inverted {
+                    255 - p
+                } else {
+                    p
+                }
+            };
+            assert_eq!(shown(100, 100), 0xff, "{night:?}: text is white");
+            assert_eq!(shown(10, 10), 0x00, "{night:?}: paper is black");
+            assert_eq!(shown(400, 500), 0x40, "{night:?}: the image as by day");
+        }
+        // By day, and without images, the page goes out as it is.
+        assert!(matches!(night_page(&page, false), Cow::Borrowed(_)));
+        page.images.clear();
+        assert!(matches!(night_page(&page, true), Cow::Borrowed(_)));
     }
 }

@@ -29,14 +29,17 @@
 //!   slow open, and a damaged one fails its checks and is ignored.
 //!
 //! What the snapshot shows is checked once the real page exists (see
-//! `open.rs`): anything but the same pixels at the same location is
-//! replaced with one full mode-9 update of the whole screen.
+//! `open.rs`): a page at another location or with other text is replaced
+//! with one full mode-9 update of the whole screen.
 //!
-//! The page chrome shows the chapter title, the page number and the
-//! percentage, all functions of the location; it has no live fields (no
-//! clock, no battery), so a snapshot cannot show a stale one. Anything live
-//! added to the page chrome must be left out of saved pages, or redrawn
-//! before showing them.
+//! The page chrome shows the chapter title, the page number, the
+//! percentage and the minutes left in the chapter. The page number is
+//! missing until the book is paginated, and the minutes follow the reading
+//! speed, so a snapshot can have an older footer than a fresh render. The
+//! open then keeps the snapshot's page until the next turn rather than
+//! sending a second update for the footer. The chrome has no live fields
+//! (no clock, no battery); anything live added to it must be left out of
+//! saved pages, or redrawn before showing them.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -49,6 +52,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use aristotle_library::Locator;
+use aristotle_render::book::Bounds;
 use aristotle_render::page::Page;
 use aristotle_render::style::Style;
 use serde::{Deserialize, Serialize};
@@ -60,7 +64,7 @@ pub const DIR: &str = "snapshots";
 const MAGIC: &[u8; 8] = b"ARSNAP01";
 
 /// Bump when the file layout changes.
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
 
 /// zstd level: 1 is the fastest to compress and decodes as fast as any;
 /// higher levels gain little on anti-aliased text.
@@ -179,6 +183,9 @@ struct Header {
     pages: Vec<PageInfo>,
     /// Compressed size of each page, in the same order.
     sizes: Vec<usize>,
+    /// Where each page's images are, in the same order ([`Page::images`]).
+    #[serde(default)]
+    images: Vec<Vec<[i32; 4]>>,
 }
 
 /// What the reader knows about a stored page without the book: enough to
@@ -225,6 +232,11 @@ pub fn encode(s: &Snapshot) -> io::Result<Vec<u8>> {
         stride: first.stride,
         pages: s.pages.iter().map(|(i, _)| i.clone()).collect(),
         sizes: blobs.iter().map(Vec::len).collect(),
+        images: s
+            .pages
+            .iter()
+            .map(|(_, p)| p.images.iter().map(|b| [b.x0, b.y0, b.x1, b.y1]).collect())
+            .collect(),
     };
     let json = serde_json::to_vec(&header).map_err(io::Error::other)?;
     let mut out = Vec::with_capacity(16 + json.len() + blobs.iter().map(Vec::len).sum::<usize>());
@@ -250,7 +262,7 @@ pub fn store(data_dir: &Path, s: &Snapshot) -> io::Result<usize> {
 pub struct Loaded {
     pub info: PageInfo,
     pub page: Rc<Page>,
-    next: Option<(PageInfo, Vec<u8>)>,
+    next: Option<(PageInfo, Vec<u8>, Vec<Bounds>)>,
     geometry: (u32, u32, usize),
     pub bytes: usize,
     pub read: Duration,
@@ -260,13 +272,16 @@ pub struct Loaded {
 impl Loaded {
     /// Decode the stored next page (once; `None` afterwards or if damaged).
     pub fn take_next(&mut self) -> Option<(PageInfo, Page)> {
-        let (info, blob) = self.next.take()?;
-        let (w, h, stride) = self.geometry;
-        Some((info, decode_page(&blob, w, h, stride)?))
+        let (info, blob, images) = self.next.take()?;
+        Some((info, decode_page(&blob, self.geometry, images)?))
     }
 }
 
-fn decode_page(blob: &[u8], width: u32, height: u32, stride: usize) -> Option<Page> {
+fn decode_page(
+    blob: &[u8],
+    (width, height, stride): (u32, u32, usize),
+    images: Vec<Bounds>,
+) -> Option<Page> {
     let len = stride * height as usize;
     let data = zstd::bulk::decompress(blob, len).ok()?;
     (data.len() == len).then_some(Page {
@@ -274,6 +289,7 @@ fn decode_page(blob: &[u8], width: u32, height: u32, stride: usize) -> Option<Pa
         height,
         stride,
         data,
+        images,
     })
 }
 
@@ -327,13 +343,21 @@ pub fn is_valid(data_dir: &Path, key: &Key, style: &Style) -> bool {
 fn parse(data: &[u8], key: &Key, style: &Style) -> Option<Loaded> {
     let (header, blobs) = parse_header(data, key, style)?;
     let geometry = (style.width, style.height, style.stride);
-    let page = decode_page(blobs[0], style.width, style.height, style.stride)?;
+    let mut images = header.images.into_iter().map(|rects| {
+        rects
+            .into_iter()
+            .map(|[x0, y0, x1, y1]| Bounds { x0, y0, x1, y1 })
+            .collect::<Vec<_>>()
+    });
+    let page = decode_page(blobs[0], geometry, images.next().unwrap_or_default())?;
     let mut infos = header.pages.into_iter();
     let info = infos.next()?;
     Some(Loaded {
         info,
         page: Rc::new(page),
-        next: infos.next().map(|i| (i, blobs[1].to_vec())),
+        next: infos
+            .next()
+            .map(|i| (i, blobs[1].to_vec(), images.next().unwrap_or_default())),
         geometry,
         bytes: data.len(),
         read: Duration::ZERO,
@@ -474,7 +498,15 @@ mod tests {
     fn round_trip_with_the_next_page() {
         let dir = crate::testdir("snapshot");
         let s = Style::pw4();
-        let (a, b) = (page(&s, 1), page(&s, 2));
+        let (a, mut b) = (page(&s, 1), page(&s, 2));
+        // Where the images are comes back too (night mode needs it).
+        let image = Bounds {
+            x0: 59,
+            y0: 300,
+            x1: 1013,
+            y1: 900,
+        };
+        b.images.push(image);
         let next = info(6200, Locator::Kindle { position: 8000 });
         let snap = Snapshot {
             key: key(&s),
@@ -486,8 +518,10 @@ mod tests {
         let mut l = load(&dir, &key(&s), &s).unwrap();
         assert_eq!(l.info, info(5000, AT));
         assert_eq!(l.page.data, a.data);
+        assert!(l.page.images.is_empty());
         let (i, p) = l.take_next().unwrap();
         assert_eq!((i, p.data == b.data), (next, true));
+        assert_eq!(p.images, vec![image]);
         assert!(l.take_next().is_none());
     }
 

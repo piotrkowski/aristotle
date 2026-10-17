@@ -11,6 +11,7 @@ use plato_core::font::{Font, FontOpener};
 use plato_core::framebuffer::{Framebuffer, Pixmap, UpdateMode};
 use plato_core::geom::{Point, Rectangle};
 
+use crate::book::Bounds;
 use crate::style::Style;
 
 /// Gray level below which a pixel becomes black in the black and white
@@ -26,6 +27,9 @@ pub struct Page {
     pub height: u32,
     pub stride: usize,
     pub data: Vec<u8>,
+    /// Where the book's images are, so night mode can leave them as they
+    /// are (see [`Page::invert_images`]).
+    pub images: Vec<Bounds>,
 }
 
 impl Page {
@@ -36,6 +40,24 @@ impl Page {
             height: style.height,
             stride: style.stride,
             data: vec![0xff; style.stride * style.height as usize],
+            images: Vec::new(),
+        }
+    }
+
+    /// Invert the pixels of the images. Night mode inverts the whole page
+    /// on its way to the panel; a page with its images inverted first shows
+    /// them as they are, rather than as photographic negatives. Inverting
+    /// twice gives the page back.
+    pub fn invert_images(&mut self) {
+        let (w, h) = (self.width as i32, self.height as i32);
+        for r in &self.images {
+            let (x0, x1) = (r.x0.clamp(0, w) as usize, r.x1.clamp(0, w) as usize);
+            for y in r.y0.clamp(0, h)..r.y1.clamp(0, h) {
+                let row = y as usize * self.stride;
+                for p in &mut self.data[row + x0..row + x1] {
+                    *p = 255 - *p;
+                }
+            }
         }
     }
 
@@ -71,6 +93,7 @@ impl Page {
                 .iter()
                 .map(|&p| if p < BW_THRESHOLD { 0x00 } else { 0xff })
                 .collect(),
+            images: self.images.clone(),
             ..*self
         }
     }
