@@ -8,6 +8,12 @@
 # repo's .cargo/config.toml (+crt-static).
 #
 # Output: $PLATO_BUILD/out/plato (default PLATO_BUILD: ~/.cache/aristotle/plato-build/main).
+# Static C archives, also used by crates/aristotle-render: $PLATO_BUILD/plato/libs.
+#
+# PLATO_TARGET=x86_64-unknown-linux-musl builds the same C libraries for the PC
+# (default PLATO_BUILD: ~/.cache/aristotle/plato-build/host-x86_64), so
+# aristotle-render can render preview pages on the host with exactly the code
+# that runs on the device. PLATO_LIBS_ONLY=1 stops after the C libraries.
 # Patches: tools/plato-patches/plato-*.patch apply to the Plato tree,
 # tools/plato-patches/<lib>-*.patch to thirdparty/<lib>.
 #
@@ -21,10 +27,25 @@ set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 PATCHES="$REPO/tools/plato-patches"
-B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/main}
+TARGET=${PLATO_TARGET:-armv7-unknown-linux-musleabihf}
+case $TARGET in
+    armv7-unknown-linux-musleabihf)
+        DEFAULT_BUILD=main
+        HOST=arm-linux-musleabihf
+        PFX=arm
+        CPU_FLAGS="-mcpu=cortex_a9 -mfpu=neon"
+        CMAKE_CPU=arm ;;
+    x86_64-unknown-linux-musl)
+        DEFAULT_BUILD=host-x86_64
+        HOST=x86_64-linux-musl
+        PFX=x86_64
+        CPU_FLAGS=
+        CMAKE_CPU=x86_64 ;;
+    *) echo "unsupported PLATO_TARGET: $TARGET" >&2; exit 1 ;;
+esac
+B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
 TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
 JOBS=${JOBS:-2}
-TARGET=armv7-unknown-linux-musleabihf
 PLATO_REV=7da89f296e58c7426692abb6fda16431b9631e60
 
 export TMPDIR="$HOME/.cache/aristotle/tmp"
@@ -93,34 +114,40 @@ fi
 # Compiler wrappers. Zig only accepts its own CPU names (cortex_a9), so map the
 # GCC spelling that MuPDF's Makerules passes (-mcpu=cortex-a9), and drop the
 # Rust-style --target=armv7-... that the cc crate adds when it detects clang.
+# For the host target, the ARM flags that MuPDF's OS=kobo rules add are dropped.
+if [ "$PFX" = arm ]; then
+    # shellcheck disable=SC2016 # expanded by the generated wrapper
+    CPU_CASE='-mcpu=*) a=-mcpu=$(printf %s "${a#-mcpu=}" | tr - _) ;;'
+else
+    CPU_CASE='-mcpu=*|-mfpu=*) continue ;;'
+fi
 for tool in cc c++; do
-    w="$B/bin/arm-$tool"
+    w="$B/bin/$PFX-$tool"
     cat > "$w" <<EOF
 #!/bin/sh
 for a do
     shift
     case \$a in
         --target=*) continue ;;
-        -mcpu=*) a=-mcpu=\$(printf %s "\${a#-mcpu=}" | tr - _) ;;
+        $CPU_CASE
     esac
     set -- "\$@" "\$a"
 done
-exec "$ZIG" $tool -target arm-linux-musleabihf -mcpu=cortex_a9 -mfpu=neon "\$@"
+exec "$ZIG" $tool -target $HOST $CPU_FLAGS "\$@"
 EOF
     chmod +x "$w"
 done
 for tool in ar ranlib; do
-    w="$B/bin/arm-$tool"
+    w="$B/bin/$PFX-$tool"
     printf '#!/bin/sh\nexec "%s" %s "$@"\n' "$ZIG" "$tool" > "$w"
     chmod +x "$w"
 done
 export PATH="$B/bin:$PATH"
-HOST=arm-linux-musleabihf
 CFLAGS="-O2"
-XCC="$B/bin/arm-cc"
-XCXX="$B/bin/arm-c++"
-XAR="$B/bin/arm-ar"
-XRANLIB="$B/bin/arm-ranlib"
+XCC="$B/bin/$PFX-cc"
+XCXX="$B/bin/$PFX-c++"
+XAR="$B/bin/$PFX-ar"
+XRANLIB="$B/bin/$PFX-ranlib"
 
 # --- Sources -----------------------------------------------------------------
 if ! done_ plato-src; then
@@ -210,7 +237,7 @@ fi
 if ! done_ openjpeg; then
     log openjpeg
     (cd "$T/openjpeg" && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+            -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$CMAKE_CPU \
             -DCMAKE_C_COMPILER="$XCC" -DCMAKE_AR="$XAR" -DCMAKE_RANLIB="$XRANLIB" \
             -DCMAKE_C_FLAGS="$CFLAGS" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
             -DBUILD_CODEC=OFF -DBUILD_TESTING=OFF \
@@ -317,16 +344,22 @@ for a in "$T/zlib/libz.a" "$T/bzip2/libbz2.a" "$T/libpng/.libs/libpng16.a" \
          "$T/harfbuzz/build/src/libharfbuzz.a" "$T/gumbo/.libs/libgumbo.a" \
          "$T/djvulibre/libdjvu/.libs/libdjvulibre.a" \
          "$T/mupdf/build/release/libmupdf.a" "$T/mupdf/build/release/libmupdf-third.a" \
-         "$B/cxxrt/libc++.a" "$B/cxxrt/libc++abi.a"; do
+         "$B/cxxrt/libc++.a" "$B/cxxrt/libc++abi.a" \
+         "$P/target/mupdf_wrapper/Kindle/libmupdf_wrapper.a"; do
     cp "$a" "$P/libs/"
 done
+
+if [ "${PLATO_LIBS_ONLY:-0}" = 1 ]; then
+    ls -l "$P/libs"
+    exit 0
+fi
 
 # --- Rust ----------------------------------------------------------------------
 log "cargo build -p plato"
 # The cc crate (zstd-sys, pulled in by zip) also needs the cross compiler.
-export CC_armv7_unknown_linux_musleabihf="$XCC" CXX_armv7_unknown_linux_musleabihf="$XCXX"
-export AR_armv7_unknown_linux_musleabihf="$XAR" CFLAGS_armv7_unknown_linux_musleabihf="$CFLAGS"
-(cd "$P" && cargo build --config "$REPO/.cargo/config.toml" --release --target $TARGET -p plato)
+T_=$(printf %s "$TARGET" | tr - _)
+export "CC_$T_=$XCC" "CXX_$T_=$XCXX" "AR_$T_=$XAR" "CFLAGS_$T_=$CFLAGS"
+(cd "$P" && cargo build --config "$REPO/.cargo/config.toml" --release --target "$TARGET" -p plato)
 
 mkdir -p "$B/out"
 cp "$CARGO_TARGET_DIR/$TARGET/release/plato" "$B/out/plato"

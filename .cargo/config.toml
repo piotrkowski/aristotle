@@ -6,3 +6,9 @@
 [target.armv7-unknown-linux-musleabihf]
 linker = "rust-lld"
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# Host build of aristotle-render for preview PNGs: static x86_64 musl, linked
+# the same way against the C libraries tools/build-plato.sh builds for the PC.
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "target-feature=+crt-static"]
