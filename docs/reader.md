@@ -32,24 +32,44 @@ aristotle-render (CLI: info, render, show, bench, turn)
 
 `plato-core` is not on crates.io, needs a few changes, and links about fifteen C libraries. The setup:
 
-- **Source.** `tools/prepare-plato-src.sh` writes `git archive` of the commit the `third_party/plato` submodule pins, plus `tools/plato-patches/plato-*.patch`, to `third_party/plato-patched/` (gitignored). The submodule is never modified. The script is idempotent: a stamp holds the commit and a hash of the patches.
-- **Patches** (each small, with a description at the top):
-  - `0001`: static musl linking (from the Plato cross-build, `tools/build-plato.sh`);
-  - `0002`: `PLATO_LIB_DIRS` lets another workspace point `build.rs` at the static archives, and the x86_64 musl host target is accepted;
-  - `0003`: MuPDF's embedded-font symbol names on every musl target (Zig's MuPDF build uses the same names on x86_64 as on ARM);
-  - `0004`: `EpubDocument::set_language`, see "Hyphenation";
-  - `0005`: links against a MuPDF without its Noto and CJK fonts (no glyph fallback then), and relinks when the archives change;
-  - `0006`: DjVu is compiled out when `libdjvulibre.a` is absent;
-  - `0007`: `zip` with deflate only;
-  - `0008`: lazy layout of spine items, see "Lazy layout";
-  - `mupdf-0001` (applied to MuPDF, not Plato): `KEEP_NOTO_SERIF`.
+- **Source.** `third_party/plato` is a git submodule with our fork of Plato, see [Plato fork](#plato-fork). Cargo builds `plato-core` straight from it (`third_party/plato/crates/core`) and only reads it; nothing is generated or copied for the Rust build.
+- **C libraries.** `tools/build-plato.sh` builds them with Zig as static archives: for the device as before, and with `PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1` for the host (about 6 minutes on 2 cores, once). It exports the submodule's commit with `git archive` into its `PLATO_BUILD` directory and unpacks and builds the C sources there, so it never writes into the submodule. `MUPDF_FONTS`, `MUPDF_FORMATS` and `PLATO_DJVU` choose what goes in; the defaults cover Polish, English, Ancient Greek and Latin books, see [Size budget](#size-budget). One patch applies to MuPDF itself, for the size budget: `tools/mupdf-patches/mupdf-0001-keep-noto-serif.patch` (`KEEP_NOTO_SERIF`).
+- **Workspace.** `crates/aristotle-render` and the reader app, `crates/aristotle-reader`, are members of the root workspace but not of its `default-members`, so a plain `cargo build`, `cargo test` or `cargo clippy` at the root skips them and needs no C libraries. Cargo still reads their manifests and `plato-core`'s, so the submodule must be checked out (`git clone --recursive`, or `git submodule update --init`). There is one `Cargo.lock`; the native crates' versions started from Plato's lock and were unified with the other crates' (patch releases only) when the two former workspaces merged. The release profile is shared: `opt-level = "s"`, with `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` at `opt-level = 3`, see [Size budget](#size-budget).
+- **Build.** `tools/build-render.sh device|host` sets `PLATO_LIB_DIRS` and the Zig C compiler (for crates that build C), runs `cargo build -p aristotle-render -p aristotle-reader`, and assembles the bundle in `~/.cache/aristotle/render/<device|host>/`. `CARGO_CMD=clippy|test` runs those instead, for the same two packages. `PLATO_BUILD` selects a `build-plato.sh` output directory (default `plato-build/main`, or `host-x86_64`).
 
-  `0005` to `0007` and `mupdf-0001` exist for the size budget, see [Size budget](#size-budget).
-- **C libraries.** `tools/build-plato.sh` builds them with Zig as static archives: for the device as before, and with `PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1` for the host (about 6 minutes on 2 cores, once). `MUPDF_FONTS`, `MUPDF_FORMATS` and `PLATO_DJVU` choose what goes in; the defaults cover Polish, English, Ancient Greek and Latin books, see [Size budget](#size-budget).
-- **Workspace.** `crates/aristotle-render` is its own Cargo workspace and the root workspace excludes it, so `cargo build` at the root keeps working on hosts that never ran the Plato build. It depends on `../../third_party/plato-patched/crates/core` by path and on `aristotle-hal`. Its `Cargo.lock` started from Plato's, so dependency versions match the tested Plato build.
-- **Build.** `tools/build-render.sh device|host` prepares the source, sets `PLATO_LIB_DIRS` and the Zig C compiler (for crates that build C), builds, and assembles the bundle in `~/.cache/aristotle/render/<device|host>/`. `CARGO_CMD=clippy|test` runs those instead. `PLATO_BUILD` selects a `build-plato.sh` output directory (default `plato-build/main`, or `host-x86_64`).
+### Plato fork
 
-Why not a `[patch]` section in the root workspace: it would make every root build depend on the prepared source and the C libraries. Why not build against the copy inside a `build-plato.sh` run: that copy is patched once when the run starts and goes stale when patches change, and its location differs per run.
+[piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`, is upstream Plato ([baskerville/plato](https://github.com/baskerville/plato), currently at `7da89f2`) plus one commit per change, each small and with a description of what and why:
+
+| Commit | Change |
+| --- | --- |
+| `core: static musl link` | Static musl linking (from the Plato cross-build, `tools/build-plato.sh`) |
+| `core: lib dirs and host musl` | `PLATO_LIB_DIRS` points `build.rs` at the static archives of a `build-plato.sh` run, and the x86_64 musl host target is accepted |
+| `core: font symbols musl` | MuPDF's embedded-font symbol names on every musl target (Zig's MuPDF build uses the same names on x86_64 as on ARM) |
+| `core: epub language override` | `EpubDocument::set_language`, see [Hyphenation](#hyphenation) |
+| `core: mupdf tofu fallback` | Links against a MuPDF without its Noto and CJK fonts (no glyph fallback then), and relinks when the archives change |
+| `core: optional djvu` | DjVu is compiled out when `libdjvulibre.a` is absent |
+| `core: zip deflate only` | `zip` with deflate only |
+| `core: lazy epub layout` | Lazy layout of spine items, see "Lazy layout" in [Opening a book](#opening-a-book) |
+
+The tofu fallback, optional DjVu and deflate-only commits exist for the size budget, see [Size budget](#size-budget).
+
+**Changing Plato.** Commit inside `third_party/plato` on the `aristotle` branch, push it to the fork, and commit the submodule bump here (`git add third_party/plato`). Cargo builds the submodule's working tree, so a change shows up in the next `tools/build-render.sh` run; rerun `tools/build-plato.sh` with a fresh `PLATO_BUILD` only when it touches the C side (`thirdparty/`, `mupdf_wrapper/`). A new change gets its own commit, and a fix to an earlier one is squashed into it, so the branch stays one commit per change.
+
+**Rebasing on upstream.** Aristotle's history pins fork commits, so tag the current tip before rewriting the branch, then rebase and force-push:
+
+```sh
+cd third_party/plato             # origin is the fork
+git remote add upstream https://github.com/baskerville/plato.git   # once
+git fetch origin && git fetch upstream
+git checkout -B aristotle origin/aristotle
+tag="aristotle-$(git rev-parse --short HEAD)"
+git tag "$tag" && git push origin "$tag"
+git rebase upstream/master       # resolve conflicts commit by commit
+git push --force-with-lease origin aristotle
+```
+
+Then commit the submodule bump, update the C library versions pinned in `tools/build-plato.sh` if upstream's `thirdparty/download.sh` changed them, build the C libraries in a fresh `PLATO_BUILD`, and check that the tests pass and rendered pages still match.
 
 ### Host previews
 
@@ -95,7 +115,7 @@ Plato's own paragraph defaults apply (Knuth–Plass `total_fit`, hyphen penalty 
 
 - Plato's patterns (kl-hyphenate, from hyph-utf8) **include Polish**: `pl.standard.bincode`, minima 2 and 2. Checked word by word: zo-ba-czy-my, po-dob-ne, prze-ci-wień-stwem, rze-czy-wi-stość, Szcze-cin.
 - Plato picks patterns per element from `lang`/`xml:lang` and otherwise from the book's **first** `dc:language` (`pl`, `pl-PL` and `PL` all map to Polish). Without a language it uses English.
-- Problem found in a test library: 2 of 44 Polish EPUBs declare several languages, and one lists `de-DE` first. It was hyphenated with German patterns ("zobac-zymy", "pod-obne"). Patch `0004` adds a language override, and `lang.rs` decides it for books that declare more than one: it samples about 190 KB of the text and picks the declared language whose marker letters (ąćęłńśźż for Polish, äöüß for German, ...) are most frequent. `--lang TAG` forces a language.
+- Problem found in a test library: 2 of 44 Polish EPUBs declare several languages, and one lists `de-DE` first. It was hyphenated with German patterns ("zobac-zymy", "pod-obne"). The fork's `core: epub language override` commit adds a language override, and `lang.rs` decides it for books that declare more than one: it samples about 190 KB of the text and picks the declared language whose marker letters (ąćęłńśźż for Polish, äöüß for German, ...) are most frequent. `--lang TAG` forces a language.
 - `aristotle-render info BOOK` prints the language and whether its patterns are loaded.
 - Plato loads every pattern file present in `hyphenation-patterns/` on first use (9 ms on the host for five languages), which is why the bundle ships only five: Polish, English (US and GB), Ancient Greek and Latin.
 - Unverified in Plato's code: in a test book (Polish, with `<p lang="grc" xml:lang="grc">` paragraphs) the Greek paragraphs did not get the `grc` patterns; with `--lang grc` they did. Books declared as `grc` or `la` use their patterns.
@@ -124,7 +144,7 @@ Saved positions (`position.rs`) outlive a layout:
 
 ## The reader app
 
-`crates/aristotle-reader` (binary `aristotle`) is the first real reader: the library from `aristotle-library`, pages from this crate, the menu from `aristotle-ui`, on the panel through `aristotle-hal`. It links Plato, so it is a member of the `aristotle-render` workspace (`members = [".", "../aristotle-reader"]`, `package.workspace` pointing back), with one lock file and one build of the C-backed dependencies; the root workspace excludes both. The renderer itself does not depend on the UI or the library.
+`crates/aristotle-reader` (binary `aristotle`) is the first real reader: the library from `aristotle-library`, pages from this crate, the menu from `aristotle-ui`, on the panel through `aristotle-hal`. It links Plato, so like the renderer it is left out of the root workspace's `default-members` and built by `tools/build-render.sh`. The renderer itself does not depend on the UI or the library.
 
 | Module | Role |
 | --- | --- |
@@ -185,7 +205,7 @@ Without a snapshot there is nothing to show early: the tapped card stays inverte
 
 On the device the layout is about 8 times slower than on the host (the novel: 1989 ms against about 250 ms), so the submit should land at about 10 to 20 ms after the release, and the page should be on the panel after the 480 ms of the mode-8 flash: about 0.5 s from tap to page, against 2.9 s before and 0.8 s for the stock reader. These are host numbers until verified on the device; the scenario `devloop/kindle/scenarios/aristotle-open.txt` (`aristotle-observe run`) exercises opening, turning, the menu and going back while a book opens, and opening another book after that.
 
-**Lazy layout.** Plato laid out a whole spine item before it could place a position in it or draw any of its pages, so a one-chapter novel cost 2.2 to 2.9 s on the device for every open without a snapshot, every placement on the worker and every font, spacing or margin change, wherever the reader was in it. Patch `0008` makes the engine's block loop stop between two children of a block (never inside a paragraph or a table) once two complete pages follow the location asked for, keeping one frame per nesting level (next child, loop context, rectangles); `EpubDocument` keeps the parsed chapter and the layout state, and resumes when a later page is asked for, 8 pages ahead. Resuming replays exactly what a full layout does, so the cost of placing a position is now proportional to how far into its chapter it is, and page breaks do not move: `aristotle-render pages BOOK 20` (every page start plus 20 placements in fresh copies) gives identical output for 39 books (the one-chapter stand-in, Lalka and 13 other converted MOBIs, the 23 Platon EPUBs, a test book with nested blocks, lists, quotes and tables) against an unpatched build, and rendered pages match byte for byte. Going back into a previous spine item still lays it out whole. Host, the one-chapter stand-in on one CPU (`aristotle-render place`, before → after):
+**Lazy layout.** Plato laid out a whole spine item before it could place a position in it or draw any of its pages, so a one-chapter novel cost 2.2 to 2.9 s on the device for every open without a snapshot, every placement on the worker and every font, spacing or margin change, wherever the reader was in it. The fork's `core: lazy epub layout` commit makes the engine's block loop stop between two children of a block (never inside a paragraph or a table) once two complete pages follow the location asked for, keeping one frame per nesting level (next child, loop context, rectangles); `EpubDocument` keeps the parsed chapter and the layout state, and resumes when a later page is asked for, 8 pages ahead. Resuming replays exactly what a full layout does, so the cost of placing a position is now proportional to how far into its chapter it is, and page breaks do not move: `aristotle-render pages BOOK 20` (every page start plus 20 placements in fresh copies) gives identical output for 39 books (the one-chapter stand-in, Lalka and 13 other converted MOBIs, the 23 Platon EPUBs, a test book with nested blocks, lists, quotes and tables) against a build without it, and rendered pages match byte for byte. Going back into a previous spine item still lays it out whole. Host, the one-chapter stand-in on one CPU (`aristotle-render place`, before → after):
 
 | Position in the chapter | Place | Restyle (+1 pt) and place | Next page |
 | --- | --- | --- | --- |
@@ -360,11 +380,11 @@ The default device build reads Polish and English, some Ancient Greek and Latin,
 | Step | Reader app `aristotle` | Renderer CLI | What changed |
 | --- | ---: | ---: | --- |
 | Before | 29.52 | 26.04 | MuPDF with Plato's Kobo font set, DjVuLibre, `zip` defaults, opt-level 3 |
-| MuPDF fonts: base 14 only | 13.79 | 10.32 | `-DTOFU -DTOFU_CJK -DNO_CJK`: no Noto (13 MB), Droid Sans Fallback (3.6 MB, CJK), CJK CMaps (0.8 MB), Charis SIL; patch `0005` |
+| MuPDF fonts: base 14 only | 13.79 | 10.32 | `-DTOFU -DTOFU_CJK -DNO_CJK`: no Noto (13 MB), Droid Sans Fallback (3.6 MB, CJK), CJK CMaps (0.8 MB), Charis SIL; fork commit `core: mupdf tofu fallback` |
 | MuPDF formats | 13.03 | 9.55 | `FZ_ENABLE_*=0` for XPS, SVG, CBZ, FB2, Office, HTML, EPUB; no MuPDF hyphenation (0.6 MB of patterns) |
-| No DjVu | 11.75 | 8.27 | DjVuLibre not built or linked; patch `0006` |
+| No DjVu | 11.75 | 8.27 | DjVuLibre not built or linked; fork commit `core: optional djvu` |
 | C function sections | 11.21 | 7.73 | `-ffunction-sections -fdata-sections` for HarfBuzz, FreeType and the other C libraries, so the link drops what nothing calls |
-| `zip` deflate only | 10.12 | 6.65 | No bzip2, LZMA, XZ, PPMd, Zstandard (0.5 MB of C), Deflate64, AES; patch `0007` |
+| `zip` deflate only | 10.12 | 6.65 | No bzip2, LZMA, XZ, PPMd, Zstandard (0.5 MB of C), Deflate64, AES; fork commit `core: zip deflate only` |
 | UI font from `data/` | 8.85 | 6.65 | The app maps `data/serif/Literata-*.ttf` instead of compiling the same 1.3 MB in |
 | Noto Serif back in MuPDF | 9.14 | 6.94 | +0.29 MB, see below; patch `mupdf-0001` |
 | opt-level "s", 3 for the page path | 8.47 | 6.77 | `opt-level = "s"`, but 3 for `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` |
@@ -376,7 +396,7 @@ The data directory went from 5.04 to 2.68 MB: `fonts/` 2.91 to 1.32 (0.14 of it 
 What was removed, and why that is safe for such a library:
 
 - **MuPDF's fonts.** Plato's engine renders EPUB (and converted MOBI) with Literata, which has Latin, Latin Extended and Greek with polytonic, so the Noto fallback fonts only ever drew symbols and CJK. PDFs embed their fonts; those that don't get the 14 standard fonts, which MuPDF keeps (URW Nimbus, Latin, monotonic Greek and Cyrillic; checked with a PDF using non-embedded Times, Helvetica and Courier with Polish and Greek glyph names, unchanged). Noto Serif (Latin, polytonic Greek, Cyrillic) stays because MuPDF's reflowed text (TXT, MOBI the converter can't take) needs it for polytonic Greek: without it the Greek accented letters of a TXT page vanished. Choices: `MUPDF_FONTS=latin-greek` (default), `base14` (without Noto Serif), `full`.
-- **Glyph fallback in Plato's engine.** Patch `0005` replaces MuPDF's Noto and Droid fonts with two small files from `data/fonts/`: Noto Sans Coptic for Coptic, and DejaVu Sans cut to arrows, mathematical operators up to ⋅, box drawing, geometric shapes, miscellaneous symbols up to the music signs, dingbats up to the checkmarks, crosses and stars, and U+2B00 to U+2B2F (106 KB unhinted). Other characters Literata lacks, CJK included, show a `.notdef` box. In the 68 EPUBs on the host (the 23 Platon dialogues and 45 other Polish books), Literata lacks only CJK characters (a few in the bibliographies of two books), U+2B1C ⬜ (22 times in one book), and spaces and invisible marks that HarfBuzz handles without the font.
+- **Glyph fallback in Plato's engine.** The fork's `core: mupdf tofu fallback` commit replaces MuPDF's Noto and Droid fonts with two small files from `data/fonts/`: Noto Sans Coptic for Coptic, and DejaVu Sans cut to arrows, mathematical operators up to ⋅, box drawing, geometric shapes, miscellaneous symbols up to the music signs, dingbats up to the checkmarks, crosses and stars, and U+2B00 to U+2B2F (106 KB unhinted). Other characters Literata lacks, CJK included, show a `.notdef` box. In the 68 EPUBs on the host (the 23 Platon dialogues and 45 other Polish books), Literata lacks only CJK characters (a few in the bibliographies of two books), U+2B1C ⬜ (22 times in one book), and spaces and invisible marks that HarfBuzz handles without the font.
 - **MuPDF formats.** EPUB and HTML go through Plato's engine. MuPDF keeps PDF, images (Plato decodes EPUB pictures through it; the test library has JPEG and PNG only), MOBI (fallback) and TXT. CBZ would no longer open; the library indexes it, but the test library has none. Choice: `MUPDF_FORMATS=minimal` (default) or `full`.
 - **DjVu.** None in the library. `PLATO_DJVU=1` brings it back.
 - **Fonts in `data/`.** `FONT_SUBSET=latin-greek` (default) cuts Literata and Noto Sans to Latin (all of it), Greek and Coptic, Greek Extended, combining marks, general punctuation, super- and subscripts, currency, letterlike symbols, number forms, arrows, mathematical operators, geometric shapes and the f-ligatures, with every OpenType feature and Literata's hinting (the app UI hints). Cyrillic goes. Libertinus Serif, which Plato opens but never draws because `Book` replaces the serif family with Literata, ships as a stub with only the space. Source Code Pro and Parisienne are unmodified: their licences reserve their names for the original fonts. `FONT_SUBSET=none` ships everything.

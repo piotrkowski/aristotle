@@ -10,19 +10,28 @@ template's device, firmware and log fields.
 code (the framebuffer stride, the waveform numbering, one update at a time);
 read it before you touch the display or input code.
 
-## Two workspaces
+## One workspace, two parts
 
-The repository has two Cargo workspaces, on purpose:
+The repository is one Cargo workspace with one `Cargo.lock`:
 
-- **The root workspace** holds the pure-Rust crates: the hardware layer, the UI
-  toolkit, the library, the measurement tools. It builds and tests on any host
-  with a plain `cargo test`, and CI checks it.
-- **The native workspace**, `crates/aristotle-render` with the reader app
-  `crates/aristotle-reader` as a member, links Plato's document engine and its
-  C libraries (MuPDF, FreeType, HarfBuzz and others). Those are built once by
-  `tools/build-plato.sh` with Zig, for the device and for the host. Keeping
-  them apart means a fresh clone builds without the C toolchain. CI does not
-  build this workspace; run its checks locally.
+- **The default members** are the pure-Rust crates: the hardware layer, the UI
+  toolkit, the library, the measurement tools. A plain `cargo build`,
+  `cargo test` or `cargo clippy` at the root covers exactly these; they build
+  and test on any host, and CI checks them.
+- **The native members**, `crates/aristotle-render` and the reader app
+  `crates/aristotle-reader`, link Plato's document engine and its C libraries
+  (MuPDF, FreeType, HarfBuzz and others). Those are built once by
+  `tools/build-plato.sh` with Zig, for the device and for the host, and
+  `tools/build-render.sh` builds the two crates against them. CI does not
+  build them; run their checks locally.
+
+Plato's engine comes from our fork in the `third_party/plato` submodule
+(branch `aristotle`, see [docs/reader.md](../docs/reader.md), "Plato fork").
+Cargo reads it even for the default members, so clone with
+`--recurse-submodules`. In an existing clone, run
+`git submodule sync && git submodule update --init` after the submodule's URL
+or commit changes. Changes to Plato are commits on the fork's `aristotle`
+branch, followed by a submodule bump here.
 
 ## Building
 
@@ -35,10 +44,10 @@ C compiler.
 
 ```sh
 git clone --recurse-submodules https://github.com/piotrkowski/aristotle && cd aristotle
-cargo test                                                   # root workspace
+cargo test                                                   # default members
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview   # every screen as PNG
 
-# Native workspace on the host (C libraries once, about 6 minutes on 2 cores)
+# Native members on the host (C libraries once, about 6 minutes on 2 cores)
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
 CARGO_CMD=test tools/build-render.sh host
 
@@ -81,14 +90,18 @@ stay within 10 % on latency. Numbers in the docs say where they come from:
 CI runs the first three on every pull request:
 
 ```sh
-cargo fmt --all --check
+cargo fmt --check        # every member, native ones included; not --all, which
+                         # would also check Plato's crates
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all-features --locked
-# The native workspace, locally:
-(cd crates/aristotle-render && cargo fmt -p aristotle-render -p aristotle-reader --check)
+# The native members, locally:
 CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host
 ```
+
+`tools/build-render.sh` builds, lints or tests the native members with
+`cargo <command> -p aristotle-render -p aristotle-reader` against the C
+libraries of a `tools/build-plato.sh` run.
 
 README screenshots are composed by `tools/screenshots/compose.sh` from raw
 panel captures listed in its manifest.
