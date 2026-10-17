@@ -26,7 +26,7 @@ use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};
 use crate::theme::{margin, IconSize, Space, Styles, INK, INK_2, INK_3, RULE};
 use crate::tree::{pages, progress, ActionId, Cross, Feedback, Kind, Node, NodeId, Tree};
-use crate::widgets::{series_number, Battery, Cover, CoverMark, GrayImage};
+use crate::widgets::{series_number, Battery, BusyMark, Cover, CoverMark, GrayImage};
 
 /// Reading state of a book, as the library index keeps it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -277,6 +277,8 @@ pub struct Library {
     pub next: NodeId,
     /// The screen title. Holding it quits the app on the device.
     pub title: NodeId,
+    /// The busy mark in the status line, hidden.
+    pub busy: NodeId,
     /// Node of each list row, for tests and the preview.
     pub rows: Vec<NodeId>,
 }
@@ -305,8 +307,12 @@ pub fn books_label(n: usize) -> String {
     plural(n, "książka", "książki", "książek")
 }
 
-/// The status line node.
-pub fn status_line(t: &mut Tree, s: &Styles, line: &StatusLine) -> NodeId {
+/// The status line node, and its busy mark (hidden; show it with
+/// `Tree::set_hidden` before a slow action, see `docs/ui-framework.md`,
+/// "Transitions").
+pub fn status_line(t: &mut Tree, s: &Styles, line: &StatusLine) -> (NodeId, NodeId) {
+    let busy = t.add(Node::new(Kind::Custom(Box::new(BusyMark))).hidden(true), []);
+    let busy_c = t.align(0.5, 0.5, busy);
     let time = t.label(line.clock, s.small());
     let fill = t.spacer(1);
     let mut status = vec![time, fill];
@@ -320,7 +326,8 @@ pub fn status_line(t: &mut Tree, s: &Styles, line: &StatusLine) -> NodeId {
         status.extend([pct, gap, bat]);
     }
     let status = t.add(Node::row(0), status);
-    t.fixed(None, Some(mm(5.5)), Some(status))
+    let both = t.add(Node::new(Kind::Stack), [status, busy_c]);
+    (t.fixed(None, Some(mm(5.5)), Some(both)), busy)
 }
 
 /// A pill-shaped chip; the selected one is solid black.
@@ -402,7 +409,7 @@ impl Library {
     /// Builds the library tree for `shelf`.
     pub fn build_shelf(text: &mut TextEngine, s: &Styles, shelf: &Shelf) -> (Tree, Self) {
         let mut t = Tree::new();
-        let status = status_line(&mut t, s, &shelf.status);
+        let (status, busy) = status_line(&mut t, s, &shelf.status);
         let mut column = vec![status];
 
         // The sort order: next to the views at home, in the header of a
@@ -588,6 +595,7 @@ impl Library {
             prev: t.node(prev).children[0],
             next: t.node(next).children[0],
             title,
+            busy,
             rows,
         };
         (t, lib)

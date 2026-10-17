@@ -92,6 +92,8 @@ pub struct Settings {
     pub prev: NodeId,
     pub next: NodeId,
     pub title: NodeId,
+    /// The busy mark in the status line, hidden.
+    pub busy: NodeId,
     /// The light [`Slider`], if there is a light.
     pub light: Option<NodeId>,
 }
@@ -230,7 +232,7 @@ fn choice(
 impl Settings {
     pub fn build(_text: &mut TextEngine, s: &Styles, v: &SystemView) -> (Tree, Self) {
         let mut t = Tree::new();
-        let status = status_line(&mut t, s, &v.status);
+        let (status, busy) = status_line(&mut t, s, &v.status);
         let back = icon_button(&mut t, Icon::ArrowLeft, IconSize::STANDARD, action::BACK);
         let title = t.label("Ustawienia", s.display());
         let g = t.gap(Space::XS, 1);
@@ -433,6 +435,7 @@ impl Settings {
             prev: t.node(prev).children[0],
             next: t.node(next).children[0],
             title,
+            busy,
             light: light_node,
         };
         (t, ids)

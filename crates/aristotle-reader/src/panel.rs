@@ -52,6 +52,36 @@ pub enum Content {
     Page,
 }
 
+/// What one UI damage rectangle becomes on the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Request {
+    /// A full-mode update of the whole screen.
+    FullScreen(FbWaveform),
+    /// A partial update of the damaged rectangle, through the display
+    /// thread.
+    Partial(FbWaveform),
+}
+
+/// The transition policy at the panel (`docs/ui-framework.md`,
+/// "Transitions"):
+///
+/// - GC16 (a screen switch, the night switch, a cleanup) is one full
+///   update of the whole screen with mode 8, the stock flash;
+/// - a gray change of the book page behind the menu is one full update of
+///   the whole screen with the turn waveform (mode 9), like a page turn;
+/// - A2 (touch-down feedback) and DU (black-and-white changes) are partial;
+/// - GL16 (gray chrome) is partial, and becomes GLKW16 (mode 9) at night:
+///   the gray waveform Lab126 made for dark pages (FBInk; KOReader's
+///   `waveform_night` on Rex and Zelda).
+pub fn plan(hint: Waveform, content: Content, night: bool, turn: FbWaveform) -> Request {
+    match hint {
+        Waveform::GC16 => Request::FullScreen(FLASH),
+        Waveform::GL16 if content == Content::Page => Request::FullScreen(turn),
+        Waveform::GL16 if night => Request::Partial(FbWaveform::GLKW16),
+        other => Request::Partial(FbWaveform(other.mode())),
+    }
+}
+
 /// Waits for page-update markers on a thread of its own, so the input loop
 /// can learn when a page reached the panel (for the log) and block only
 /// when the next page needs it.
@@ -165,18 +195,6 @@ impl Panel {
         self.night == Some(NightMethod::Software)
     }
 
-    /// The waveform for a UI damage hint. In night mode the gray updates of
-    /// the chrome use GLKW16 (mode 9), the gray waveform Lab126 made for
-    /// dark pages (FBInk, KOReader `waveform_night` on Rex and Zelda), as a
-    /// partial update; DU and A2 stay, they only move pixels to black or
-    /// white.
-    fn chrome_waveform(&self, w: Waveform) -> FbWaveform {
-        match w {
-            Waveform::GL16 if self.night.is_some() => FbWaveform::GLKW16,
-            other => FbWaveform(other.mode()),
-        }
-    }
-
     pub fn size(&self) -> (u32, u32) {
         let g = self.fb.geometry();
         (g.width, g.height)
@@ -185,20 +203,27 @@ impl Panel {
     /// Send a UI frame's damage (see the module documentation).
     pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
         for d in damage {
-            let page = content == Content::Page && d.waveform == Waveform::GL16;
-            if page || d.waveform == Waveform::GC16 {
-                // Full-screen, full-mode: clears ghosting.
-                let wf = if page { self.turn } else { FLASH };
-                self.blit_ui_wait(ui, Rect::screen())?;
-                let all = self.fb.full_screen();
-                let m = self.fb.update(all, wf, true)?;
-                self.track(m, if page { "page (menu open)" } else { "flash" });
-            } else {
-                // No wait: the driver latched the last page when it started
-                // it, and the display thread queues behind it by itself.
-                self.blit_ui(ui, d.rect);
-                let wf = self.chrome_waveform(d.waveform);
-                self.display.damage(fb_rect(d.rect), wf, &[]);
+            match plan(d.waveform, content, self.night.is_some(), self.turn) {
+                Request::FullScreen(wf) => {
+                    // Full-screen, full-mode: clears ghosting.
+                    self.blit_ui_wait(ui, Rect::screen())?;
+                    let all = self.fb.full_screen();
+                    let m = self.fb.update(all, wf, true)?;
+                    self.track(
+                        m,
+                        if wf == FLASH {
+                            "flash"
+                        } else {
+                            "page (menu open)"
+                        },
+                    );
+                }
+                Request::Partial(wf) => {
+                    // No wait: the driver latched the last page when it
+                    // started it, and the display thread queues behind it.
+                    self.blit_ui(ui, d.rect);
+                    self.display.damage(fb_rect(d.rect), wf, &[]);
+                }
             }
         }
         Ok(())
@@ -300,4 +325,49 @@ fn log_shown(p: &InFlight, done: Instant) {
         p.label,
         crate::ms(done.saturating_duration_since(p.submitted))
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TURN: FbWaveform = FbWaveform::GLKW16;
+
+    #[test]
+    fn screen_switches_and_night_switch_are_one_mode_8_flash() {
+        for night in [false, true] {
+            for content in [Content::Chrome, Content::Page] {
+                assert_eq!(
+                    plan(Waveform::GC16, content, night, TURN),
+                    Request::FullScreen(FbWaveform::GCK16)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn page_behind_the_menu_goes_out_like_a_turn() {
+        assert_eq!(
+            plan(Waveform::GL16, Content::Page, false, TURN),
+            Request::FullScreen(FbWaveform(9))
+        );
+        assert_eq!(
+            plan(Waveform::GL16, Content::Page, true, FbWaveform(7)),
+            Request::FullScreen(FbWaveform(7)),
+            "the chosen turn waveform, day or night"
+        );
+    }
+
+    #[test]
+    fn chrome_is_partial_and_night_grays_use_glkw16() {
+        let p = |w, night| plan(w, Content::Chrome, night, TURN);
+        assert_eq!(p(Waveform::A2, false), Request::Partial(FbWaveform::A2));
+        assert_eq!(p(Waveform::A2, true), Request::Partial(FbWaveform::A2));
+        assert_eq!(p(Waveform::DU, true), Request::Partial(FbWaveform::DU));
+        assert_eq!(p(Waveform::GL16, false), Request::Partial(FbWaveform::GL16));
+        assert_eq!(
+            p(Waveform::GL16, true),
+            Request::Partial(FbWaveform::GLKW16)
+        );
+    }
 }

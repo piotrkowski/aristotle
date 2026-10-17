@@ -807,7 +807,7 @@ impl App {
             UiEvent::Action { id, .. } => match id {
                 a::RESUME => {
                     if let Some(book) = model.hero_id().map(String::from) {
-                        self.open_book(&book)?;
+                        self.open_from_library(&book)?;
                     }
                 }
                 a::SETTINGS => self.show_settings(Refresh::Full, 0)?,
@@ -822,7 +822,7 @@ impl App {
                     self.show_library(Refresh::Full)?;
                 }
                 id if id >= a::ITEM => match model.target((id - a::ITEM) as usize).cloned() {
-                    Some(Target::Book(book)) => self.open_book(&book)?,
+                    Some(Target::Book(book)) => self.open_from_library(&book)?,
                     Some(Target::Folder(name)) => {
                         self.nav.folder.push(name);
                         self.show_library(Refresh::Full)?;
@@ -861,6 +861,26 @@ impl App {
     }
 
     // --- Reader -----------------------------------------------------------
+
+    /// Open a book from the library. The pressed row already shows the tap
+    /// landed; a first open of a MOBI or AZW3 file converts it (seconds on
+    /// the device), so for those the busy mark joins the release in one DU
+    /// update before the work starts. Every other open is a single flash.
+    fn open_from_library(&mut self, id: &str) -> Result<(), Error> {
+        let slow = self.lib.book(id).is_some_and(|r| {
+            matches!(
+                r.format,
+                aristotle_library::Format::Mobi | aristotle_library::Format::Azw3
+            ) && r.last_opened.is_none()
+        });
+        if slow {
+            if let Screen::Library { view, .. } = &self.screen {
+                self.ui.tree.set_hidden(view.busy, false);
+            }
+            self.render_ui()?;
+        }
+        self.open_book(id)
+    }
 
     fn open_book(&mut self, id: &str) -> Result<(), Error> {
         let Some(rec) = self.lib.book(id).cloned() else {

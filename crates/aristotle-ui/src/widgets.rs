@@ -345,6 +345,28 @@ impl Widget for Battery {
     }
 }
 
+/// The busy mark: a black tab with three white dots, square-cornered and
+/// pixel-aligned so it is pure black and white and goes out with DU. Shown
+/// in the status line when an action will take longer than about 300 ms.
+pub struct BusyMark;
+
+impl Widget for BusyMark {
+    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
+        c.constrain(Size::new(72, 28))
+    }
+
+    fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let p = &mut *cx.painter;
+        p.fill_rect(r, BLACK);
+        let d = 8;
+        let gap = (r.w - 3 * d) / 4;
+        for i in 0..3 {
+            let x = r.x + gap + i * (d + gap);
+            p.fill_rect(Rect::new(x, r.y + (r.h - d) / 2, d, d), WHITE);
+        }
+    }
+}
+
 /// An on/off switch. Pure black and white in both states, so flipping it
 /// is a single DU update.
 pub struct Toggle {
