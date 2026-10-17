@@ -30,11 +30,13 @@
   </div>
 
   <div class="prose">
-    <h2 id="workspaces">Two workspaces</h2>
-    <p>The root workspace holds the pure-Rust crates (hardware layer, UI toolkit, library, measurement tools) and builds anywhere with <code>cargo test</code>. The native workspace holds the renderer and the reader app. It links Plato's engine and C libraries, which <code>tools/build-plato.sh</code> builds once with Zig. Keep builds in <code>$ARISTOTLE_CACHE/</code> and point <code>CARGO_TARGET_DIR</code> and <code>TMPDIR</code> there.</p>
-<pre><code>cargo test                                     # root workspace
+    <h2 id="workspaces">One workspace, two build paths</h2>
+    <p>Plain <code>cargo test</code> checks the pure-Rust default members. The renderer and reader app also belong to this workspace, but need Plato's C libraries. From the repository root:</p>
+<pre><code>. devloop/env.sh
+export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
+cargo test
 
-# native workspace on the host: C libraries once, about 6 minutes on 2 cores
+# Build the native members' C libraries once for the host.
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
 CARGO_CMD=test tools/build-render.sh host</code></pre>
 

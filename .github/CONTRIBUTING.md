@@ -31,12 +31,11 @@ Builds go to `$ARISTOTLE_CACHE` (default `~/.cache/aristotle`), since `/tmp`
 is a small RAM disk on many hosts. Do the same for your own cargo runs:
 
 ```sh
+git clone --recurse-submodules https://github.com/piotrkowski/aristotle
+cd aristotle
 . devloop/env.sh   # ARISTOTLE_CACHE, and TMPDIR inside it
 export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
-```
 
-```sh
-git clone --recurse-submodules https://github.com/piotrkowski/aristotle && cd aristotle
 cargo test                                                   # default members
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview   # every screen as PNG
 

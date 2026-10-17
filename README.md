@@ -36,7 +36,7 @@ Aristotle runs in place of the stock interface. It makes no network connections 
 | Measured on a Paperwhite 4 | Stock | Aristotle |
 |---|--:|--:|
 | Page turn, from release | 0.57 s | 0.44 s |
-| Open a book | 0.8 s | 0.56 s |
+| Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
 | Memory used by the interface | about 200 MB | 14.5 MB |
 
 See [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html) and [docs/native-vs-aristotle.md](docs/native-vs-aristotle.md) for the method.
@@ -57,7 +57,7 @@ Aristotle is alpha software.
 
 The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). The [install guide](https://piotrkowski.github.io/aristotle/guides/install.html) covers building on Linux, copying over USB and uninstalling.
 
-The stock interface stays installed and comes back when you quit Aristotle or reboot. Reading positions and highlights are shared with the stock reader through its sidecar files and `My Clippings.txt` ([docs/library.md](docs/library.md)).
+The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
 Uninstalling removes everything Aristotle installed, including its SSH key. To disable Aristotle without SSH, choose KUAL › Aristotle › USB drive mode for 10 minutes, create an empty file named `aristotle-disable` at the root of the drive and restart the Kindle. The stock system then starts instead.
 
