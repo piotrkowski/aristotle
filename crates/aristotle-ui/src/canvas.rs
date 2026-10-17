@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! 8-bit grayscale canvas and clipped drawing primitives.
 //!
 //! The canvas mirrors the PW4 framebuffer format (8 bpp, 0 black, 255

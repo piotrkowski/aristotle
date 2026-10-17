@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parsing the Lab126 EPDC driver's debug log from `/dev/kmsg`.
 //!
 //! Writing 1 to `/sys/devices/soc0/soc/2000000.aips-bus/20f4000.epdc/mxc_epdc_debug`

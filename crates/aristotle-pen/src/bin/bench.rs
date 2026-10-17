@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Replays a recorded touch session at its original timing through [`Pen`] and
 //! measures, for every event, the time from its (replayed) kernel timestamp to
 //! the moment the EPDC reports the update showing it as complete.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Frame raw Aristotle panel captures for the README and docs.
 
 Usage: python compose.py manifest.toml

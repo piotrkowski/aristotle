@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shaping and glyph rasterization with `swash`.
 //!
 //! Shaping runs OpenType GSUB and GPOS, so kerning pairs, ligatures and

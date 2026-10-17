@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Stub of glibc's `getent ahostsv4 HOST` for the test, in its output format.
 # FAKE_DNS_DOWN=HOST makes that host fail, as during a DNS hiccup.
 [ "${FAKE_DNS_DOWN:-}" = "$2" ] && exit 2

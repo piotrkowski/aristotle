@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! EPDC streaming experiment: how does A2 latency behave when updates arrive
 //! continuously, as they do while a finger draws?
 //!

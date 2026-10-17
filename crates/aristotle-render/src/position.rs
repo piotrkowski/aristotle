@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mapping between reading positions in the library index and locations in
 //! Plato's engine.
 //!

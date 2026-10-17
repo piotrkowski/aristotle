@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Paragraph layout: line breaking, hyphenation and justification.
 //!
 //! Break opportunities come from the Unicode line breaking algorithm

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The persistent library index.
 //!
 //! One JSON file, `library.json`, in the data directory. JSON over a binary

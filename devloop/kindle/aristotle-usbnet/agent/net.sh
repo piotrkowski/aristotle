@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Aristotle's Wi-Fi policy (docs/network.md). Two modes, kept in
 # /var/local/aristotle/net-mode:
 #
@@ -262,7 +263,7 @@ apply) apply ;;
 tick) tick ;;
 status) status ;;
 *)
-    sed -n '15,29p' "$0"
+    sed -n '16,30p' "$0"
     exit 2
     ;;
 esac

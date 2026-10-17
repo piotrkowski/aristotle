@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading interactions in the app: selecting words, the dictionary,
 //! footnotes, highlights, bookmarks, the contents, "go to".
 //!

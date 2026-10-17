@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Getting pixels onto the PW4 panel, by the rules measured on the device
 //! (`docs/eink-rendering.md`, `docs/native-vs-aristotle.md`):
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Library home, and the folder and series shelves under it.
 //!
 //! One job: get back into a book, or find the next one. So the home screen

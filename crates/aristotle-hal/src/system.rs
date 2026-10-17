@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! System facts for the settings screen: storage, memory, firmware, local
 //! time, and the USB mode of the device agent.
 //!

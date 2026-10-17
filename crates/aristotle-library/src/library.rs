@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The library: an index plus a cover cache in one data directory, and the
 //! incremental scanner that keeps them in step with the books on disk.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `aristotle-library-cli`: drive the library from a shell, on the host or
 //! over SSH on the device. Argument parsing is hand-rolled to keep the
 //! static ARM binary small.

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Build a crate for the Kindle, copy it over the USB network, run it, and save
 # a PNG of the e-ink framebuffer.
 #   devloop/host/run.sh [PACKAGE[:BINARY]] [ARGS...]     (default: aristotle-hello)

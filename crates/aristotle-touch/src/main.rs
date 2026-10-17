@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Touch and pen-feel test. Each finger draws a stroke; finger 0 is thick,
 //! finger 1 thin. Strokes go out as A2 updates (about 144 ms on the PW4)
 //! through a pipelined `Presenter`, so input is never blocked by the panel.

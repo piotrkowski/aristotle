@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Lookups on a thread of their own.
 //!
 //! A lookup is normally a few milliseconds, but the first one after a

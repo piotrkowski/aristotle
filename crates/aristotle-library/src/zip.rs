@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Read-only ZIP access for EPUB and CBZ.
 //!
 //! The `zip` crate brings compression back ends, encryption and writers we do

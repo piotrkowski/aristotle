@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parser for the stock Kindle's `My Clippings.txt`.
 //!
 //! The format, read from firmware 5.13.6 (`ReaderSDK-impl.jar`, class

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Run the Aristotle reader in place of the stock UI, then bring the stock UI
 # back. Lives next to the `aristotle` binary and its data/ directory (the app
 # bundle from tools/build-render.sh unpacks all of them into one folder):

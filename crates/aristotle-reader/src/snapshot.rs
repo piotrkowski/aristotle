@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Page snapshots: the page a book was left at, kept on disk, so reopening
 //! the book puts that page on the panel before any layout.
 //!

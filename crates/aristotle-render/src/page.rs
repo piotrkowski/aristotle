@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Full-screen 8-bit page buffers, and the header and footer drawn on them.
 
 use std::fs::File;

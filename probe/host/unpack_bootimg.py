@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Split an Android v0 boot image (as shipped in Kindle update packages) into
 kernel, ramdisk and second-stage blobs, then decompress the kernel and pull out
 its embedded config (IKCONFIG) and version string when present.

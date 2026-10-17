@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Putting rendered pages on the PW4 panel.
 //!
 //! The page turn copies the stock reader exactly: one full-mode update of the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Dictionary lookup: StarDict dictionaries, chosen by the language of the
 //! word and the book.
 //!

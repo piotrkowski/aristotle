@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading StarDict dictionaries: `.ifo`, `.idx`, `.syn` and `.dict(.dz)`.
 //!
 //! Plato's own dictionary code reads the dictd format, not StarDict, so this

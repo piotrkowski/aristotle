@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Font faces and families.
 //!
 //! A family maps (bold, italic) to a face. Missing styles are synthesized

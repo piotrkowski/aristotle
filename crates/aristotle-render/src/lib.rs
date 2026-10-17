@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aristotle's e-book page renderer for the Kindle Paperwhite 4.
 //!
 //! It drives Plato's document engine (`plato-core`, AGPL-3.0, by Bastien

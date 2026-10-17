@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hyphenation hooks.
 //!
 //! Justified text in a narrow column needs hyphenation or it fills with

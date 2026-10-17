@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Prints battery status and ramps the frontlight up and back down, restoring
 //! the original brightness. Checks the power module against the real device.
 

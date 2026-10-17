@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Page geometry and typesetting defaults for the Kindle Paperwhite 4.
 
 /// Everything that decides how a page looks. [`Style::pw4`] holds the

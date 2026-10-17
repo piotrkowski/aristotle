@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Desktop preview: renders every screen to PNG, in day and night mode.
 //!
 //! Every screen goes through the same `Ui` the device runs, including

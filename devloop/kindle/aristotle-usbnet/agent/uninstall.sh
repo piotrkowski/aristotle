@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Remove the Aristotle agent completely and give USB back to volumd.
 set -u
 S=/var/local/aristotle

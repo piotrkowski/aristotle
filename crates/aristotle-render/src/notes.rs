@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Footnotes: what a tapped link points at, as text for a popup.
 //!
 //! Plato's engine keeps only a link's `href`, so the note is found again in

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MOBI, AZW3 and PalmDOC metadata from the PalmDB header, record 0 and
 //! the EXTH block.
 //!

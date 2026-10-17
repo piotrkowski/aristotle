@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # One-time migration of a device agent installed before the project's rename
 # (upstart job "aristotle", state in /var/local/aristotle) to the Aristotle agent
 # (job "aristotle-agent", state in /var/local/aristotle). Run as root, from

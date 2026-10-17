@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! What the device knows about itself, read fresh for the status line and
 //! the settings screen: clock, battery, storage, USB mode, versions.
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Exporting highlights: the stock Kindle's `My Clippings.txt` and a clean
 //! Markdown file per book.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading speed, for "minutes left in the chapter".
 //!
 //! Every forward page turn after a plausible time on the page (5 s to 10

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Remote control for the Aristotle agent (run over SSH as root).
 #   aristotlectl status            agent, USB mode, network, stock GUI, last log lines
 #   aristotlectl mode net          USB network + SSH (default)
@@ -63,7 +64,7 @@ reboot)
     reboot
     ;;
 *)
-    sed -n '2,13p' "$0"
+    sed -n '3,14p' "$0"
     exit 2
     ;;
 esac

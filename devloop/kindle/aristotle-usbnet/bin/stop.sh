@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Undo start.sh: stop SSH, drop the firewall holes and unload the network gadget.
 # Replug the cable (or reboot) to get USB drive mode back.
 set -u

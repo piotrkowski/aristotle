@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Snapshots made ahead of time, so almost every open is a snapshot open.
 //!
 //! A book gets a [snapshot](crate::snapshot) when it is left, but not one

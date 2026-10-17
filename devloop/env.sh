@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Host settings shared by the scripts in devloop/ and tools/. Source it:
 #
 #   . devloop/env.sh

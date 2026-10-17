@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Stroke rendering for touch input on e-ink, plus the record/replay format
 //! used to tune it.
 //!

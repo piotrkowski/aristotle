@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Switch the USB port from mass storage to a network gadget and start SSH,
 # so development continues over the same cable without replugging.
 # Everything here is runtime state only: a reboot restores stock behaviour.

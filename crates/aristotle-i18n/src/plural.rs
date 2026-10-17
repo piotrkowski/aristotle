@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Plural rules, per language code.
 //!
 //! The build script includes this file too, so the forms it requires of a

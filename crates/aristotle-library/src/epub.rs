@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! EPUB 2 and 3 metadata, plus CBZ which shares the ZIP plumbing.
 //!
 //! The path is `META-INF/container.xml` → the first rootfile with the OPF

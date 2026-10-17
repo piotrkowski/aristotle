@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aristotle's UI languages.
 //!
 //! Every user-visible string of the UI lives in `locales/<code>.json`.

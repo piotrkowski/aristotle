@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Highlights and bookmarks: how they are stored in the library index, and
 //! exported for note-taking tools.
 //!

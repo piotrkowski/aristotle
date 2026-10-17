@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reader page and reader menu.
 //!
 //! The page is the book and almost nothing else: a quiet running head,

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Convert a raw 8-bpp PW4 framebuffer dump into a PNG of the visible area.
 
 Usage: fb2png.py RAW PNG [STRIDE WIDTH HEIGHT Y_OFFSET]

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Dictionary tests on small StarDict dictionaries generated here, in the
 //! shape of the Wiktionary exports (HTML entries, inflected forms as
 //! synonyms, dictzip). The real dictionaries are not committed; an ignored
