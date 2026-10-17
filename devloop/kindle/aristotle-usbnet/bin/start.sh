@@ -3,12 +3,20 @@
 # Switch the USB port from mass storage to a network gadget and start SSH,
 # so development continues over the same cable without replugging.
 # Everything here is runtime state only: a reboot restores stock behaviour.
+#
+# Refuses to run, and changes nothing, unless the device is a Kindle
+# Paperwhite 4 (2018) on firmware 5.13.x (../guard.sh). ARISTOTLE_FORCE=1
+# skips that check, for developers trying another model or firmware on
+# purpose, at their own risk.
 set -u
 umask 022
 
-BASE=/mnt/us/extensions/aristotle-usbnet
-KO=/mnt/us/koreader
-PIDFILE=/var/run/aristotle-dropbear.pid
+# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# is empty on the device.
+R=${AGENT_TEST_ROOT:-}
+BASE=$R/mnt/us/extensions/aristotle-usbnet
+KO=$R/mnt/us/koreader
+PIDFILE=$R/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
 # The same arbitrary, locally administered MACs as agent/boot.sh.
 DEV_MAC=02:61:72:69:73:01
@@ -27,6 +35,9 @@ fail() {
     exit 1
 }
 
+[ -f "$BASE/guard.sh" ] || fail "guard.sh missing in extension"
+. "$BASE/guard.sh"
+device_guard || exit 1
 [ -x "$KO/dropbear" ] || fail "KOReader dropbear not found"
 [ -s "$BASE/authorized_keys" ] || fail "authorized_keys missing in extension"
 

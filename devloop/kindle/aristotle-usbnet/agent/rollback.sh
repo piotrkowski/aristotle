@@ -12,7 +12,8 @@
 #  2. In one `mntroot rw` window: removes /etc/upstart/aristotle-agent.conf and
 #     restores the old job file from the backup.
 #  3. Moves /var/local/aristotle (if the migration created it) into the backup
-#     directory, carrying the USB mode and the takeover flag back; restores
+#     directory, carrying the USB mode and the takeover flag
+#     (/var/run/aristotle-takeover) back; restores
 #     /var/local/aristotle from the backup if it is gone.
 #  4. Re-enables the old KUAL extension and starts the old job.
 set -u
@@ -83,13 +84,13 @@ initctl reload-configuration 2> /dev/null
 [ -d "$OLD_S" ] || { [ -d "$B/old-state" ] && cp -a "$B/old-state" "$OLD_S"; }
 if [ -d "$S" ] && grep -qx new-state "$B/journal"; then
     if [ -d "$OLD_S" ]; then
-        for f in usb-mode takeover; do
-            if [ -e "$S/$f" ]; then cp -p "$S/$f" "$OLD_S/$f"; else rm -f "$OLD_S/$f"; fi
-        done
+        if [ -e "$S/usb-mode" ]; then cp -p "$S/usb-mode" "$OLD_S/usb-mode"; else rm -f "$OLD_S/usb-mode"; fi
+        if [ -e "$R/var/run/aristotle-takeover" ]; then touch "$OLD_S/takeover"; else rm -f "$OLD_S/takeover"; fi
     fi
     n=1
     while [ -e "$B/new-state.$n" ]; do n=$((n + 1)); done
     mv "$S" "$B/new-state.$n" && say "rollback: moved $S to $B/new-state.$n"
+    rm -f "$R/var/run/aristotle-takeover"
 fi
 
 # 4. The old extension and job.

@@ -20,10 +20,22 @@
 # refuses unless the stock UI is fully up, and holds poll_daemons while frozen.
 # It is still unproven; don't build on it.
 #
-# Nothing is written to the root filesystem: everything here is runtime state,
-# so a reboot always returns the stock system. Kept running on purpose: powerd
+# Nothing is written to persistent storage: everything here is runtime state,
+# so a reboot in the middle of a takeover, or after it, always returns the
+# stock system. The flag that keeps the agent's watchdog from restarting the
+# stock GUI, /var/run/aristotle-takeover, is on the /var tmpfs too. Kept running on purpose: powerd
 # (power keys, battery, suspend), volumd (USB mass storage), wifid, lipcd and
 # dbus, plus our USB network and SSH.
+#
+# start and pause refuse to run, and change nothing, unless the device is a
+# Kindle Paperwhite 4 (2018) on firmware 5.13.x (aristotle-usbnet/guard.sh,
+# looked for next to this script, then in the installed KUAL extension).
+# ARISTOTLE_FORCE=1 skips that check, for developers trying another model or
+# firmware on purpose, at their own risk. stop, resume and status always run.
+
+# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# is empty on the device.
+R=${AGENT_TEST_ROOT:-}
 
 # Jobs stopped by `stop lab126_gui`: x, framework (cvm), pillow, kb,
 # kppreader, webreader, kfxreader, ... Their "stop on" stanzas follow it.
@@ -31,15 +43,29 @@ GUI=lab126_gui
 # Background services that only serve the stock UI or Amazon's cloud.
 # Same list KOReader stops to reclaim RAM, plus telemetry.
 EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
-# The agent's state directory, where its watchdog looks for the takeover flag.
-# Agents installed before the project's rename use /var/local/aristotle until
-# the device has run agent/migrate.sh; drop that fallback once none does.
-AGENT_DIRS="/var/local/aristotle /var/local/aristotle"
-agent_dir() {
-    for d in $AGENT_DIRS; do
-        [ -x "$d/boot.sh" ] && { echo "$d"; return; }
+TAKEOVER=$R/var/run/aristotle-takeover
+# An agent installed before the project's rename (until the device has run
+# agent/migrate.sh) looks for the flag in its persistent state directory
+# instead, where a reboot does not clear it; its watchdog then stays off
+# until the next stop. Drop this once no device runs it.
+LEGACY=$R/var/local/aristotle
+# The device guard: beside this script in the app bundle and the KUAL
+# extension, one level down in the repository, or in the installed extension
+# when the script comes on stdin (sh -s).
+guard() {
+    [ "${ARISTOTLE_FORCE:-}" = 1 ] && return 0
+    here=
+    case "$0" in */takeover.sh) here=${0%/*} ;; takeover.sh) here=. ;; esac
+    for g in ${here:+"$here/guard.sh" "$here/aristotle-usbnet/guard.sh"} \
+        "$R/mnt/us/extensions/aristotle-usbnet/guard.sh"; do
+        if [ -f "$g" ]; then
+            . "$g"
+            device_guard
+            return
+        fi
     done
-    echo /var/local/aristotle
+    echo "takeover: guard.sh not found; refusing (ARISTOTLE_FORCE=1 overrides)" >&2
+    return 1
 }
 # Processes frozen by `pause`: everything that would draw over us.
 FROZEN="awesome cvm AaMenuApplication KindleContentDownloadManagerApplication"
@@ -57,10 +83,11 @@ state() {
 
 case "${1:-status}" in
 start)
+    guard || exit 1
     mem
     # Tell the agent's watchdog that the stock GUI is down on purpose.
-    dir=$(agent_dir)
-    mkdir -p "$dir" && touch "$dir/takeover"
+    touch "$TAKEOVER"
+    [ -x "$LEGACY/boot.sh" ] && touch "$LEGACY/takeover"
     stop "$GUI" > /dev/null 2>&1
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
@@ -78,9 +105,7 @@ start)
     mem
     ;;
 stop)
-    for d in $AGENT_DIRS; do
-        rm -f "$d/takeover"
-    done
+    rm -f "$TAKEOVER" "$LEGACY/takeover" "$R/var/local/aristotle/takeover"
     for job in $EXTRA; do
         start "$job" > /dev/null 2>&1
     done
@@ -88,6 +113,7 @@ stop)
     echo "takeover: stock GUI starting (takes about 20 s)"
     ;;
 pause)
+    guard || exit 1
     # Freezing a GUI that is still starting wedged it until reboot: require
     # the framework, the window manager and Pillow to be running.
     for p in cvm awesome pillowd; do

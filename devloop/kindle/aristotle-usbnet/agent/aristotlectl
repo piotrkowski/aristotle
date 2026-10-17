@@ -9,18 +9,24 @@
 #                                  only the hosts in /var/local/aristotle/net-allow
 #   aristotlectl net status        mode, allowed addresses, rule counters
 #   aristotlectl takeover on|off   tell the watchdog the stock GUI is down on purpose
+#                                  (until off or the next reboot)
 #   aristotlectl gui-restart       restart the stock GUI now
 #   aristotlectl log [N]           last N log lines (default 40)
 #   aristotlectl reboot            reboot; the agent brings SSH back on boot
 set -u
-S=/var/local/aristotle
+# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# is empty on the device.
+R=${AGENT_TEST_ROOT:-}
+S=$R/var/local/aristotle
+# On the /var tmpfs: a reboot always clears it.
+TAKEOVER=$R/var/run/aristotle-takeover
 
 case "${1:-status}" in
 status)
     initctl status aristotle-agent 2> /dev/null || echo "aristotle-agent job not installed"
     printf 'usb-mode: %s\n' "$(cat "$S/usb-mode" 2> /dev/null || echo net)"
     printf 'net: %s\n' "$(cat "$S/net-mode" 2> /dev/null || echo off)"
-    printf 'takeover: %s\n' "$([ -e "$S/takeover" ] && echo on || echo off)"
+    printf 'takeover: %s\n' "$([ -e "$TAKEOVER" ] && echo on || echo off)"
     printf 'stock GUI: cvm %s, Xorg %s\n' \
         "$(pgrep -f /usr/java/bin/cvm > /dev/null && echo up || echo down)" \
         "$(pgrep -x Xorg > /dev/null && echo up || echo down)"
@@ -47,8 +53,8 @@ net)
     ;;
 takeover)
     case "${2:-}" in
-    on) touch "$S/takeover" ;;
-    off) rm -f "$S/takeover" ;;
+    on) touch "$TAKEOVER" ;;
+    off) rm -f "$TAKEOVER" ;;
     *) echo "usage: aristotlectl takeover on|off" >&2; exit 2 ;;
     esac
     ;;
@@ -64,7 +70,7 @@ reboot)
     reboot
     ;;
 *)
-    sed -n '3,14p' "$0"
+    sed -n '3,15p' "$0"
     exit 2
     ;;
 esac

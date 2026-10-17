@@ -27,7 +27,21 @@ installation (`devloop/kindle/aristotle-usbnet/`):
   someone who has both the device and the key.
 - **One file on the root filesystem.** The agent installs
   `/etc/upstart/aristotle-agent.conf`; everything it runs lives in
-  `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes it out again.
+  `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes all of it out
+  again: the job, the state directory with the agent's copy of the key,
+  migration backups, and the agent's key in KOReader's
+  `settings/SSH/authorized_keys` and in the extension. Only the log stays, as
+  `aristotle-agent.log` on the USB drive.
+- **A kill switch without SSH.** A file named `aristotle-disable` at the root
+  of the USB drive keeps the agent from starting at the next boot: no USB
+  network, no SSH, no watchdog, and USB left to the stock system. While the
+  agent runs, the USB port is a network link; KUAL > Aristotle > USB drive
+  mode for 10 minutes makes it a drive to create the file on.
+- **One device.** The scripts that change the device outside the USB drive
+  (installing the agent, the migration, the manual USB network, the
+  takeover) refuse to run on anything but a Kindle Paperwhite 4 (2018) on
+  firmware 5.13.x, read from `/proc/usid` and `/etc/prettyversion.txt`.
+  `ARISTOTLE_FORCE=1` overrides that, for developers who mean it.
 - **Wi-Fi is the stock system's by default.** In the default `off` mode the
   agent adds no Wi-Fi rules, and the stock firewall lets every process,
   Amazon's included, connect out. The optional `scoped` mode
@@ -40,6 +54,11 @@ installation (`devloop/kindle/aristotle-usbnet/`):
   tick. [docs/network.md](../docs/network.md) has the details and the checks
   that confirm it on a device. A way through the scoped policy that its
   documented limits do not cover is a security issue.
+
+The device probe (`probe/device/aristotle-probe`) is read-only, but its
+output identifies the device and its owner (serial number, MAC addresses,
+Wi-Fi networks): review it before sharing any of it, never attach it to a
+public issue as it is, and never share the e-ink waveforms it can copy.
 
 Books are parsed by Plato's engine (Rust) and MuPDF (C), which read
 untrusted files. A malformed book that crashes the reader or worse is a

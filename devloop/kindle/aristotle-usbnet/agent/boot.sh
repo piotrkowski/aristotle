@@ -2,14 +2,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Aristotle agent, started by /etc/upstart/aristotle-agent.conf on every boot.
 #
-# Keeps the device reachable and healthy without anyone touching it:
+# Kill switch: a file named aristotle-disable at the root of the USB drive
+# (/mnt/us/aristotle-disable) stops the agent before it does anything on this
+# boot: no USB network, no SSH, no watchdog, no Wi-Fi policy. USB stays with
+# volumd and the stock system. It is the way out without SSH: connect the
+# Kindle as a USB drive, create the file, eject and reboot. While the agent
+# runs, the USB port is a network link, so switch it to drive mode first
+# (KUAL > Aristotle > USB drive mode for 10 minutes, or the reader's
+# settings). Delete the file and reboot to have the agent back.
+#
+# Otherwise it keeps the device reachable and healthy without anyone touching
+# it:
 # - USB network (g_ether, usb0 at 192.168.15.244) and key-only SSH (KOReader's
 #   dropbear) whenever the USB mode is "net", the default;
 # - "storage" mode for a limited time on request (aristotlectl mode storage N),
 #   then back to net automatically;
 # - a watchdog that restarts the stock GUI if it stays dead for 5 minutes, and
 #   reboots at most once an hour if that does not help. It stays out of the
-#   way while Aristotle has taken over (/var/local/aristotle/takeover exists);
+#   way while Aristotle has taken over (/var/run/aristotle-takeover exists;
+#   /var is a tmpfs, so a reboot clears it and the watchdog is back);
 # - the Wi-Fi policy (net.sh, docs/network.md): nothing in "off", the default;
 #   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
 #   address, the resolvers or the list change.
@@ -19,16 +30,26 @@
 set -u
 umask 022
 
-S=/var/local/aristotle
+# R stands in for / in the host-side test (devloop/kindle/tests/agent.sh); it
+# is empty on the device.
+R=${AGENT_TEST_ROOT:-}
+S=$R/var/local/aristotle
 LOG=$S/log
-KO=/mnt/us/koreader
-PIDFILE=/var/run/aristotle-dropbear.pid
+KO=$R/mnt/us/koreader
+PIDFILE=$R/var/run/aristotle-dropbear.pid
+DISABLE=$R/mnt/us/aristotle-disable
+TAKEOVER=$R/var/run/aristotle-takeover
+# How long to wait for the userstore (/mnt/us) before giving up on the kill
+# switch check.
+MOUNT_WAIT=${MOUNT_WAIT:-60}
 DEV_IP=192.168.15.244
 # Fixed MACs for both ends of the USB link, so the host's NetworkManager
-# profile (devloop/host/setup-host-net.sh) can match the interface. The bytes
-# are arbitrary: any unicast address with the locally administered bit set
-# (0x02 in the first byte) works. bin/start.sh and setup-host-net.sh repeat
-# them; change all three together.
+# profile (devloop/host/setup-host-net.sh) can match the interface: 02, the
+# locally administered unicast prefix, then "aris" in ASCII and the end of
+# the link. Any locally administered unicast address would do. bin/start.sh
+# and setup-host-net.sh repeat them; change all three together. Earlier
+# versions used 02:61:72:69:73:01 and :02; a g_ether loaded with those keeps
+# them until it is loaded again (a reboot).
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
 TICK=15
@@ -125,7 +146,7 @@ gui_alive() {
 gui_bad=0
 gui_good=0
 gui_check() {
-    if [ -e "$S/takeover" ]; then
+    if [ -e "$TAKEOVER" ]; then
         gui_bad=0
         return
     fi
@@ -134,7 +155,7 @@ gui_check() {
         gui_good=$((gui_good + TICK))
         return
     fi
-    up=$(cut -d. -f1 /proc/uptime)
+    up=$(cut -d. -f1 "$R/proc/uptime")
     [ "$up" -lt "$GUI_GRACE" ] && return
     gui_bad=$((gui_bad + TICK))
     [ "$gui_bad" -lt "$GUI_GRACE" ] && return
@@ -156,7 +177,33 @@ gui_check() {
     fi
 }
 
-log "agent: boot (uptime $(cut -d' ' -f1 /proc/uptime) s)"
+log "agent: boot (uptime $(cut -d' ' -f1 "$R/proc/uptime") s)"
+
+# The kill switch, before anything else. The userstore may be mounted a
+# moment after the agent starts.
+i=0
+until grep -q ' /mnt/us ' "$R/proc/mounts" 2> /dev/null; do
+    if [ $i -ge "$MOUNT_WAIT" ]; then
+        log "agent: /mnt/us not mounted after ${MOUNT_WAIT}s; kill switch not checked"
+        break
+    fi
+    sleep 1
+    i=$((i + 1))
+done
+if [ -e "$DISABLE" ]; then
+    log "agent: /mnt/us/aristotle-disable exists; not starting (no USB network, SSH, watchdog or Wi-Fi policy). Delete it and reboot to enable the agent."
+    # A network setting the agent left must not keep volumd from drive mode.
+    lipc-set-prop com.lab126.volumd useUsbForNetwork 0 2> /dev/null
+    # Idle instead of exiting: upstart respawns a job whose process ends.
+    exec sleep 2147483647
+fi
+
+# Earlier versions kept the takeover flag here, on persistent storage, where a
+# reboot during a takeover left it behind and the watchdog off for good.
+if [ -e "$S/takeover" ]; then
+    rm -f "$S/takeover"
+    log "agent: removed a takeover flag left in $S"
+fi
 # iptables rules do not survive a reboot; make the first tick apply the
 # Wi-Fi policy again.
 rm -f "$S/net-sig"

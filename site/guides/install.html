@@ -75,7 +75,7 @@ devloop/host/install-extensions.sh</code></pre>
 
     <h2 id="uninstall">Uninstall</h2>
     <ol>
-      <li>On the Kindle: <strong>KUAL › Aristotle › Remove agent</strong>.</li>
+      <li>On the Kindle: <strong>KUAL › Aristotle › Remove agent completely</strong>. It removes the agent, its state and its SSH key, and leaves its log on the Kindle's storage as <code>aristotle-agent.log</code>.</li>
       <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots) and <code>extensions/aristotle-*</code> from the Kindle's storage.</li>
     </ol>
     <p>Removing the agent takes away everything it put on the device, including its SSH key. Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>

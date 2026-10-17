@@ -16,7 +16,8 @@ Every fact here is marked by source:
 | Board DTBs | `imx6sll-moonshine-wfo` (Wi-Fi only), `imx6sll-moonshine-wan` (LTE), plus the generic `imx6sll-rex` and a stub `imx6sll-jaeger-wfo` [fw] |
 | SoC | NXP i.MX6 SoloLite-Lite (imx6sll), one Cortex-A9 core with NEON and VFPv3, PL310 L2 cache [fw] |
 | RAM | 512 MB. The DT `memory` node says 2 GB at `0x80000000`; the bootloader fixes it up. The Falcon BIOS sits at `0x9ffc0000`, just below 512 MB [fw] |
-| Firmware | 5.13.6 (373198 038), jailbroken, KUAL and MRPI installed, KOReader installed [dev] |
+| Firmware | 5.13.6 (373198 038), jailbroken, KUAL and MRPI installed, KOReader installed [dev]. `/etc/prettyversion.txt` starts with `Kindle 5.13.6` [dev] |
+| Identification | `/proc/usid` holds the serial number. For serials that do not start with `B` or `9`, characters 4–6 are the device code: `0PP` on ours [dev]; KOReader lists 21 PW4 codes (`0PP`, `0T1`–`0T7`, `0TJ`–`0TN`, `102`, `103`, `16Q`–`16V`) [ko]. The device scripts check both (`devloop/kindle/aristotle-usbnet/guard.sh`) |
 | Kernel | `Linux 4.1.15-lab126 #1 SMP PREEMPT Thu Apr 8 09:28:53 UTC 2021`, gcc 4.9.1, `HZ=100` [fw][dev] |
 
 ## Boot chain
@@ -187,4 +188,5 @@ The times above are for an idle panel; A2 alone measures 120–144 ms. Under a s
 - `x` (Xorg, awesome, `lxinit`, and `blanket`, about 22 MB together) keeps running, because its job only stops on `stopping dbus or stop_x`. We leave it on purpose for now: `blanket -t splash screensaver langpicker blankwindow` looks like what draws the screensaver when `powerd` suspends, so removing it should wait until we own power management. This is inferred from the command line, not tested.
 - `powerd`, `volumd`, `wifid`, `lipcd`, `dbus`, our USB network and SSH keep running.
 - `start lab126_gui` brings the stock UI back, showing the boot splash with a progress bar while the framework starts.
+- Everything is runtime state. The flag that keeps the agent's watchdog from restarting the stock GUI, `/var/run/aristotle-takeover`, is on the `/var` tmpfs, so a reboot in the middle of a takeover comes back to the stock UI with the watchdog on. `start` and `pause` refuse anything but a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
 - Stroke latency is the same with the stock GUI stopped (p50 194–197 ms against 199 ms), so the panel, not CPU contention, sets it.

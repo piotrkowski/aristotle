@@ -10,13 +10,22 @@
 # An SSH session survives it: the running dropbear is handed to the new agent,
 # not restarted.
 #
-#  1. Checks: root, an old agent present, no new one, USB mode "net", the new
-#     agent's files beside this script. Nothing has changed if one fails.
+# The USB network is handed over as it runs too: g_ether keeps the MACs the
+# old agent loaded it with (02:61:72:69:73:01 and :02), until the next
+# reboot loads it with the new ones (02:61:72:69:73:01 and :02). Re-run
+# devloop/host/setup-host-net.sh on the host after the migration: it keeps
+# a profile for the old host MAC as well as the new one, so the host stays
+# connected now and after the reboot.
+#
+#  1. Checks: a PW4 on firmware 5.13.x (../guard.sh), root, an old agent
+#     present, no new one, USB mode "net", the new agent's files beside this
+#     script. Nothing has changed if one fails.
 #  2. Backup to /var/local/aristotle-migrate/<UTC stamp>/: the old job file
 #     and a copy of /var/local/aristotle.
-#  3. Copies the state (key, USB mode, takeover and watchdog flags, log) into
-#     /var/local/aristotle and installs the agent's scripts there. The old
-#     directory is left as it was.
+#  3. Copies the state (key, USB mode, watchdog flags, log) into
+#     /var/local/aristotle and installs the agent's scripts there; the old
+#     takeover flag becomes /var/run/aristotle-takeover, which a reboot
+#     clears. The old directory is left as it was.
 #  4. Stops the old job and hands its dropbear pid file to the new agent.
 #  5. In one `mntroot rw` window: installs /etc/upstart/aristotle-agent.conf
 #     and removes /etc/upstart/aristotle.conf.
@@ -51,7 +60,7 @@ PIDFILE=$R/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
 # FILES: what install.sh puts in $S. STATE: what the old agent kept there.
 FILES="boot.sh aristotlectl net.sh"
-STATE="authorized_keys usb-mode takeover last-reboot gui-restarted log log.1"
+STATE="authorized_keys usb-mode last-reboot gui-restarted log log.1"
 VERIFY_SECS=${VERIFY_SECS:-30}
 POLL_SECS=${POLL_SECS:-3}
 # The agent ticks every 15 s; dropbear and usb0 may need one tick.
@@ -113,6 +122,10 @@ case "${CONFIRM:-}:${1:-}" in
 yes:* | *:kual) ;;
 *) echo "This replaces the agent's upstart job on the root filesystem. Run with CONFIRM=yes." >&2; exit 2 ;;
 esac
+# Only on the device it was written for (../guard.sh; ARISTOTLE_FORCE=1 skips).
+[ -f "$EXT/guard.sh" ] || { echo "migrate: $EXT/guard.sh missing; nothing changed" >&2; exit 1; }
+. "$EXT/guard.sh"
+device_guard || exit 1
 mkdir -p "$BACKUPS" || { echo "cannot create $BACKUPS" >&2; exit 1; }
 say "migrate: start ($HERE)"
 [ "$(id -u)" = 0 ] || refuse "must run as root"
@@ -152,6 +165,7 @@ done
 if [ ! -s "$S/authorized_keys" ]; then
     cp "$EXT/authorized_keys" "$S/authorized_keys" || fail "cannot copy authorized_keys"
 fi
+[ -e "$OLD_S/takeover" ] && touch "$R/var/run/aristotle-takeover"
 for f in $FILES; do
     cp "$HERE/$f" "$S/$f" && chmod 755 "$S/$f" || fail "cannot install $f"
 done
