@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Add books · Aristotle</title>
-<meta name="description" content="Put books on a Kindle running Aristotle: USB drive mode or scp into documents/. Formats, folders, series and progress.">
+<meta name="description" content="Copy books to a Kindle running Aristotle in USB drive mode or with scp. Formats, folders, series and progress.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
@@ -26,35 +26,31 @@
   <div class="page-head">
     <p class="crumbs"><a href="index.html">Guides</a></p>
     <h1>Add books</h1>
-    <p>Aristotle shows everything in the Kindle's <code>documents/</code> folder. There is no store; books arrive over the USB cable.</p>
+    <p>The library shows the Kindle's <code>documents/</code> folder. You add books over the USB cable.</p>
   </div>
 
   <div class="prose">
     <h2 id="formats">What it reads</h2>
-    <p>EPUB, DRM-free MOBI, PDF and TXT; books with DRM cannot be read. Kindle dictionaries and the stock <code>.sdr</code> folders are left out of the library.</p>
+    <p>EPUB, DRM-free MOBI, PDF and TXT. Kindle dictionaries and the stock <code>.sdr</code> folders are hidden from the library.</p>
 
     <h2 id="drive">As a USB drive</h2>
     <ol>
-      <li>In Aristotle, open the settings (the gear in the library) and set the USB port to <strong>Dysk USB</strong> (USB drive). The Kindle appears on the computer for 10 minutes.</li>
-      <li>Copy books into <code>documents/</code>. Subfolders are fine: the library's Folders view shows them as they are.</li>
+      <li>In Aristotle, tap the gear in the library and set USB port to <strong>USB drive</strong>. The Kindle shows up on the computer for 10 minutes.</li>
+      <li>Copy books into <code>documents/</code>, in subfolders if you like.</li>
       <li>Eject the drive on the computer.</li>
     </ol>
-    <p>Without Aristotle running, the stock interface's own drive mode works the same way. While the storage is exported, the Kindle cannot write to it.</p>
+    <p>When Aristotle is not running, the stock drive mode works too. The Kindle cannot write to its storage while the computer has it.</p>
 
     <h2 id="scp">Over SSH</h2>
-    <p>With the agent installed and the cable in, copy straight into <code>documents/</code>:</p>
+    <p>With the agent installed and the cable connected:</p>
 <pre><code>scp -F devloop/host/ssh_config book.epub kindle:/mnt/us/documents/
 scp -F devloop/host/ssh_config -r Platon kindle:/mnt/us/documents/</code></pre>
-    <p>Aristotle scans <code>documents/</code> when it starts, so new books appear after the next start. The library shows its saved index at once and adds what changed; an unchanged library costs one <code>stat</code> per file.</p>
+    <p>Aristotle scans <code>documents/</code> when it starts, so new books appear after a restart. The saved index shows at once, and changes are added after. An unchanged library costs one <code>stat</code> per file.</p>
 
     <h2 id="organise">Folders, series and progress</h2>
-    <ul>
-      <li><strong>Folders.</strong> The library mirrors <code>documents/</code>: subfolders first, then loose books; the back arrow goes up a level.</li>
-      <li><strong>Series.</strong> Books whose metadata name a series get a shelf per series, in series order.</li>
-      <li><strong>Progress.</strong> Positions from the stock reader and from KOReader are picked up, so a book opens where you left it.</li>
-      <li><strong>Metadata.</strong> Title and author come from the book; without them, from the folder and file name.</li>
-    </ul>
-    <p class="note">More: <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/library.md">Library</a> in the documentation.</p>
+    <p>The library lists subfolders first, then loose books. The back arrow goes up one level. Books whose metadata name a series get a shelf for it, in series order.</p>
+    <p>Title and author come from the metadata, or from the folder and file name when there is none. Reading positions from the stock reader and KOReader are picked up, so a book opens where you left it.</p>
+    <p class="note">More in the <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/library.md">library documentation</a>.</p>
   </div>
 
   <nav class="pager" aria-label="Guides">
@@ -65,7 +61,7 @@ scp -F devloop/host/ssh_config -r Platon kindle:/mnt/us/documents/</code></pre>
 
 <footer class="site-footer">
   <div class="inner">
-    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It builds on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, MuPDF, FreeType and HarfBuzz.</p>
     <p>Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.</p>
   </div>
 </footer>
