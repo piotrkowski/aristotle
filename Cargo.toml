@@ -18,6 +18,7 @@ exclude = ["crates/aristotle-render", "crates/aristotle-reader"]
 [workspace.package]
 edition = "2021"
 license = "AGPL-3.0-or-later"
+publish = false
 
 [workspace.dependencies]
 libc = "0.2"
