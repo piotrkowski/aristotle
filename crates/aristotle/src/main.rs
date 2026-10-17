@@ -2728,6 +2728,7 @@ mod tests {
             Overlay::Toc { .. } => "toc",
             Overlay::Marks { .. } => "marks",
             Overlay::GoTo { .. } => "go to",
+            Overlay::Sync { .. } => "sync",
         }
         .to_string();
         let location = r.session.current;
