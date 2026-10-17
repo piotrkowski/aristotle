@@ -29,10 +29,25 @@ plato-core = { path = "../../third_party/plato-patched/crates/core" }
 zip = { version = "7.0.0", default-features = false, features = ["deflate-flate2"] }
 
 [profile.release]
-# Page layout and glyph rasterisation are CPU-bound on a single Cortex-A9
-# core and sit inside the page-turn budget, so optimise for speed, not size.
-opt-level = 3
-lto = true
+# Optimise for size, except the crates that lay out and draw pages: those
+# are CPU-bound on a single Cortex-A9 core and sit inside the page-turn
+# budget. Measured in docs/reader.md, "Size budget" ("z" is much slower).
+opt-level = "s"
+lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[profile.release.package.plato-core]
+opt-level = 3
+
+[profile.release.package.aristotle-render]
+opt-level = 3
+# The override would otherwise leave the renderer's binary unstripped.
+strip = true
+
+[profile.release.package.paragraph-breaker]
+opt-level = 3
+
+[profile.release.package.kl-hyphenate]
+opt-level = 3
