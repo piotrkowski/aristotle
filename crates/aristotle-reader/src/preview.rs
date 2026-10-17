@@ -378,7 +378,8 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     d.tap("night off", p)?;
     d.tap("close menu", Point { x: 536, y: 640 })?;
 
-    // Greek: grc-pl first, then switch to grc-en with one tap.
+    // Greek: the dictionary into the UI language first (grc-en in
+    // English, grc-pl in Polish), then the other one with one tap.
     let p = d.word("ψυχή")?;
     d.hold("hold psyche", p)?;
     d.snap("06-dict-greek")?;

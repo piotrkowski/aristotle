@@ -243,6 +243,10 @@ fn dictzip_reads_across_chunks() {
 
 #[test]
 fn greek_goes_to_greek_polish_first_accent_insensitive() {
+    aristotle_i18n::with_language("pl", greek_in_a_polish_ui);
+}
+
+fn greek_in_a_polish_ui() {
     let root = crate::testdir("dict-grc");
     let mut d = open(&root);
     // In a Polish book, a Greek word goes to Greek dictionaries only.
@@ -284,7 +288,33 @@ fn greek_goes_to_greek_polish_first_accent_insensitive() {
 }
 
 #[test]
+fn the_ui_language_picks_the_target_and_a_choice_wins() {
+    let root = crate::testdir("dict-ui");
+    let mut d = open(&root);
+    let id = |d: &Dictionaries, o: Vec<usize>| -> Vec<String> {
+        o.iter().map(|&i| d.dicts[i].id.clone()).collect()
+    };
+    assert_eq!(id(&d, d.order_for("grc", "en")), ["grc-en", "grc-pl"]);
+    assert_eq!(id(&d, d.order_for("grc", "pl")), ["grc-pl", "grc-en"]);
+    let l = aristotle_i18n::with_language("en", || d.lookup("ψυχή", Some("pl")));
+    assert_eq!(shown(&d, &l), "grc-en");
+    let l = aristotle_i18n::with_language("pl", || d.lookup("ψυχή", Some("pl")));
+    assert_eq!(shown(&d, &l), "grc-pl");
+    // A choice made in the switcher wins over the UI language.
+    let mut l = aristotle_i18n::with_language("en", || d.lookup("ψυχή", Some("pl")));
+    let pl = d.dicts.iter().position(|x| x.id == "grc-pl").unwrap();
+    d.switch(&mut l, pl);
+    assert_eq!(id(&d, d.order_for("grc", "en")), ["grc-pl", "grc-en"]);
+    let l = aristotle_i18n::with_language("en", || d.lookup("ψυχή", None));
+    assert_eq!(shown(&d, &l), "grc-pl");
+}
+
+#[test]
 fn switching_is_remembered_per_language() {
+    aristotle_i18n::with_language("pl", switching_in_a_polish_ui);
+}
+
+fn switching_in_a_polish_ui() {
     let root = crate::testdir("dict-switch");
     let mut d = open(&root);
     let mut l = d.lookup("ψυχή", Some("pl"));
@@ -346,6 +376,10 @@ fn closest_headwords_when_nothing_matches() {
 
 #[test]
 fn indexes_are_built_on_demand() {
+    aristotle_i18n::with_language("pl", indexes_on_demand);
+}
+
+fn indexes_on_demand() {
     let root = crate::testdir("dict-pending");
     let (dicts, cache) = fixtures(&root);
     let mut d = Dictionaries::discover(&[dicts], &cache, None);

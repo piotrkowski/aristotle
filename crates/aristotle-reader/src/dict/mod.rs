@@ -443,11 +443,21 @@ impl Dictionaries {
             .collect()
     }
 
-    /// The dictionaries to try for a word in `lang`, best first.
+    /// The dictionaries to try for a word in `lang`, best first, for a
+    /// reader of the UI language (`aristotle_i18n::language`).
     pub fn order(&self, lang: &str) -> Vec<usize> {
+        self.order_for(lang, aristotle_i18n::language())
+    }
+
+    /// [`Dictionaries::order`] for a reader of `ui`: the word's own
+    /// dictionaries first, those that translate into `ui` before the others
+    /// (grc-en before grc-pl in English, grc-pl first in Polish), unless one
+    /// was picked in the switcher for `lang` before.
+    pub fn order_for(&self, lang: &str, ui: &str) -> Vec<usize> {
         let latin = |l: &str| !matches!(l, "grc" | "el" | "ru");
+        let ui = base_lang(ui);
         let pref_target = |d: &Dictionary| match d.target.as_deref() {
-            Some("pl") => 0,
+            Some(t) if t == ui => 0,
             Some(_) => 1,
             None => 2,
         };

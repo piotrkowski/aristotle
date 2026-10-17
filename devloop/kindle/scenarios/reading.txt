@@ -84,7 +84,7 @@ tap 378 1377
 wait 1500
 snap 06m-dict-greek-more
 label other dictionary
-tap 930 845
+tap 934 463
 wait 1500
 snap 07-dict-greek-switched
 label close
