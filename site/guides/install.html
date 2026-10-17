@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install · Aristotle</title>
-<meta name="description" content="How to build Aristotle, copy it to a jailbroken Kindle Paperwhite 4, run it and uninstall it.">
+<meta name="description" content="How to download Aristotle, copy it to a jailbroken Kindle Paperwhite 4, run it and uninstall it.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
@@ -26,7 +26,7 @@
   <div class="page-head">
     <p class="crumbs"><a href="index.html">Guides</a></p>
     <h1>Install</h1>
-    <p>You build Aristotle on a Linux computer and copy it to the Kindle over the USB cable.</p>
+    <p>You download one zip file and unzip it onto the Kindle over the USB cable.</p>
   </div>
 
   <div class="prose">
@@ -35,41 +35,38 @@
     </div>
 
     <h2 id="before">Before you start</h2>
-    <p>The Kindle needs a jailbreak and three packages. KUAL is the launcher that holds Aristotle's menu, MRPI installs packages, and KOReader provides the SSH server. <a href="https://kindlemodding.org">kindlemodding.org</a> explains how to install them.</p>
+    <p>The Kindle needs a jailbreak and KUAL, the launcher that holds Aristotle's menu. MRPI installs KUAL and other packages. KOReader is needed only for the optional agent, which uses its SSH server. <a href="https://kindlemodding.org">kindlemodding.org</a> explains how to install them.</p>
     <p>Aristotle contains no jailbreak, exploit or DRM-removal code, and it opens only DRM-free books. It uses the e-ink waveforms and firmware already on the Kindle. Aristotle does not include them, and they never leave the device.</p>
     <p>The only tested device is the Paperwhite 4 (2018, PQ94WIF) on firmware 5.13.x. On any other device, the scripts that change the system refuse to run. Developers can override this with <code>ARISTOTLE_FORCE=1</code>.</p>
     <p>The stock system stays installed. The agent writes one file to the root filesystem, <code>/etc/upstart/aristotle-agent.conf</code>. Everything else goes to the user storage and <code>/var/local</code>.</p>
 
-    <h2 id="build">Build</h2>
-    <p>You need Rust through <a href="https://rustup.rs">rustup</a> with the <code>armv7-unknown-linux-musleabihf</code> target. You also need curl, tar, xz, openssl, xxd, make, cmake, bash and a C compiler. The first script, needed once, downloads a pinned Zig and builds Plato's C libraries.</p>
-<pre><code>git clone --recurse-submodules https://github.com/piotrkowski/aristotle
-cd aristotle
-PLATO_LIBS_ONLY=1 tools/build-plato.sh
-tools/build-render.sh device</code></pre>
-    <p>The app bundle is written to <code>$ARISTOTLE_CACHE/render/aristotle-device.tar.gz</code>.</p>
+    <h2 id="download">Download</h2>
+    <p>Download <code>aristotle-X.Y.Z.zip</code> from the latest <a href="https://github.com/piotrkowski/aristotle/releases">release on GitHub</a>. The release lists the SHA-256 sum of each file in <code>SHA256SUMS</code>, and with the GitHub CLI you can check that a file was built by the project's release workflow:</p>
+<pre><code>sha256sum -c --ignore-missing SHA256SUMS
+gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle</code></pre>
 
-    <h2 id="copy">Copy it over</h2>
-    <p>Create the SSH key the Kindle will accept and add a NetworkManager profile for the USB network. Then connect the Kindle as a USB drive and install.</p>
-<pre><code>. tools/env.sh        # sets ARISTOTLE_CACHE, the cache directory
-mkdir -p "$ARISTOTLE_CACHE/ssh"
-ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
-tools/host/setup-host-net.sh
-tools/host/install-extensions.sh</code></pre>
-    <p>If the Kindle is not mounted at <code>/run/media/$USER/Kindle</code>, set <code>KINDLE_MOUNT</code>. The script copies the app to <code>aristotle/</code> on the Kindle with its licences and <code>SOURCE.txt</code>, adds two KUAL extensions and ejects the Kindle.</p>
-
-    <h2 id="agent">Start the agent</h2>
-    <p>On the Kindle, open <strong>KUAL › Aristotle › Install agent</strong>. After that you can reach the Kindle over SSH whenever the cable is connected:</p>
-<pre><code>ssh -F tools/host/ssh_config kindle</code></pre>
-    <p class="note">For SSH without installing the agent, use KUAL › Aristotle › Start USB network once. It lasts until the next reboot.</p>
+    <h2 id="copy">Copy it to the Kindle</h2>
+    <p>Connect the Kindle to a computer over USB. It appears as a drive with <code>documents/</code> at its root. Unzip the file to the root of that drive, so that two folders appear next to <code>documents/</code>:</p>
+    <ul>
+      <li><code>aristotle/</code>: the app with its fonts and data, the licences of everything in it, and <code>SOURCE.txt</code>, which names the source it was built from.</li>
+      <li><code>extensions/aristotle/</code>: Aristotle's menu in KUAL.</li>
+    </ul>
+    <p>Then eject the Kindle. To update, unzip a newer release over the old one.</p>
 
     <h2 id="run">Run</h2>
-<pre><code>ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh</code></pre>
-    <p>Aristotle stops the stock interface while it runs. To quit, hold the "Library" title for a second. The stock interface returns after its boot splash, in 30 to 60 seconds. A reboot also brings it back.</p>
+    <p>On the Kindle, open <strong>KUAL › Aristotle › Start Aristotle</strong>. Aristotle stops the stock interface while it runs. To quit, hold the "Library" title for a second. The stock interface returns after its boot splash, in 30 to 60 seconds. A reboot also brings it back.</p>
+
+    <h2 id="agent">The agent (optional)</h2>
+    <p><strong>KUAL › Aristotle › Install agent</strong> installs a small service that starts with the Kindle. It keeps SSH over the USB cable available, lets Aristotle's settings switch the USB port to drive mode for copying books, and restarts the stock interface if it stays down. It runs KOReader's SSH server, so install KOReader first.</p>
+    <p>The agent accepts one SSH key. Before you install it, save your public key, such as <code>~/.ssh/id_ed25519.pub</code>, as <code>extensions/aristotle/authorized_keys</code> on the Kindle's drive. The Kindle is then at <code>192.168.15.244</code> whenever the cable is connected. <a href="https://github.com/piotrkowski/aristotle/blob/main/device/README.md#the-usb-link">device/README.md</a> describes the computer's side of the link.</p>
+
+    <h2 id="build">Build it yourself</h2>
+    <p>Developers can build the same zip from source on Linux. <a href="https://github.com/piotrkowski/aristotle/blob/main/.github/CONTRIBUTING.md#building">CONTRIBUTING.md</a> lists the tools and commands, and the <a href="develop.html">Develop</a> guide covers working on Aristotle.</p>
 
     <h2 id="uninstall">Uninstall</h2>
     <ol>
       <li>On the Kindle, open <strong>KUAL › Aristotle › Remove agent completely</strong>. This removes everything the agent put on the device, its SSH key included. The agent's log is saved to the Kindle's storage as <code>aristotle-agent.log</code>.</li>
-      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots), <code>extensions/aristotle/</code> and <code>extensions/aristotle-probe/</code> from the Kindle's storage. Older installs have <code>extensions/aristotle-usbnet/</code> instead of <code>extensions/aristotle/</code>.</li>
+      <li>Delete <code>aristotle/</code>, <code>.aristotle/</code> (the index, page cache and snapshots), <code>extensions/aristotle/</code> and, if you installed a developer build, <code>extensions/aristotle-probe/</code> from the Kindle's storage. Older installs have <code>extensions/aristotle-usbnet/</code> instead of <code>extensions/aristotle/</code>.</li>
     </ol>
     <p>Your books, <code>My Clippings.txt</code> and the exported notes stay.</p>
     <p>If you cannot reach the Kindle over SSH, open <strong>KUAL › Aristotle › USB drive mode for 10 minutes</strong> and connect the Kindle to a computer. Create an empty file named <code>aristotle-disable</code> at the root of the drive, then restart the Kindle. The agent will not start, and the Kindle runs the stock system.</p>
