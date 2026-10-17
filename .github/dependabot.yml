@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # The workspace's Cargo.lock; minor and patch updates in one pull request.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  # The actions in .github/workflows, pinned by commit SHA.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

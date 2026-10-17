@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Replay a recorded pen session under several PenParams and print one latency
 # line per variant. Upload aristotle-pen-bench and the recording to /var/tmp,
 # then run on the device: ssh kindle sh -s < devloop/kindle/pen-sweep.sh

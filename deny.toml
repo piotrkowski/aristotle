@@ -1,0 +1,66 @@
+# cargo-deny: licences, RustSec advisories, bans and sources of every crate in
+# the workspace, the native members and plato-core included (Cargo resolves
+# them from manifests alone; nothing is built). Run with `cargo deny check`.
+
+[graph]
+# What we build: the host (tests, previews) and the device.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "armv7-unknown-linux-musleabihf",
+]
+all-features = true
+
+[advisories]
+# The RustSec advisory database. Unmaintained crates are reported only when
+# we depend on them directly.
+unmaintained = "workspace"
+ignore = [
+    # zip 7.0.0 (pinned by plato-core, matched by aristotle-render): the three
+    # advisories are about extracting archives to disk (`ZipArchive::extract`,
+    # `ZipStreamReader::extract`), which neither calls; both read members into
+    # memory. Drop these with the move to zip 9 in the Plato fork.
+    { id = "RUSTSEC-2026-0367", reason = "zip extract() only; not called" },
+    { id = "RUSTSEC-2026-0368", reason = "zip extract() only; not called" },
+    { id = "RUSTSEC-2026-0369", reason = "zip extract() only; not called" },
+]
+
+[licenses]
+# Licences whose terms allow combining the code into an AGPL-3.0-or-later
+# program.
+allow = [
+    "AGPL-3.0-or-later",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+# The list is a policy, not an inventory: entries no crate uses yet are fine.
+unused-allowed-license = "allow"
+
+# Plato's manifest has no licence field. Its LICENSE-AGPLv3 grants the AGPL
+# version 3 "or (at your option) any later version".
+[[licenses.clarify]]
+crate = "plato-core"
+expression = "AGPL-3.0-or-later"
+license-files = []
+
+[bans]
+multiple-versions = "warn"
+# A version is required for every registry dependency; path dependencies
+# between our own crates and plato-core need none.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

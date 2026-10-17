@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Reversible takeover of the Kindle: stop Amazon's GUI stack so Aristotle owns
 # the screen and most of the RAM, and bring it back afterwards.
 #

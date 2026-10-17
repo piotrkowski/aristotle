@@ -1,9 +1,10 @@
 [package]
 name = "aristotle-render"
 version = "0.1.0"
-edition = "2021"
-license = "AGPL-3.0-or-later"
-publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
 description = "E-book page renderer for Aristotle on the PW4, built on Plato's document engine"
 
 # Not a default member of the workspace: plato-core links static C libraries

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Page numbers without laying out the whole book on every open.
 //!
 //! "x / y" needs the start of every page, and finding them means laying out

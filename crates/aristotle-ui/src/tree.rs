@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The retained widget tree: nodes, box layout, painting and hit testing.
 //!
 //! Retained rather than immediate mode because e-ink inverts the usual

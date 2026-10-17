@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The transition policy (`docs/ui-framework.md`, "Transitions"), checked
 //! on the host: for every user action, how many updates `Ui::render` hands
 //! to the panel and with which waveform.

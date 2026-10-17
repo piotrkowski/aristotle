@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tiny text decoders for the legacy encodings books actually use.
 //!
 //! A general-purpose crate such as `encoding_rs` would add a few hundred

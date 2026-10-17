@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # A small model of iptables' filter table for the test: chains are files in
 # $AGENT_TEST_ROOT/ipt/, one rule per line. It fails where iptables fails
 # (creating a chain twice, deleting a referenced, non-empty or missing chain,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `aristotle-render`: render, show and benchmark e-book pages on the PW4.
 //!
 //! ```text

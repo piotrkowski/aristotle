@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading progress: between the library index's locators and the
 //! renderer's positions, and onto disk without stalling page turns.
 //!

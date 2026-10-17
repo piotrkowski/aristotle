@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Install the Aristotle agent: one upstart job on the root filesystem, the rest
 # in /var/local/aristotle. Run as root on the device (from KUAL or SSH).
 # Idempotent.

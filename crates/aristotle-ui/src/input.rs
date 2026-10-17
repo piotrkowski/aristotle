@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Gesture recognition: tap, long press and swipe from raw touch events.
 //!
 //! Events have the shape of `aristotle_hal::input::TouchEvent` (phase,

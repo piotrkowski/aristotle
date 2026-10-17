@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Re-render every framed screenshot listed in manifest.toml.
 #   tools/screenshots/compose.sh [manifest.toml]
 # Set SCREENSHOTS_BASE to read captures from another directory.

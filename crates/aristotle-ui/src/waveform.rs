@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! E-ink waveform hints.
 //!
 //! The numbers are Lab126's *Zelda* numbering used by the PW4 EPDC driver,

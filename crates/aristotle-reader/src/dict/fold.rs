@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The fold index: every headword and synonym of a dictionary under a
 //! folded key (lower case, no diacritics), sorted, on disk.
 //!

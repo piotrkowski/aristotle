@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Write the reading-interactions test book, "Próba czytania" (EPUB 3).
 
 usage: make-reading-test-epub.py OUT.epub

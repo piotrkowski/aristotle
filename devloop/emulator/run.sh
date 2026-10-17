@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Build a crate for the Kindle, copy it into the running PW4 emulator, run it
 # over SSH and save a screenshot of the e-ink scanout.
 #   devloop/emulator/run.sh [PACKAGE] [ARGS...]     (default: aristotle-hello)

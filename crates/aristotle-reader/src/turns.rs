@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reading gestures: page turns on release, the menu on a tap at the top,
 //! and the text gestures: hold a word, drag to extend, tap a footnote or
 //! the bookmark corner.

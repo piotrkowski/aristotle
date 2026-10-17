@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Small HTML fragments (dictionary definitions, footnotes) as styled
 //! paragraphs a popup can set: blocks of runs that are plain, italic or
 //! bold. Everything else in the markup (classes, links, tables, images) is

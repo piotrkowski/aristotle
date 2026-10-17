@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Preferences: the menu's typography steps (mapped onto aristotle-render's
 //! [`Style`]), the page-turn waveform, night mode, library covers and view,
 //! the screensaver delay and the UI language.

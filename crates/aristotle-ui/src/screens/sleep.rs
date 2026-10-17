@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The screensaver: what the screen shows while nobody reads.
 //!
 //! E-ink keeps its picture without power, so this is the face of the

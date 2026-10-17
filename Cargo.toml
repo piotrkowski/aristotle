@@ -36,6 +36,7 @@ exclude = ["third_party"]
 [workspace.package]
 edition = "2021"
 license = "AGPL-3.0-or-later"
+repository = "https://github.com/piotrkowski/aristotle"
 publish = false
 
 [workspace.dependencies]

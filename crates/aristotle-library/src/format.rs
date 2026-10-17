@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Format detection by content.
 //!
 //! Extensions on a Kindle lie often enough to matter: calibre and Send to

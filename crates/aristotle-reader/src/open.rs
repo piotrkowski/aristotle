@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Opening a book without making the reader wait for its layout.
 //!
 //! 1. If the book has a matching [snapshot](crate::snapshot), its page goes

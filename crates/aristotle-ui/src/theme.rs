@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Design tokens: grays, spacing and the type scale.
 //!
 //! E-ink shows 16 gray levels and light grays fade under the frontlight, so

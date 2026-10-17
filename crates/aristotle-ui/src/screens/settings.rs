@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Settings: light, night mode, covers, sleep, the UI language, and what
 //! the device knows about itself. Offline only: there is no Wi-Fi, account or
 //! store section, because Aristotle has none of those.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Touch input from the evdev touchscreen (Goodix gt9xx or Parade cyttsp5,
 //! depending on the unit). The device is found by name, never by `eventN`.
 

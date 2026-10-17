@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Live finger drawing. Optionally records every touch event for replay.
 //!   aristotle-pen-live [SECONDS] [record=/var/tmp/pen.rec] [backend=display|pipeline stroke=6 radius=4 ...]
 //! Tap the top-left target three times in a row to quit.

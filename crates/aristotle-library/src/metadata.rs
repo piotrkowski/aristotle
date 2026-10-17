@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Book metadata and the per-format dispatch.
 //!
 //! Precedence, highest first:

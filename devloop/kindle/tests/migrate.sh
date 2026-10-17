@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Host-side test of the agent migration (agent/migrate.sh and rollback.sh).
 #
 #   sh devloop/kindle/tests/migrate.sh

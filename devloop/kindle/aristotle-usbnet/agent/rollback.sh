@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Undo migrate.sh: bring back the agent from before the project's rename (job
 # "aristotle", state in /var/local/aristotle) from a migration backup. migrate.sh
 # runs it by itself when a step fails; run it by hand to go back later:

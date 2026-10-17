@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The screens: library and shelves, settings, the screensaver, and the
 //! reader page and menu.
 //!

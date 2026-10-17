@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Copy the dev-loop KUAL extensions (and the reader app, if built) to a Kindle
 # mounted over USB mass storage, then eject it so the device leaves drive mode
 # while the cable stays plugged in. After installing the agent from KUAL once,

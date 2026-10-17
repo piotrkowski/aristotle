@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Integer geometry in device pixels, plus physical-unit helpers.
 //!
 //! Everything in the toolkit is laid out in whole device pixels. E-ink

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Download pinned host-side reverse-engineering tools into $ARISTOTLE_TOOLS
 # (default $ARISTOTLE_CACHE/tools, see devloop/env.sh). No root needed; nothing is installed system-wide.
 # Each archive is checked against the SHA-256 published by its upstream release.

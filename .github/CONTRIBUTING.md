@@ -95,13 +95,15 @@ stay within 10 % on latency. Numbers in the docs say where they come from:
 
 ## Checks
 
-CI runs the first three on every pull request:
+CI runs the first five on every pull request:
 
 ```sh
 cargo fmt --check        # every member, native ones included; not --all, which
                          # would also check Plato's crates
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all-features --locked
+cargo build --release --locked --target armv7-unknown-linux-musleabihf
+cargo deny check         # deny.toml: licences, advisories, bans, sources
 # The native members, locally:
 CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host

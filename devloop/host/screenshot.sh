@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Save a PNG of the Kindle's framebuffer over the USB network.
 #   devloop/host/screenshot.sh [NAME]     -> $ARISTOTLE_CACHE/screens/NAME-<stamp>.png
 set -eu

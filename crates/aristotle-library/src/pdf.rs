@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Best-effort PDF metadata: the document Info dictionary and the page count.
 //!
 //! A full PDF crate (lopdf, pdf) is large and parses far more than we need.

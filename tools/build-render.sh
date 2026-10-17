@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Build the workspace members that link Plato (crates/aristotle-render and
 # the reader app, crates/aristotle-reader) and assemble their bundle:
 #

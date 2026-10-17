@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Read-only runtime probe for the Kindle PW4. Collects kernel, hardware,
 # process, upstart and lipc state into /mnt/us/aristotle-probe/<UTC stamp>/.
 # Writes nothing outside that directory and changes no system state.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Battery and frontlight through sysfs.
 //!
 //! Paths verified on our PW4: the ROHM BD71827 PMIC exposes the battery as

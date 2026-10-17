@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aristotle on the device: the `aristotle-ui` screens driven by the real
 //! panel, touchscreen and frontlight through `aristotle-hal`.
 //!

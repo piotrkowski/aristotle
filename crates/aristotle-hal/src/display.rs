@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! A dedicated display thread with latest-wins damage coalescing.
 //!
 //! # Why

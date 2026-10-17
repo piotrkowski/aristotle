@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! EPDC latency benchmark. Prints submit-to-complete times per waveform for a
 //! small region, then checks whether disjoint regions refresh concurrently and
 //! how overlapping ones queue. Results drive the refresh policy.

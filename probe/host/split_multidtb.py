@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Lab126 boot images carry a wrapper DTB whose /fdts/fdt@N nodes each embed
 one board DTB (platform_name + data). Extract each one as .dtb and .dts.
 

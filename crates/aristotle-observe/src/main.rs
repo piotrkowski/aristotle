@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `aristotle-observe`: measure any UI on the device, stock or ours, the same way.
 //!
 //! It turns on the EPDC driver's debug log, reads `/dev/kmsg` and the

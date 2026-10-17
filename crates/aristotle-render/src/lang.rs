@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Choosing the language a book is hyphenated in.
 //!
 //! Plato hyphenates EPUB text in the book's first `dc:language`. Most books

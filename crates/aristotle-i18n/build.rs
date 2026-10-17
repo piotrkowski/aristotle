@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Reads `locales/*.json`, checks every locale against `en.json` (the
 //! source of truth) and generates `messages.rs`: the `Msg` and `Plural`
 //! enums and one string table per locale. A broken locale fails the build.

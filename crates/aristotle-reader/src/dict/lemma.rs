@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cheap guesses at the dictionary form of an inflected word.
 //!
 //! The Wiktionary StarDict exports already list most inflected forms as

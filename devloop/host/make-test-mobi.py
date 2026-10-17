@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Make a small MOBI 7 test book from an EPUB, without calibre or kindlegen.
 
 Usage: make-test-mobi.py BOOK.epub OUT.mobi [LANG]

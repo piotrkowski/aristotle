@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Page-turn strategy experiment on real text.
 //!
 //! Alternates between two full-screen text pages (raw 8-bit framebuffer

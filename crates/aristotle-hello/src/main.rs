@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Draws a gray ramp and a moving bar, timing full and partial e-ink updates.
 //! Run on the device (or the PW4 emulator) while the stock UI is idle.
 

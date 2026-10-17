@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Aristotle contributors
+# SPDX-FileCopyrightText: Bastien Dejean
 # Build Plato (third_party/plato, our fork) as a fully static armv7-unknown-linux-musleabihf
 # binary for the Kindle Paperwhite 4, with user-space tools only.
 #

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Aristotle contributors
+// SPDX-FileCopyrightText: KOReader contributors
 //! Book identity.
 //!
 //! A book's ID is KOReader's "partial MD5": the MD5 of up to twelve 1 KiB

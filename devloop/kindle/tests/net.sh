@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Host-side test of the agent's Wi-Fi policy generator (agent/net.sh).
 #
 #   sh devloop/kindle/tests/net.sh          compare with net/expected-*

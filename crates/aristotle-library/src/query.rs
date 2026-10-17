@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Sorting, filtering and search over the index.
 //!
 //! The whole library is a few dozen records, so queries are a linear filter

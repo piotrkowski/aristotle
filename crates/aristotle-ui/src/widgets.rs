@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Custom widgets the generic node kinds do not cover.
 //!
 //! All of them draw in solid black and white wherever possible, so their

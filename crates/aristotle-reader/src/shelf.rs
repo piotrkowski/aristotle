@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The library screens fed from the real library index.
 //!
 //! [`Nav`] is where the reader is: a view of the home screen (books with a

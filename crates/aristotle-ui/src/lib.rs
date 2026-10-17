@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Aristotle's UI toolkit: a small retained UI for e-ink.
 //!
 //! See `docs/ui-framework.md` for the architecture and design rules.

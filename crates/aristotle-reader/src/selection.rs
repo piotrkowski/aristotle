@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Words under the finger, and selections of words on a page.
 //!
 //! Plato lays text out word by word and reports each word's box

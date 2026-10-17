@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! E-ink framebuffer on the i.MX EPDC, using Lab126's Rex update ABI.
 //!
 //! # Model

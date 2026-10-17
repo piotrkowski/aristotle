@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! What the reading interactions draw over the page: the selection, the
 //! popups (dictionary, footnote, gloss, selection actions), the contents
 //! and highlights lists, "go to", and the row of reading actions shown with

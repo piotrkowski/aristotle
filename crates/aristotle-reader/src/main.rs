@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `aristotle`: the reader app for the Kindle Paperwhite 4.
 //!
 //! The library from `aristotle-library` (scanned incrementally on start,

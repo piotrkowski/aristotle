@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Opening a book with Plato's document engine and turning it into pages.
 
 use std::collections::HashMap;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Renders the prototype screens headless and times each step. Runs on the
 //! host and, built for armv7-unknown-linux-musleabihf, on the device, where
 //! it doubles as the binary-size probe for the toolkit.

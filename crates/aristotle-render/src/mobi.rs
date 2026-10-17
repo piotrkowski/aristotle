@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! MOBI (Mobipocket 7) books, converted to EPUB so Plato's own engine lays
 //! them out.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One open book: where the reader is, the pages rendered around it, and
 //! the page numbers once known.
 //!

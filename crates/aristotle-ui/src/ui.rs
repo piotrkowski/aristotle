@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! The UI driver: turns tree changes into minimal damage with waveform
 //! hints, and touch events into actions.
 //!

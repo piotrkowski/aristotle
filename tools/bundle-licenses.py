@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Write the licence notices and SOURCE.txt of a build-render.sh bundle.
 
 usage: bundle-licenses.py OUT REPO PLATO_TREE TARGET ZIG_DIR HYPH_DIR DJVU
