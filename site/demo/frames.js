@@ -24,7 +24,7 @@
 window.ARISTOTLE_DEMO = {
   "screen": { "width": 1072, "height": 1448 },
   "start": "library",
-  "note": "Frames are screenshots of a Kindle Paperwhite 4 running Aristotle. The book is from Project Gutenberg; the dictionary is a Wiktionary export (CC BY-SA).",
+  "note": "Frames are screenshots of a Kindle Paperwhite 4 running Aristotle. The book is from Project Gutenberg. The dictionary is a Wiktionary export (CC BY-SA).",
   "frames": {
     "library": {
       "image": "demo/frames/library.png",
@@ -124,16 +124,16 @@ window.ARISTOTLE_DEMO = {
     }
   },
   "tour": [
-    { "frame": "library", "target": "continue", "hint": "This is the library. Tap the book to continue, Nicomachean Ethics, Book I, to open it where you left off." },
-    { "frame": "greek-page", "target": "word", "hint": "The book opens in one flash, on Bywater's Greek text. Hold a word to look it up: tap ἀγαθοῦ." },
-    { "frame": "greek-popup", "target": "close", "hint": "The definition comes from an offline Wiktionary dictionary. ἀγαθοῦ is an inflected form; the popup shows its dictionary form, ἀγαθός. Tap Close." },
-    { "frame": "greek-page", "target": "next", "hint": "Tap the right of the page, or press <kbd>→</kbd>, to turn it. The page changes in one update, as on the panel." },
-    { "frame": "english-page", "target": "menu", "hint": "Chase's English translation, justified and hyphenated. Tap the top of the page to open the menu. It appears without a flash." },
+    { "frame": "library", "target": "continue", "hint": "The library. Tap Nicomachean Ethics, Book I, to continue where you left off." },
+    { "frame": "greek-page", "target": "word", "hint": "The book opens with one flash, on Bywater's Greek text. Holding a word looks it up. In this demo, tap ἀγαθοῦ." },
+    { "frame": "greek-popup", "target": "close", "hint": "The definition comes from a Wiktionary dictionary on the device. ἀγαθοῦ is an inflected form, so the popup shows ἀγαθός. Tap Close." },
+    { "frame": "greek-page", "target": "next", "hint": "Tap the right side of the page or press <kbd>→</kbd> to turn it. The page changes in one update, as it does on the panel." },
+    { "frame": "english-page", "target": "menu", "hint": "Chase's English translation, justified and hyphenated. Tap the top of the page to open the menu, which appears without a flash." },
     { "frame": "menu", "target": "library", "hint": "The menu sets the size, spacing, margins and light. Tap Library to go back." },
     { "frame": "library", "target": "settings", "hint": "Tap the gear to open the settings." },
     { "frame": "settings", "target": "night", "hint": "Turn on Night mode." },
-    { "frame": "settings-night", "target": "back", "hint": "Night mode is white on black on every screen, switched with one flash. Tap the arrow to go back." },
+    { "frame": "settings-night", "target": "back", "hint": "Night mode applies to all screens and switches with one flash. Tap the arrow to go back." },
     { "frame": "library-night", "target": "continue", "hint": "Open the book again." },
-    { "frame": "greek-page-night", "hint": "That is the tour. Everything else in the demo still responds to taps: the word, the menu, the next page.", "action": { "label": "Start again", "to": "library", "kind": "flash" } }
+    { "frame": "greek-page-night", "hint": "End of the tour. You can still tap the word, the menu and the next page.", "action": { "label": "Start again", "to": "library", "kind": "flash" } }
   ]
 };

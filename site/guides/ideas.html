@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ideas · Aristotle</title>
-<meta name="description" content="Things to do with an open Kindle: a daily newspaper, web pages as EPUB, highlights in your notes, dictionaries for any language.">
+<meta name="description" content="Ideas for a Kindle running Aristotle. A daily newspaper, web pages as EPUB, highlights in your notes, more dictionaries.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
@@ -26,27 +26,24 @@
   <div class="page-head">
     <p class="crumbs"><a href="index.html">Guides</a></p>
     <h1>Ideas</h1>
-    <p>Aristotle reads whatever lands in <code>documents/</code>, and the USB network gives you SSH to the device. Anything on your computer that writes an EPUB can feed the Kindle. None of this is part of Aristotle itself.</p>
+    <p>Aristotle shows whatever is in <code>documents/</code>, and the USB network gives you SSH to the Kindle. Any program that writes EPUB can put books on it. These ideas are not part of Aristotle.</p>
   </div>
 
   <div class="prose">
     <h2 id="newspaper">A daily newspaper</h2>
-    <p>Turn Hacker News and your RSS feeds into one EPUB a day and copy it into <code>documents/Gazeta/</code>. The library shows it like any folder.</p>
-    <ul>
-      <li>A small script can do it: reader-mode extraction of each article, photos redrawn as simple line drawings or described in one line, the top comments of each Hacker News story, and a sync step that keeps the last few issues on the device.</li>
-      <li>Calibre's <strong>Fetch news</strong> does much the same with its built-in recipes. Save the result as EPUB and copy it over.</li>
-    </ul>
+    <p>Turn Hacker News and your RSS feeds into one EPUB a day in <code>documents/Gazeta/</code>. A small script can extract each article in reader mode, replace photos with line drawings or one-line descriptions, and add the top Hacker News comments. A sync step keeps the last few issues on the device.</p>
+    <p>Calibre's <strong>Fetch news</strong> does much the same with its built-in recipes. Save the result as EPUB and copy it over.</p>
 
     <h2 id="web">Send a web page to the Kindle</h2>
-    <p>Any article becomes an EPUB with <a href="https://github.com/danburzo/percollate">percollate</a> or pandoc, and one <code>scp</code> puts it in the library:</p>
+    <p><a href="https://github.com/danburzo/percollate">percollate</a> or pandoc can turn an article into an EPUB. Copy it to the library with <code>scp</code>:</p>
 <pre><code>percollate epub https://example.com/long-read -o long-read.epub
 scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</code></pre>
 
     <h2 id="notes">Highlights in your notes</h2>
-    <p>Highlights go to <code>My Clippings.txt</code> in the stock Kindle format, so existing tools (Obsidian plugins, Readwise importers, your own scripts) keep working. Aristotle also writes one Markdown file per book to <code>aristotle-notes/</code>.</p>
+    <p>Highlights are saved to <code>My Clippings.txt</code> in the stock Kindle format, which Obsidian plugins, Readwise importers and your own scripts already read. Aristotle also writes a Markdown file per book to <code>aristotle-notes/</code>.</p>
 
-    <h2 id="dictionaries">Dictionaries for any language</h2>
-    <p>Drop StarDict dictionaries, for example the Wiktionary exports for Ancient Greek or Latin, into the dictionary folder, and holding a word looks it up offline. See <a href="dictionaries.html">Add dictionaries</a>.</p>
+    <h2 id="dictionaries">Dictionaries for other languages</h2>
+    <p>Put StarDict dictionaries, such as the Wiktionary exports for Ancient Greek or Latin, in the dictionary folder. Holding a word then looks it up offline. See <a href="dictionaries.html">Add dictionaries</a>.</p>
   </div>
 
   <nav class="pager" aria-label="Guides">
@@ -56,7 +53,7 @@ scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</c
 
 <footer class="site-footer">
   <div class="inner">
-    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It builds on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, MuPDF, FreeType and HarfBuzz.</p>
     <p>Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.</p>
   </div>
 </footer>

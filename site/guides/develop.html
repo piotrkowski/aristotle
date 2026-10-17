@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Develop · Aristotle</title>
-<meta name="description" content="Work on Aristotle: previews on the host, the QEMU Paperwhite 4 emulator, device scenarios with aristotle-observe, and screenshots.">
+<meta name="description" content="Developing Aristotle with host previews, the QEMU Paperwhite 4 emulator, device scenarios in aristotle-observe, and screenshots.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
@@ -26,12 +26,12 @@
   <div class="page-head">
     <p class="crumbs"><a href="index.html">Guides</a></p>
     <h1>Develop</h1>
-    <p>Most work needs no Kindle: every screen renders to PNG on the host, pixel for pixel what the panel gets. The emulator and the device come after.</p>
+    <p>Most work needs no Kindle. The host renders each screen to PNG exactly as the panel would show it.</p>
   </div>
 
   <div class="prose">
     <h2 id="workspaces">Two workspaces</h2>
-    <p>The <strong>root workspace</strong> holds the pure-Rust crates (the hardware layer, the UI toolkit, the library, the measurement tools) and builds anywhere with <code>cargo test</code>. The <strong>native workspace</strong>, the renderer and the reader app, links Plato's engine and its C libraries, which <code>tools/build-plato.sh</code> builds once with Zig. Keep builds under <code>$ARISTOTLE_CACHE/</code> and point <code>CARGO_TARGET_DIR</code> and <code>TMPDIR</code> there.</p>
+    <p>The root workspace holds the pure-Rust crates (hardware layer, UI toolkit, library, measurement tools) and builds anywhere with <code>cargo test</code>. The native workspace holds the renderer and the reader app. It links Plato's engine and C libraries, which <code>tools/build-plato.sh</code> builds once with Zig. Keep builds in <code>$ARISTOTLE_CACHE/</code> and point <code>CARGO_TARGET_DIR</code> and <code>TMPDIR</code> there.</p>
 <pre><code>cargo test                                     # root workspace
 
 # native workspace on the host: C libraries once, about 6 minutes on 2 cores
@@ -39,8 +39,8 @@ PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
 CARGO_CMD=test tools/build-render.sh host</code></pre>
 
     <h2 id="preview">Previews on the host</h2>
-    <p>Two previews drive the same code the device runs, with simulated touches, and write one PNG per step:</p>
-<pre><code># every screen of the toolkit, day and night
+    <p>Two previews run the device code with simulated touches and write a PNG for each step:</p>
+<pre><code># all screens of the toolkit, day and night
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview
 
 # the reading interactions on a test book: menu, contents,
@@ -48,16 +48,16 @@ cargo run --release -p aristotle-ui --bin aristotle-ui-preview
 devloop/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
 $ARISTOTLE_CACHE/render/host/aristotle --data DATA --library LIB \
     --dict DICTIONARIES --preview OUT BOOKS/Aristotle/proba-czytania.epub</code></pre>
-    <p>Both report every panel update with its waveform and rectangle (the reader in <code>updates.txt</code>). Compare them before and after a change: the images should stay identical unless the change is about how things look.</p>
+    <p>Both log each panel update with its waveform and rectangle, the reader to <code>updates.txt</code>. Compare the output before and after a change. Images should only differ if the change is visual.</p>
 
     <h2 id="emulator">The emulator</h2>
-    <p><code>devloop/emulator/setup.sh</code> builds a QEMU Paperwhite 4 running the stock firmware 5.13.6, with KUAL, MRPI and the jailbreak. Anything that could hang boot, touch the stock framework or load kernel code goes there first. It does not reproduce e-ink timing or ghosting; that needs the device.</p>
+    <p><code>devloop/emulator/setup.sh</code> builds a QEMU Paperwhite 4 with stock firmware 5.13.6, KUAL, MRPI and the jailbreak. Try anything that could hang the boot, touch the stock framework or load kernel code there first. The emulator does not reproduce e-ink timing or ghosting.</p>
 <pre><code>devloop/emulator/setup.sh
 cd $ARISTOTLE_CACHE/emulator/eink-emulator
 ./eink run pw4 --headless --qmp-socket --serial-socket</code></pre>
 
     <h2 id="scenarios">Scenarios on the device</h2>
-    <p><code>aristotle-observe</code> runs touch scenarios from <code>devloop/kindle/scenarios/</code> against the stock interface or Aristotle. It reads the panel driver's own log and reports, per interaction, the time to the first and last update, the number of updates, flashes and waveforms.</p>
+    <p><code>aristotle-observe</code> plays touch scenarios from <code>devloop/kindle/scenarios/</code> against the stock interface or Aristotle. From the panel driver's log it reports, for each interaction, the time to the first and last update, the update count, flashes and waveforms.</p>
 <pre><code># from devloop/kindle/scenarios/aristotle-transitions.txt
 label turn-fwd
 tap 900 800
@@ -66,18 +66,18 @@ label menu-open
 tap 536 60
 wait 2000</code></pre>
 <pre><code>/var/tmp/aristotle-observe run /var/tmp/aristotle-transitions.txt</code></pre>
-    <p>A scenario starts from a known state (<code>go-home</code>) and checks its steps with <code>snap</code> screenshots: numbers without a look at the screen were wrong more than once. A change to what reaches the panel should keep the same updates and waveforms and stay within 10 % on latency.</p>
+    <p>Start each scenario from a known state with <code>go-home</code> and check its steps with <code>snap</code> screenshots. Unchecked numbers were wrong more than once. A change to what reaches the panel should keep the same updates and waveforms, and latency within 10 %.</p>
 
     <h2 id="screenshots">Screenshots</h2>
-    <p><code>tools/screenshots/compose.sh</code> makes every screenshot of the README, the docs and this site from 1072 × 1448 captures of the device's framebuffer (<code>devloop/host/screenshot.sh</code>), kept in <code>$ARISTOTLE_CACHE/captures/readme/</code>. Its <code>manifest.toml</code> lists every output and its inputs: framed shots, and the demo's frames in the panel's 16 grays.</p>
-    <p>The demo on this site reads its frames from one file, <code>site/demo/frames.js</code>: each frame's image, alt text and tap targets in panel pixels. New captures or another language replace the images and that file.</p>
+    <p><code>tools/screenshots/compose.sh</code> makes the screenshots for the README, the docs and this site from 1072 × 1448 framebuffer captures in <code>$ARISTOTLE_CACHE/captures/readme/</code>, taken with <code>devloop/host/screenshot.sh</code>. <code>manifest.toml</code> lists each output and its inputs. The outputs are framed shots and demo frames in the panel's 16 grays.</p>
+    <p>The demo reads <code>site/demo/frames.js</code>, which holds each frame's image, alt text and tap targets in panel pixels. For new captures or another language, replace the images and that file.</p>
 
     <h2 id="rules">Before you send a change</h2>
     <ul>
-      <li>Read <a href="https://github.com/piotrkowski/aristotle/blob/main/AGENTS.md">AGENTS.md</a>: the framebuffer stride, the waveform numbering, one panel update at a time.</li>
+      <li>Read <a href="https://github.com/piotrkowski/aristotle/blob/main/AGENTS.md">AGENTS.md</a>, which covers the framebuffer stride, the waveform numbering and the rule of one panel update at a time.</li>
       <li>Run the checks in <a href="https://github.com/piotrkowski/aristotle/blob/main/.github/CONTRIBUTING.md">CONTRIBUTING.md</a>.</li>
-      <li>Use public-domain books or text written for the test, never copyrighted books.</li>
-      <li>Never write to the root filesystem, boot partitions, <code>/mnt/wfm</code> or <code>/var/local</code> on a device without its owner's consent.</li>
+      <li>Test with public-domain books or text written for the test.</li>
+      <li>Do not write to the root filesystem, boot partitions, <code>/mnt/wfm</code> or <code>/var/local</code> on a device without its owner's consent.</li>
     </ul>
   </div>
 
@@ -89,7 +89,7 @@ wait 2000</code></pre>
 
 <footer class="site-footer">
   <div class="inner">
-    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It builds on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, MuPDF, FreeType and HarfBuzz.</p>
     <p>Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.</p>
   </div>
 </footer>

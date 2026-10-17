@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Add dictionaries · Aristotle</title>
-<meta name="description" content="Add StarDict dictionaries to Aristotle: which files, which folder, how they are indexed, and how a dictionary is chosen.">
+<meta name="description" content="Which StarDict files Aristotle reads, where they go, how they are indexed and which dictionary answers a lookup.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/style.css">
@@ -26,39 +26,31 @@
   <div class="page-head">
     <p class="crumbs"><a href="index.html">Guides</a></p>
     <h1>Add dictionaries</h1>
-    <p>Hold a word while reading and its definition pops up, from dictionaries on the Kindle. Nothing goes over the network.</p>
+    <p>Hold a word while reading to see its definition. Lookups use dictionaries stored on the Kindle.</p>
   </div>
 
   <div class="prose">
     <h2 id="files">Which files</h2>
-    <p>Aristotle reads <strong>StarDict</strong> dictionaries: an <code>.ifo</code> file with its <code>.idx</code>, <code>.dict</code> or <code>.dict.dz</code>, and optionally <code>.syn</code> for inflected forms. The Wiktionary exports from <a href="https://github.com/xxyzz/wiktionary_stardict">wiktionary_stardict</a> work well: HTML entries, and inflected forms as synonyms (1.4 million for Polish, 1.8 million for Ancient Greek).</p>
-    <p>Name the files after the language pair, source first: <code>grc-pl.ifo</code> is Ancient Greek to Polish, <code>la-en.ifo</code> Latin to English. Aristotle takes the languages from the name.</p>
+    <p>A StarDict dictionary is an <code>.ifo</code> file with an <code>.idx</code>, a <code>.dict</code> or <code>.dict.dz</code>, and an optional <code>.syn</code> file of inflected forms. The Wiktionary exports from <a href="https://github.com/xxyzz/wiktionary_stardict">wiktionary_stardict</a> work well. They have HTML entries and list inflected forms as synonyms, 1.4 million for Polish and 1.8 million for Ancient Greek.</p>
+    <p>Name the files after the language pair, source first. <code>grc-pl.ifo</code> is Ancient Greek to Polish, <code>la-en.ifo</code> is Latin to English.</p>
 
     <h2 id="folder">Where they go</h2>
-    <p>Put each dictionary in its own folder, one level deep, under either of:</p>
+    <p>Put each dictionary in its own folder, directly under one of these two directories:</p>
 <pre><code>/mnt/us/dictionaries/grc-pl/grc-pl.ifo
 /mnt/us/koreader/data/dict/grc-pl/grc-pl.ifo</code></pre>
-    <p>On the USB drive these are <code>dictionaries/</code> and <code>koreader/data/dict/</code>. The second is where KOReader keeps its dictionaries, so those work in Aristotle too.</p>
+    <p>On the USB drive these are <code>dictionaries/</code> and <code>koreader/data/dict/</code>. The second is KOReader's, so its dictionaries work too.</p>
 
     <h2 id="index">Indexing</h2>
-    <p>Each dictionary gets an index the first time Aristotle sees it. It folds every headword and form to plain letters, so lookups ignore accents, Greek breathings and missing Polish diacritics: ψυχὴ, ΨΥΧΗ and ψυχη all find ψυχή.</p>
-    <ul>
-      <li>Missing indexes are built at start, in the background, at idle priority, so reading is not slowed down. They are stored in <code>.aristotle/dict-index/</code>.</li>
-      <li>Large dictionaries take a while on the device the first time. The Polish Wiktionary's index is 21 MB; it took 846 ms to build on a PC, and the Kindle is many times slower.</li>
-      <li>To skip the wait, build the indexes on the computer and copy them over:</li>
-    </ul>
+    <p>Aristotle indexes each dictionary the first time it sees it. The index reduces words to plain letters, so lookups ignore accents, Greek breathings and missing Polish diacritics. ψυχὴ, ΨΥΧΗ and ψυχη all find ψυχή.</p>
+    <p>Missing indexes are built in the background at idle priority and stored in <code>.aristotle/dict-index/</code>. The Polish Wiktionary index is 21 MB. It took 846 ms to build on a PC and 22.9 s on the Kindle. To skip the wait, build the indexes on the computer and copy them over:</p>
 <pre><code>aristotle --index-dicts --dict DICTIONARIES --library OUT
 scp -F devloop/host/ssh_config -r OUT/dict-index kindle:/mnt/us/.aristotle/</code></pre>
 
     <h2 id="choice">Which dictionary answers</h2>
-    <ul>
-      <li>Greek script means Ancient Greek; otherwise the book's language decides.</li>
-      <li>Dictionaries into the interface language come first (grc-en before grc-pl in English, grc-pl first in Polish), then the others for that language. For Latin-script words, the other Latin-script dictionaries follow, since Latin phrases turn up in Polish books.</li>
-      <li>The popup has a tab per dictionary. The one you pick is remembered per language.</li>
-      <li>Inflected forms find their dictionary form: through the dictionary's own forms, through another dictionary of the same language, or by suffix rules for Polish, Greek and Latin, marked as a guess.</li>
-    </ul>
-    <p>A selection of several words can be glossed word by word with <strong>Translate</strong>, from the same dictionaries.</p>
-    <p class="note">More: <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/reader.md#dictionary">Dictionary</a> in the reader documentation. Measured lookup times are on the <a href="../benchmarks.html#dictionary">benchmarks</a> page.</p>
+    <p>Words in Greek script are looked up as Ancient Greek, other words in the book's language. Dictionaries into the interface language come first, so grc-en precedes grc-pl in English and follows it in Polish. Latin-script words also try the other Latin-script dictionaries, because Latin phrases turn up in Polish books.</p>
+    <p>The popup has a tab for each dictionary and remembers your choice per language. Inflected forms are found through the dictionary's own forms, another dictionary of the same language, or suffix rules for Polish, Greek and Latin. Suffix-rule matches are marked as guesses.</p>
+    <p><strong>Translate</strong> glosses a selection word by word.</p>
+    <p class="note">Details are in the <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/reader.md#dictionary">reader documentation</a>. Lookup times are on the <a href="../benchmarks.html#dictionary">benchmarks</a> page.</p>
   </div>
 
   <nav class="pager" aria-label="Guides">
@@ -69,7 +61,7 @@ scp -F devloop/host/ssh_config -r OUT/dict-index kindle:/mnt/us/.aristotle/</cod
 
 <footer class="site-footer">
   <div class="inner">
-    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It builds on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, MuPDF, FreeType and HarfBuzz.</p>
     <p>Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.</p>
   </div>
 </footer>
