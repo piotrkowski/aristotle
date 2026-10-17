@@ -25,18 +25,23 @@
 #   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
 #   address, the resolvers or the list change.
 #
-# State and logs live in /var/local/aristotle (persistent ext3). Nothing here
-# writes to the root filesystem.
+# State and logs live in /var/local/aristotle (persistent ext3), which only
+# root may enter (device/README.md, "Security"). The job starts this script
+# with that directory as the current one and ARISTOTLE_DIR pointing at it
+# through /proc, so what runs cannot be swapped later in the boot. SSH runs
+# the agent's own copy of KOReader's dropbear from there, with its own keys:
+# nothing on the USB drive, which every process may write, runs as root.
+# Nothing here writes to the root filesystem.
 set -u
-umask 022
+umask 077
 
 # R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
-S=$R/var/local/aristotle
+S=${ARISTOTLE_DIR:-$R/var/local/aristotle}
 LOG=$S/log
 KO=$R/mnt/us/koreader
-PIDFILE=$R/var/run/aristotle-dropbear.pid
+PIDFILE=$S/dropbear.pid
 DISABLE=$R/mnt/us/aristotle-disable
 TAKEOVER=$R/var/run/aristotle-takeover
 # How long to wait for the userstore (/mnt/us) before giving up on the kill
@@ -72,8 +77,11 @@ usb_mode() {
     esac
 }
 
+# The pid file is on persistent storage: after a reboot its pid may belong to
+# another process, so check the name too.
 dropbear_alive() {
-    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2> /dev/null
+    p=$(cat "$PIDFILE" 2> /dev/null)
+    [ -n "$p" ] && kill -0 "$p" 2> /dev/null && grep -q dropbear "/proc/$p/cmdline" 2> /dev/null
 }
 
 net_up() {
@@ -97,18 +105,26 @@ net_up() {
     iptables -C INPUT -i usb0 -j ACCEPT 2> /dev/null || iptables -I INPUT -i usb0 -j ACCEPT
     iptables -C OUTPUT -o usb0 -j ACCEPT 2> /dev/null || iptables -I OUTPUT -o usb0 -j ACCEPT
     if ! dropbear_alive; then
-        if [ ! -x "$KO/dropbear" ]; then
-            log "ssh: $KO/dropbear not available yet"
+        # The agent's copy (install.sh), or KOReader's if there is none.
+        if [ -x "$S/dropbear" ]; then
+            db=$S/dropbear
+            home=$S/ssh
+        elif [ -x "$KO/dropbear" ]; then
+            db=$KO/dropbear
+            home=$KO
+            log "ssh: no copy of dropbear in $S; using KOReader's (install the agent again)"
+        else
+            log "ssh: no dropbear available yet"
             return 1
         fi
-        mkdir -p "$KO/settings/SSH"
-        cp "$S/authorized_keys" "$KO/settings/SSH/authorized_keys" 2>> "$LOG"
-        chmod 600 "$KO/settings/SSH/authorized_keys"
+        mkdir -p "$home/settings/SSH"
+        cp "$S/authorized_keys" "$home/settings/SSH/authorized_keys" 2>> "$LOG"
+        chmod 600 "$home/settings/SSH/authorized_keys"
         # KOReader's dropbear reads settings/SSH/authorized_keys relative to
         # its working directory and keeps its host keys there (-R). -s: keys
         # only; -p ADDRESS:PORT: listen on usb0's address only, never on
         # Wi-Fi.
-        if (cd "$KO" && ./dropbear -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
+        if (cd "$home" && "$db" -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
             # dropbear writes its pid file after forking; give it a moment.
             sleep 1
             log "ssh: dropbear started (pid $(cat "$PIDFILE" 2> /dev/null))"

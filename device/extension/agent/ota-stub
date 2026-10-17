@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Stands in for Amazon's OTA daemons, bind-mounted over /usr/bin/otaupd and
+# /usr/bin/otav3 by aristotle-ota.conf. It sleeps instead of exiting, so their
+# respawning jobs stay quietly "running".
+exec sleep 2147483647

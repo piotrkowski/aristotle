@@ -33,7 +33,10 @@ set -u
 set -f
 
 R=${AGENT_TEST_ROOT:-}
-S=$R/var/local/aristotle
+# The agent's directory, through /proc when the agent or aristotlectl runs
+# us (see boot.sh).
+S=${ARISTOTLE_DIR:-$R/var/local/aristotle}
+umask 077
 IF=wlan0
 RESOLV=$R/etc/resolv.conf
 REFRESH_SECS=${REFRESH_SECS:-900}

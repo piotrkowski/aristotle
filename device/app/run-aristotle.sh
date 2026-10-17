@@ -18,12 +18,25 @@
 # are ignored, so the app keeps running if the SSH session drops; the stock
 # GUI comes back whenever it exits. Quit by holding the "Biblioteka" title for
 # a second, or with `killall aristotle` (progress is saved either way).
+#
+# KUAL > Aristotle > Start Aristotle runs this script detached
+# (extension/bin/aristotle-start.sh), with the log on the USB drive.
 DIR=$(cd "$(dirname "$0")" && pwd)
 LOG=${ARISTOTLE_LOG:-/var/tmp/aristotle.log}
+# R stands in for / in the host-side test (device/tests/agent.sh); it is
+# empty on the device.
+R=${AGENT_TEST_ROOT:-}
 
 # The app installs its own SIGINT/SIGTERM handlers (save and leave); the
 # script itself must survive them to restore the stock GUI.
 trap '' HUP INT TERM
+
+# An Aristotle started at boot (or by `aristotlectl app start`) has the
+# screen: stop it first, without counting it as a crash and without bringing
+# the stock GUI back in between.
+if initctl status aristotle-ui 2> /dev/null | grep -q start/running; then
+    sh "$R/var/local/aristotle/aristotlectl" app stop --keep-takeover
+fi
 
 start=0
 [ -f "$LOG" ] && start=$(wc -l < "$LOG")

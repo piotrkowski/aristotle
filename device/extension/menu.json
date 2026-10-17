@@ -4,7 +4,31 @@
       "name": "Aristotle",
       "items": [
         {
-          "name": "Install agent (SSH on every boot)",
+          "name": "Start Aristotle",
+          "action": "sh ./bin/aristotle-start.sh",
+          "exitmenu": true,
+          "status": false
+        },
+        {
+          "name": "Return to the Kindle interface",
+          "action": "sh ./bin/aristotle-stop.sh",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Start Aristotle at boot: on (agent installed)",
+          "action": "sh ./agent/autostart.sh on",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Start Aristotle at boot: off",
+          "action": "sh ./agent/autostart.sh off",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Install agent (SSH on every boot, no Amazon updates)",
           "action": "sh ./agent/install.sh",
           "exitmenu": false,
           "status": false
@@ -16,7 +40,7 @@
           "status": false
         },
         {
-          "name": "Remove agent completely (job, state, SSH key)",
+          "name": "Remove agent completely (jobs, state, SSH key)",
           "action": "sh ./agent/uninstall.sh",
           "exitmenu": false,
           "status": false
