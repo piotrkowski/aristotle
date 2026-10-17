@@ -16,8 +16,8 @@
 #   /mnt/us/.aristotle/dict-index/ (else the device builds them at start;
 #   lookups say "Słownik jest indeksowany" until then).
 # Run, the app in front with the book open. --test-clippings keeps the
-# scenario's highlight out of the owner's My Clippings.txt (their notes
-# pipeline imports it on every plug-in); check it is byte-identical:
+# scenario's highlight out of the user's My Clippings.txt (note-taking
+# tools may import it on every plug-in); check it is byte-identical:
 #   ssh kindle md5sum "/mnt/us/documents/My Clippings.txt"
 #   ssh kindle sh /mnt/us/aristotle/run-aristotle.sh --open "Próba czytania" \
 #       --test-clippings /var/tmp/reading-test/My\ Clippings.txt

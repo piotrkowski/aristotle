@@ -1,8 +1,8 @@
 # Opening books in the Aristotle reader through page snapshots, and using a
 # book before its layout is done. Run with the app up
 # (devloop/kindle/run-aristotle.sh in another shell), its library on screen,
-# and at least two books. Best with "Pan Tadeusz" as the book to continue: it is
-# one huge chapter, so the layout takes about 2 s on the device and every
+# and at least two books. Best with a long MOBI novel without chapter breaks
+# as the book to continue: it is one huge chapter, so the layout takes about 2 s on the device and every
 # step below lands while the book is still opening.
 #
 # Coordinates follow the library and menu layouts of 2026-10-17: the
