@@ -2494,9 +2494,6 @@ mod tests {
         updates(app)[before..].to_vec()
     }
 
-    /// Reopening a book from its snapshot is one update, also when the
-    /// snapshot's footer is out of date: made ahead of time before the page
-    /// numbers were known (or at another reading speed).
     /// An EPUB titled "Reopened" with two chapters in its contents (the
     /// footer's progress line needs chapters).
     fn write_book(path: &Path) {
@@ -2559,15 +2556,19 @@ mod tests {
         zip.finish().unwrap();
     }
 
-    #[test]
-    fn reopening_from_a_snapshot_is_one_update() {
+    /// A library in a fresh directory with the "Reopened" book at 40 %,
+    /// its page numbers on disk and a snapshot made ahead of time: before
+    /// the page numbers were known (its footer lacks "x / y", so the open
+    /// finds [`open::Verdict::Chrome`]), or after (`Same`). Returns the
+    /// library, the books' root and the book's id.
+    fn reopen_fixture(numbers_first: bool) -> Option<(PathBuf, PathBuf, String)> {
         let Some(data) = render_data() else {
             assert!(
                 std::env::var_os("CI").is_none(),
                 "no render data directory in CI"
             );
             eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
-            return;
+            return None;
         };
         aristotle_render::use_data_dir(&data).unwrap();
         let dir = testdir("reopen");
@@ -2587,32 +2588,28 @@ mod tests {
             r#"{"secs_per_page": 10.0, "samples": 2}"#,
         )
         .unwrap();
-        let snap = snapshot::path(&library, &id);
-        let prewarm = |app: &mut App| {
-            std::thread::sleep(prewarm::QUIET + Duration::from_millis(100));
-            wait(app, |_| snap.exists());
-            // Let the job finish and be reaped.
-            wait(app, |a| a.prewarm.deadline().is_none());
-        };
-
-        // 1. A snapshot made ahead of time, with no page numbers known yet;
-        //    then the book is paginated (as by an earlier read) and opened.
         let mut app = memory_app(&library, &root);
-        prewarm(&mut app);
         let style = app.prefs.style();
-        let stamp = snapshot::file_stamp(&book).unwrap();
-        let mut b = aristotle_render::book::Book::open(&book, &style, None).unwrap();
-        b.paginate();
-        let cache = pagecache::cache_path(&library, &id, stamp.0, stamp.1, &style);
-        pagecache::store(&cache, b.pagination().unwrap()).unwrap();
-        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
-        app.leave().unwrap();
-
-        // 2. Made ahead of time with the page numbers known: the footer is
-        //    the one the open renders, at the reader's own speed.
-        std::fs::remove_file(&snap).unwrap();
-        let mut app = memory_app(&library, &root);
-        prewarm(&mut app);
+        // The page numbers, as an earlier read leaves them.
+        let paginate = || {
+            let stamp = snapshot::file_stamp(&book).unwrap();
+            let mut b = aristotle_render::book::Book::open(&book, &style, None).unwrap();
+            b.paginate();
+            let cache = pagecache::cache_path(&library, &id, stamp.0, stamp.1, &style);
+            pagecache::store(&cache, b.pagination().unwrap()).unwrap();
+        };
+        if numbers_first {
+            paginate();
+        }
+        let snap = snapshot::path(&library, &id);
+        std::thread::sleep(prewarm::QUIET + Duration::from_millis(100));
+        wait(&mut app, |_| snap.exists());
+        // Let the job finish and be reaped.
+        wait(&mut app, |a| a.prewarm.deadline().is_none());
+        if !numbers_first {
+            paginate();
+        }
+        // What the open will find.
         let rec = app.lib.book(&id).unwrap().clone();
         let mut src = Source::new(&app.lib, &rec, &app.mobi_cache).unwrap();
         src.secs_per_page = app.speed.secs_per_page();
@@ -2621,11 +2618,260 @@ mod tests {
         let mut s =
             Session::from_prepared(Session::prepare(src, style.clone(), false).unwrap()).unwrap();
         let real = s.page(s.current).unwrap();
-        assert_eq!(
-            open::compare(&shown.page, &real, &style),
+        let expected = if numbers_first {
             open::Verdict::Same
-        );
-        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+        } else {
+            open::Verdict::Chrome
+        };
+        assert_eq!(open::compare(&shown.page, &real, &style), expected);
         app.leave().unwrap();
+        Some((library, root, id))
+    }
+
+    /// A copy of `library`: the fixture stays as it is for the next run.
+    fn copy_library(library: &Path) -> PathBuf {
+        fn copy(from: &Path, to: &Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for e in std::fs::read_dir(from).unwrap() {
+                let e = e.unwrap();
+                if e.file_type().unwrap().is_dir() {
+                    copy(&e.path(), &to.join(e.file_name()));
+                } else {
+                    std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+                }
+            }
+        }
+        let to = testdir("library");
+        copy(library, &to);
+        to
+    }
+
+    /// Reopening a book from its snapshot is one update, also when the
+    /// snapshot's footer is out of date: made ahead of time before the page
+    /// numbers were known (or at another reading speed).
+    #[test]
+    fn reopening_from_a_snapshot_is_one_update() {
+        // A snapshot made before the page numbers were known (Chrome), and
+        // one made with them known (Same).
+        for numbers_first in [false, true] {
+            let Some((library, root, _)) = reopen_fixture(numbers_first) else {
+                return;
+            };
+            let mut app = memory_app(&library, &root);
+            assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+            app.leave().unwrap();
+        }
+    }
+
+    fn touch(app: &mut App, phase: HalPhase, x: u32, y: u32, time_us: u64) {
+        let ev = aristotle_hal::input::TouchEvent {
+            phase,
+            id: 0,
+            x,
+            y,
+            raw_x: x as i32,
+            raw_y: y as i32,
+            time_us,
+        };
+        app.on_touch(&ev).unwrap();
+    }
+
+    /// A 60 ms tap at (`x`, `y`).
+    fn tap(app: &mut App, x: u32, y: u32) {
+        let t = monotonic_us();
+        touch(app, HalPhase::Down, x, y, t);
+        touch(app, HalPhase::Up, x, y, t + 60_000);
+    }
+
+    /// A finger resting 600 ms at (`x`, `y`), then lifted.
+    fn hold(app: &mut App, x: u32, y: u32) {
+        let t = monotonic_us();
+        touch(app, HalPhase::Down, x, y, t);
+        app.tick_reading(t + 600_000).unwrap();
+        touch(app, HalPhase::Up, x, y, t + 700_000);
+    }
+
+    /// What one step of input left: the panel's updates, its pixels after
+    /// a full-screen update, the page, the menu and the overlay.
+    #[derive(Debug, PartialEq)]
+    struct After {
+        updates: Vec<String>,
+        pixels: Option<u64>,
+        location: usize,
+        menu_open: bool,
+        overlay: String,
+        bookmarked: bool,
+    }
+
+    fn after(app: &mut App, before: usize) -> After {
+        use std::hash::{Hash, Hasher};
+        let updates = updates(app)[before..].to_vec();
+        let pixels = match &app.panel {
+            Panel::Memory(m) if m.updates[before..].iter().any(|u| u.full_screen) => {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                m.pixels.hash(&mut h);
+                Some(h.finish())
+            }
+            _ => None,
+        };
+        let Screen::Reader(r) = &mut app.screen else {
+            panic!("not reading");
+        };
+        let overlay = match r.overlay {
+            Overlay::None => "none",
+            Overlay::Waiting { .. } => "waiting",
+            Overlay::Dict { .. } => "dict",
+            Overlay::Dragging { .. } => "dragging",
+            Overlay::Actions { .. } => "actions",
+            Overlay::Gloss { .. } => "gloss",
+            Overlay::Note { .. } => "note",
+            Overlay::Toc { .. } => "toc",
+            Overlay::Marks { .. } => "marks",
+            Overlay::GoTo { .. } => "go to",
+            Overlay::Sync { .. } => "sync",
+        }
+        .to_string();
+        let location = r.session.current;
+        After {
+            updates,
+            pixels,
+            location,
+            menu_open: r.menu_open,
+            overlay,
+            bookmarked: r.session.bookmarked(location).is_some(),
+        }
+    }
+
+    type Step<'a> = &'a dyn Fn(&mut App);
+
+    /// Reopen a copy of `library` and run `steps` on it, recording each.
+    /// Returns the page reopened and what each step left.
+    fn reopen_and_run(library: &Path, root: &Path, steps: &[Step]) -> (usize, Vec<After>) {
+        let library = copy_library(library);
+        let mut app = memory_app(&library, root);
+        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+        let Screen::Reader(r) = &app.screen else {
+            panic!("not reading");
+        };
+        let start = r.session.current;
+        let mut out = Vec::new();
+        for step in steps {
+            let before = updates(&app).len();
+            step(&mut app);
+            out.push(after(&mut app, before));
+        }
+        app.leave().unwrap();
+        (start, out)
+    }
+
+    /// The centre of a word in the middle of the page.
+    fn some_word(app: &mut App) -> (u32, u32) {
+        let Screen::Reader(r) = &mut app.screen else {
+            panic!("not reading");
+        };
+        let words = r.session.words(r.session.current);
+        let w = &words[words.len() / 2];
+        (
+            ((w.rect.x0 + w.rect.x1) / 2) as u32,
+            ((w.rect.y0 + w.rect.y1) / 2) as u32,
+        )
+    }
+
+    /// After a reopen that kept the snapshot's page (its footer out of
+    /// date), every input does what it does after a reopen that showed the
+    /// real page: taps turn and open the menu by their zones, a hold
+    /// selects, the bookmark corner marks the page, night mode switches,
+    /// and once a turn or a mark redrew the pages, every page shown has the
+    /// same pixels (coming back to the reopened page too).
+    #[test]
+    fn input_after_a_kept_snapshot_page_is_as_after_an_exact_one() {
+        let Some(chrome) = reopen_fixture(false) else {
+            return;
+        };
+        let same = reopen_fixture(true).unwrap();
+        let corner = turns::bookmark_corner(Rect::screen());
+        let (cx, cy) = ((corner.x + corner.w / 2) as u32, (corner.y + 40) as u32);
+        let forward: Step = &|a| tap(a, 950, 800);
+        let back: Step = &|a| tap(a, 150, 800);
+        let middle: Step = &|a| tap(a, 536, 724);
+        let top: Step = &|a| tap(a, 536, 80);
+        let mark: Step = &|a| tap(a, cx, cy);
+        let select: Step = &|a| {
+            let (x, y) = some_word(a);
+            hold(a, x, y);
+        };
+        // The menu's night switch.
+        let night: Step = &|a| {
+            let ev = UiEvent::Action {
+                id: menu_action::NIGHT,
+                node: NodeId(0),
+                at: aristotle_ui::geom::Point { x: 0, y: 0 },
+            };
+            a.on_menu_event(ev).unwrap();
+        };
+        let scripts: [&[Step]; 7] = [
+            // The tap seen opening the menu on the device, then back onto
+            // the reopened page.
+            &[forward, back],
+            &[back, forward, forward],
+            // The middle of the page turns forward too.
+            &[middle, back],
+            // The top strip opens the menu; a tap on the page closes it.
+            &[top, middle, forward],
+            &[select],
+            &[mark, forward, back, mark],
+            &[top, night, middle, forward, back],
+        ];
+        for (i, script) in scripts.iter().enumerate() {
+            let (start_c, mut kept) = reopen_and_run(&chrome.0, &chrome.1, script);
+            let (start_s, mut exact) = reopen_and_run(&same.0, &same.1, script);
+            assert_eq!(start_c, start_s, "script {i}: the same page reopened");
+            // Until the first turn, a full redraw of the reopened page (a
+            // popup, night mode) still has the snapshot's header and footer.
+            let mut turned = false;
+            for (k, e) in kept.iter_mut().zip(&mut exact) {
+                turned |= k.location != start_c || k.bookmarked;
+                if !turned {
+                    k.pixels = None;
+                    e.pixels = None;
+                }
+            }
+            assert_eq!(kept, exact, "script {i}");
+        }
+        // What the first script does: one turn forward, one back.
+        let (start, steps) = reopen_and_run(&chrome.0, &chrome.1, scripts[0]);
+        assert_eq!(steps[0].updates, ["turn"]);
+        assert!(steps[0].location > start && !steps[0].menu_open);
+        assert_eq!(steps[1].updates, ["turn"]);
+        assert_eq!(steps[1].location, start);
+    }
+
+    /// Back to the library at once after a reopen that kept the snapshot's
+    /// page: the progress is saved as after an exact reopen, and the next
+    /// open is again one update, on the same page.
+    #[test]
+    fn leaving_at_once_after_a_kept_snapshot_page() {
+        let Some(chrome) = reopen_fixture(false) else {
+            return;
+        };
+        let same = reopen_fixture(true).unwrap();
+        let run = |(library, root, id): &(PathBuf, PathBuf, String)| {
+            let library = copy_library(library);
+            let mut app = memory_app(&library, root);
+            assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+            app.back_to_library().unwrap();
+            assert!(matches!(app.screen, Screen::Library { .. }));
+            let progress = app.lib.book(id).unwrap().progress.clone().unwrap();
+            app.leave().unwrap();
+            let mut app = memory_app(&library, root);
+            assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+            let Screen::Reader(r) = &app.screen else {
+                panic!("not reading");
+            };
+            let at = r.session.current;
+            app.leave().unwrap();
+            (progress.locator, progress.fraction, at)
+        };
+        assert_eq!(run(&chrome), run(&same));
     }
 }
