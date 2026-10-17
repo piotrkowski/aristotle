@@ -1,7 +1,7 @@
 #!/bin/sh
 # Host-side test of the device scripts other than the migration: the device
 # guard (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and
-# takeover.sh.
+# takeover.sh, and uninstall.sh.
 #
 #   sh devloop/kindle/tests/agent.sh
 #
@@ -125,6 +125,10 @@ run() {
         sh "$r/mnt/us/extensions/aristotle-usbnet/$s" "$@" > "$r.out" 2>&1
 }
 
+running() {
+    AGENT_TEST_ROOT=$1 "$WORK/bin/initctl" status "$2" 2> /dev/null | grep -q start/running
+}
+
 called() {
     grep -q "^$2" "$1/calls" 2> /dev/null
 }
@@ -183,6 +187,63 @@ r=$(device force "$PW5_SN" 5.16.2)
 ARISTOTLE_FORCE=1 run "$r" agent/install.sh
 check "exit status 0" "[ $? = 0 ]"
 check "job file installed" "[ -f $r/etc/upstart/aristotle-agent.conf ]"
+
+# installed NAME: a PW4 with the agent installed and running, its dropbear
+# up, g_ether loaded, a log and its rotated copy, a scoped Wi-Fi policy, a
+# migration backup, and KOReader's authorized_keys holding the agent's key
+# and one of the owner's.
+installed() {
+    r=$(device "$1" "$PW4_SN" 5.13.6)
+    run "$r" agent/install.sh
+    S=$r/var/local/aristotle
+    printf '2026-01-01 00:00:00 agent: boot\n' > "$S/log"
+    printf '2025-12-31 00:00:00 older lines\n' > "$S/log.1"
+    echo scoped > "$S/net-mode"
+    echo example.org > "$S/net-allow"
+    mkdir -p "$r/mnt/us/koreader/settings/SSH" "$r/var/local/aristotle-migrate/20260101T000000Z"
+    printf 'ssh-ed25519 OWNER own\nssh-ed25519 AAAA test\n' > "$r/mnt/us/koreader/settings/SSH/authorized_keys"
+    printf 'ssh-ed25519 AAAA test\n' > "$r/var/local/aristotle-migrate/20260101T000000Z/authorized_keys"
+    printf 'migrated\n' > "$r/var/local/aristotle-migrate/migrate.log"
+    sleep 300 > /dev/null 2>&1 &
+    echo $! > "$r/var/run/aristotle-dropbear.pid"
+    echo 'g_ether 40960 0' > "$r/modules"
+    echo "$r"
+}
+
+echo "uninstall removes everything"
+r=$(installed uninstall)
+dropbear=$(cat "$r/var/run/aristotle-dropbear.pid")
+run "$r" agent/uninstall.sh
+check "exit status 0" "[ $? = 0 ]"
+check "job file removed" "[ ! -e $r/etc/upstart/aristotle-agent.conf ] && [ \"\$(grep '^mntroot' $r/calls | tail -n 2 | tr '\n' ' ')\" = 'mntroot rw mntroot ro ' ]"
+check "agent stopped" "called $r 'stop aristotle-agent' && ! running $r aristotle-agent"
+check "Wi-Fi policy back to off" "called $r 'iptables -F ARISTOTLE_IN'"
+check "state directory removed, key included" "[ ! -e $r/var/local/aristotle ]"
+check "migration backups removed" "[ ! -e $r/var/local/aristotle-migrate ]"
+check "log saved to the USB drive" "grep -q 'agent: boot' $r/mnt/us/aristotle-agent.log && grep -q 'older lines' $r/mnt/us/aristotle-agent.log && grep -q migrated $r/mnt/us/aristotle-agent.log"
+check "agent key gone from KOReader, the owner's kept" "[ \"\$(cat $r/mnt/us/koreader/settings/SSH/authorized_keys)\" = 'ssh-ed25519 OWNER own' ]"
+check "extension key removed" "[ ! -e $r/mnt/us/extensions/aristotle-usbnet/authorized_keys ]"
+check "dropbear stopped" "! kill -0 $dropbear 2> /dev/null && [ ! -e $r/var/run/aristotle-dropbear.pid ]"
+check "USB back to volumd" "called $r 'lipc-set-prop com.lab126.volumd useUsbForNetwork 0' && called $r 'rmmod g_ether'"
+check "usb0 firewall holes closed" "called $r 'iptables -D INPUT -i usb0 -j ACCEPT' && called $r 'iptables -D OUTPUT -o usb0 -j ACCEPT'"
+check "nothing left in /var/run" "[ -z \"\$(ls $r/var/run)\" ]"
+check "shows it on screen" "called $r 'eips 0 1 aristotle agent removed'"
+cp "$r/mnt/us/aristotle-agent.log" "$r.usb-log"
+run "$r" agent/uninstall.sh
+check "running it again is harmless" "[ $? = 0 ] && cmp -s $r.usb-log $r/mnt/us/aristotle-agent.log"
+
+echo "uninstall: KOReader's keys were only the agent's"
+r=$(installed onlyours)
+printf 'ssh-ed25519 AAAA test\n' > "$r/mnt/us/koreader/settings/SSH/authorized_keys"
+run "$r" agent/uninstall.sh
+check "KOReader's authorized_keys removed" "[ ! -e $r/mnt/us/koreader/settings/SSH/authorized_keys ] && [ ! -e $r/mnt/us/koreader/settings/SSH/authorized_keys.new ]"
+
+echo "uninstall: mntroot rw fails"
+r=$(installed mntroot)
+FAKE_MNTROOT_FAIL=rw run "$r" agent/uninstall.sh
+check "exit status 1" "[ $? = 1 ]"
+check "says the job file stayed" "grep -q 'mntroot failed' $r.out"
+check "state still removed, so the job cannot run" "[ ! -e $r/var/local/aristotle ]"
 
 if [ $failures = 0 ]; then
     echo "agent: all checks passed"

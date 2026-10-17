@@ -10,7 +10,7 @@
           "status": false
         },
         {
-          "name": "Remove agent",
+          "name": "Remove agent completely (job, state, SSH key)",
           "action": "sh ./agent/uninstall.sh",
           "exitmenu": false,
           "status": false
