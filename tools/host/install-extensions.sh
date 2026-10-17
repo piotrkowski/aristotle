@@ -14,8 +14,8 @@ KINDLE=${KINDLE_MOUNT:-/run/media/$USER/Kindle}
 #   mkdir -p "$ARISTOTLE_CACHE/ssh" && ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
 # or point ARISTOTLE_PUBKEY at another public key.
 PUBKEY=${ARISTOTLE_PUBKEY:-$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub}
-# The reader app's bundle, as tools/build-render.sh device writes it.
-APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-device.tar.gz}
+# The reader app comes from APP_BUNDLE (default: what tools/build-render.sh
+# device writes); see tools/package.sh.
 
 [ -s "$PUBKEY" ] || {
     echo "no public key at $PUBKEY" >&2
@@ -30,19 +30,18 @@ if findmnt -no OPTIONS "$KINDLE" | grep -q '^ro'; then
     udisksctl mount -b "$dev" > /dev/null
 fi
 
-EXT="$KINDLE/extensions/aristotle"
-mkdir -p "$KINDLE/extensions/aristotle-probe" "$EXT"
-cp -r "$REPO/device/probe/." "$KINDLE/extensions/aristotle-probe/"
-cp -r "$REPO/device/extension/." "$EXT/"
-cp "$REPO/device/app/takeover.sh" "$EXT/"
-cp "$PUBKEY" "$EXT/authorized_keys"
+# The app and the extension as in the release zip (tools/package.sh), plus
+# the read-only probe and the dev-loop key.
+STAGE=$(mktemp -d "$TMPDIR/install.XXXXXX")
+trap 'rm -rf "$STAGE"' EXIT
+"$REPO/tools/package.sh" tree "$STAGE/root"
+mkdir -p "$STAGE/root/extensions/aristotle-probe"
+cp -r "$REPO/device/probe/." "$STAGE/root/extensions/aristotle-probe/"
+cp "$PUBKEY" "$STAGE/root/extensions/aristotle/authorized_keys"
 # The extension's folder before it was renamed: KUAL would show both menus,
 # and it may hold an older copy of the key.
 rm -rf "$KINDLE/extensions/aristotle-usbnet"
-if [ -s "$APP_BUNDLE" ]; then
-    tar -xzf "$APP_BUNDLE" -C "$KINDLE"
-    echo "Unpacked the reader app to $KINDLE/aristotle"
-fi
+cp -r "$STAGE/root/." "$KINDLE/"
 sync
 
 # Eject (not power off): the device leaves drive mode, the cable stays usable.

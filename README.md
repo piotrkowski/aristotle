@@ -62,7 +62,15 @@ Aristotle is alpha software.
 | Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
 | Other devices | | Not supported. The install scripts refuse to run unless `ARISTOTLE_FORCE=1` is set. |
 
-The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). See [Building](.github/CONTRIBUTING.md#building) for the Linux build and [Device-side code](device/README.md) for installation and uninstalling.
+The Kindle also needs KUAL, the launcher that holds Aristotle's menu. Then:
+
+1. Download `aristotle-X.Y.Z.zip` from the latest [release](https://github.com/piotrkowski/aristotle/releases).
+2. Connect the Kindle to a computer over USB and unzip the file to the root of its drive. This adds `aristotle/` (the app, its licences and `SOURCE.txt`) and `extensions/aristotle/` (the KUAL menu) next to `documents/`. Eject the Kindle.
+3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
+
+To quit, hold the "Library" title for a second. To update, unzip a newer release over the old one. KUAL › Aristotle › Install agent is optional: it keeps SSH over USB available for development, lets Aristotle's settings switch the USB drive mode, and restarts the stock interface if it stays down. It needs KOReader, whose SSH server it starts, and your SSH public key saved as `extensions/aristotle/authorized_keys` on the drive.
+
+[device/README.md](device/README.md) has the details and how to uninstall. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
