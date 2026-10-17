@@ -40,6 +40,7 @@ Early bring-up. Our Rust code draws on the panel and reads touch on the real dev
 | `crates/aristotle-library` | Book library: format detection, metadata, e-ink cover thumbnails, JSON index, Kindle/KOReader import, `aristotle-library-cli` |
 | `crates/aristotle-hello`, `aristotle-touch`, `aristotle-bench` | On-device tests and the EPDC waveform benchmark |
 | `crates/aristotle-render` | E-book pages (EPUB, MOBI, PDF) with Plato's document engine; separate workspace, built by `tools/build-render.sh` |
+| `crates/aristotle-reader` | The reader app `aristotle`: library, Plato pages, menu, progress, page-number cache; member of the aristotle-render workspace |
 | `devloop/` | SSH-over-USB dev loop (`host/run.sh`), the KUAL network extension, and PW4 emulator setup |
 | `probe/host/` | Host-side tools that take apart the stock firmware |
 | `probe/device/` | KUAL extensions that run read-only probes on the Kindle |

@@ -52,7 +52,7 @@ use aristotle_ui::tree::{Constraints, Kind, Node, NodeId, PaintCx, Refresh, Tree
 use aristotle_ui::ui::{Ui, UiEvent};
 use aristotle_ui::widgets::{Slider, Steps};
 
-use crate::panel::Panel;
+use crate::panel::{Content, Panel};
 use crate::prefs::Prefs;
 use crate::progress::{Debounce, Saver};
 use crate::session::Session;
@@ -313,9 +313,14 @@ fn quit_zone(ui: &Ui, title: NodeId) -> Rect {
 }
 
 impl App {
+    /// Render and send UI chrome changes.
     fn render_ui(&mut self) -> Result<(), Error> {
+        self.render_ui_with(Content::Chrome)
+    }
+
+    fn render_ui_with(&mut self, content: Content) -> Result<(), Error> {
         let damage = self.ui.render();
-        self.panel.present(&self.ui, &damage)?;
+        self.panel.present(&self.ui, &damage, content)?;
         Ok(())
     }
 
@@ -741,7 +746,7 @@ impl App {
         self.lib
             .set_progress(&r.session.id, r.session.progress(now));
         self.debounce.changed(Instant::now());
-        self.render_ui()?;
+        self.render_ui_with(Content::Page)?;
         if let Screen::Reader(r) = &mut self.screen {
             r.session.prerender();
         }
@@ -779,7 +784,7 @@ impl App {
             r.session.style.margin_mm,
             ms(t_layout)
         );
-        self.render_ui()?;
+        self.render_ui_with(Content::Page)?;
         if let Screen::Reader(r) = &mut self.screen {
             r.session.prerender();
         }

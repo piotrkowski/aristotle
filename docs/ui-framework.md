@@ -142,6 +142,8 @@ Reader zones: the top 12 % opens the menu, the left 30 % goes back, the rest goe
 
 ## Screens and the stock UI
 
+The screens are real, not only prototypes: the reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds the library with `Library::build_shelf` from a `Shelf` (book to continue, books with status and cover thumbnails as `GrayImage`, filter, sort label, clock, battery) and lays `build_menu` over pages rendered by Plato (`Painter::blit_gray`). `MenuSpec` leaves out rows a caller cannot serve (font faces, night mode). All labels the owner reads are Polish.
+
 Preview PNGs (from `aristotle-ui-preview`, quantized to 16 levels): `library.png`, `library-pressed.png`, `library-page2.png`, `reader.png`, `reader-page2.png`, `reader-zones.png`, `reader-menu.png`, `reader-menu-pressed.png`, `reader-menu-night.png`, `reader-night.png`, `reader-charis.png`, damage overlays `*-damage.png`, and `compare-library.png` (stock home on the left, ours on the right).
 
 Compared with the stock home screen (`~/.cache/aristotle/screens/stock-home.png`, firmware 5.13.x):

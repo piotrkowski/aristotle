@@ -10,9 +10,10 @@
 //! - **UI chrome** (library, menu) goes through the HAL display thread,
 //!   which never blocks the input loop: DU for black and white changes,
 //!   GL16 for grays (the UI's own hints), and mode 8 full for screen
-//!   switches and cleanups (the stock UI's flashing refresh). A large gray
-//!   change, such as a re-laid-out page behind the open menu, becomes a
-//!   full mode-9 update of the whole screen like a page turn.
+//!   switches and cleanups (the stock UI's flashing refresh). When the book
+//!   page itself changed behind the open menu (new font size, chapter jump),
+//!   the frame goes out as a full mode-9 update of the whole screen like a
+//!   page turn ([`Content::Page`]).
 //!
 //! The driver runs one update at a time and reads the framebuffer when it
 //! processes an update, so a new page is only blitted once the previous
@@ -28,14 +29,21 @@ use std::time::{Duration, Instant};
 use aristotle_hal::display::Display;
 use aristotle_hal::framebuffer::{Framebuffer, Rect as FbRect, Waveform as FbWaveform};
 use aristotle_render::page::Page;
-use aristotle_ui::geom::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use aristotle_ui::ui::{Damage, Ui};
 use aristotle_ui::{Rect, Waveform};
 
 /// The stock UI's full flashing refresh (GC16 equivalent on the PW4).
 pub const FLASH: FbWaveform = FbWaveform::GCK16;
-/// A GL16 rectangle at least this share of the screen is a page change.
-const PAGE_SHARE: f32 = 0.4;
+/// What a UI frame shows, which decides how gray changes reach the panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Content {
+    /// Chrome only: the UI's own DU and GL16 hints.
+    Chrome,
+    /// The book page behind the menu changed: any gray change goes out as
+    /// a full mode-9 update of the whole screen, like a page turn, so the
+    /// old page leaves no ghost.
+    Page,
+}
 
 /// Waits for page-update markers on a thread of its own, so the input loop
 /// can learn when a page reached the panel (for the log) and block only
@@ -137,18 +145,16 @@ impl Panel {
     }
 
     /// Send a UI frame's damage (see the module documentation).
-    pub fn present(&mut self, ui: &Ui, damage: &[Damage]) -> io::Result<()> {
-        let screen_area = (SCREEN_WIDTH * SCREEN_HEIGHT) as f32;
+    pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
         for d in damage {
-            let big_gray = d.waveform == Waveform::GL16
-                && (d.rect.w * d.rect.h) as f32 >= screen_area * PAGE_SHARE;
-            if big_gray || d.waveform == Waveform::GC16 {
-                // Full-screen, full-mode, like a page: clears ghosting.
-                let wf = if big_gray { self.turn } else { FLASH };
+            let page = content == Content::Page && d.waveform == Waveform::GL16;
+            if page || d.waveform == Waveform::GC16 {
+                // Full-screen, full-mode: clears ghosting.
+                let wf = if page { self.turn } else { FLASH };
                 self.blit_ui_wait(ui, Rect::screen())?;
                 let all = self.fb.full_screen();
                 let m = self.fb.update(all, wf, true)?;
-                self.track(m, if big_gray { "page (ui)" } else { "flash" });
+                self.track(m, if page { "page (menu open)" } else { "flash" });
             } else {
                 // No wait: the driver latched the last page when it started
                 // it, and the display thread queues behind it by itself.
