@@ -1,24 +1,24 @@
 # Kindle Paperwhite 4 reference
 
-Facts about the device and its stock firmware. `AGENTS.md` has the short list of things that break naive code. This file has the detail.
+Device and stock-firmware facts for contributors. Source marks apply to the claim or table they follow:
 
-Each fact is marked by its source:
-
-- **[fw]** read from the stock firmware 5.13.6 update package on the host. `tools/probe/` reproduces it.
-- **[dev]** observed on our device.
-- **[ko]** taken from KOReader's device support code and not yet confirmed by our own probe.
+- [fw]: read from firmware 5.13.6 on the host with `tools/probe/`.
+- [dev]: observed on our device.
+- [ko]: taken from KOReader, not verified by our probe.
+- [ext]: another public source.
+- [inference]: a conclusion, not a measurement.
 
 ## Device
 
-| | |
+| Property | Value |
 | --- | --- |
 | Model | Kindle Paperwhite 4 (2018), codename *Moonshine*, platform *Rex* [fw][dev] |
-| Board DTBs | `imx6sll-moonshine-wfo` (Wi-Fi only), `imx6sll-moonshine-wan` (LTE), the generic `imx6sll-rex` and a stub `imx6sll-jaeger-wfo` [fw] |
-| SoC | NXP i.MX6 SoloLite-Lite (imx6sll), one Cortex-A9 core with NEON and VFPv3, PL310 L2 cache [fw] |
+| Board DTBs | `imx6sll-moonshine-wfo` for Wi-Fi, `imx6sll-moonshine-wan` for LTE [fw] |
+| SoC | NXP i.MX6 SoloLite-Lite, one Cortex-A9 with NEON and VFPv3 [fw] |
 | RAM | 512 MB. The DT `memory` node says 2 GB at `0x80000000`, and the bootloader fixes it up [fw] |
-| Firmware | 5.13.6 (373198 038), jailbroken, with KUAL, MRPI and KOReader [dev]. `/etc/prettyversion.txt` starts with `Kindle 5.13.6` [dev] |
-| Identification | `/proc/usid` holds the serial number. Unless it starts with `B` or `9`, characters 4–6 are the device code, `0PP` on ours [dev]. KOReader lists 21 PW4 codes [ko], which `device/extension/guard.sh` checks along with the firmware |
-| Kernel | `Linux 4.1.15-lab126 #1 SMP PREEMPT Thu Apr 8 09:28:53 UTC 2021`, gcc 4.9.1, `HZ=100` [fw][dev] |
+| Firmware | 5.13.6. Version file: `/etc/prettyversion.txt` [dev] |
+| Identification | `/proc/usid` holds the serial. `device/extension/guard.sh` checks PW4 codes and firmware [dev][ko] |
+| Kernel | `4.1.15-lab126`, `HZ=100` [fw][dev] |
 
 ## Boot chain
 
@@ -27,15 +27,11 @@ The update package `update_kindle_all_new_paperwhite_v2_5.13.6.bin`, unpacked wi
 | File | What it is |
 | --- | --- |
 | `imx6sll_rex/u-boot.bin` | U-Boot |
-| `imx6sll_rex/bios.bin`, `s-bios.bin` | Lab126 "Falcon" BIOS, resident firmware at `0x9ffc0000` (storage BIOS at `0x9ffd0000`), in the top 256 KiB of RAM |
-| `imx6sll_rex/boot.img` | Android v0 boot image: LZO-compressed zImage, initramfs cpio, and a wrapper DTB in the "second" slot with one DTB per board |
+| `imx6sll_rex/bios.bin`, `s-bios.bin` | Resident Falcon BIOS |
+| `imx6sll_rex/boot.img` | Kernel, initramfs, and board device trees |
 | `rootfs.img.gz` | ext3 root filesystem |
 
-Each component has a `.sig` (RSA-256). MobileRead users report the PW4 as secure-boot locked, with `secure_cpu: 1, production: 1, unlocked: 0` in a serial U-Boot log and fastboot flash and erase blocked ([t=354311](https://www.mobileread.com/forums/showthread.php?t=354311)). We assume signed boot images are enforced.
-
-The kernel command line is `console=ttymxc0,115200 consoleblank=0 uart_at_4m root=/dev/mmcblk1p8 rootwait quiet` [fw].
-
-The kernel is built with Lab126's Falcon options (`CONFIG_FALCON`, `FALCON_BLK`, `FALCON_DRV`, `FALCON_WRAPPER`) and `CONFIG_HIBERNATION_IMX6SLL=y`. The eMMC node `usdhc@02194000` is compatible with `falcon_blk` [fw]. We infer that the eMMC goes through the resident BIOS, which also handles fast hibernation, so a mainline kernel would need its own eMMC path.
+Components have `.sig` signatures [fw]. A [MobileRead serial-log report](https://www.mobileread.com/forums/showthread.php?t=354311) shows `secure_cpu: 1, production: 1, unlocked: 0` and blocked fastboot writes [ext]. Signed boot-image enforcement remains an inference [inference]. Treat boot partitions as read-only.
 
 ## Hardware map
 
@@ -52,9 +48,9 @@ From `imx6sll-moonshine-wfo.dts` [fw]:
 | Touch, variant B | Goodix `gt9xx` | I2C2 `0x14` | `gt9xx-ts.ko` |
 | USB charger detection | Maxim MAX14656 | I2C3 `0x35` | built in |
 | Wi-Fi | Broadcom BCM43430 (4343W), SDIO | | `bcmdhd.ko`, firmware `/opt/brcm_4343w/` |
-| Bluetooth | same chip, `amzn,bt_pwr_ctrl` | | |
-| Cover sensor | `amzn,rex_hall` | | |
-| Crash log | `fsl,mxc_ramoops` | | |
+| Bluetooth | same chip, `amzn,bt_pwr_ctrl` | Property | Value |
+| Cover sensor | `amzn,rex_hall` | Property | Value |
+| Crash log | `fsl,mxc_ramoops` | Property | Value |
 
 ## Kernel configuration
 
@@ -69,7 +65,7 @@ The config is embedded in the kernel and at `/proc/config.gz` on the device [fw]
 
 From FBInk and sysfs on the device [dev]:
 
-| | |
+| Property | Value |
 | --- | --- |
 | Framebuffer device | `/dev/fb0`, id `mxc_epdc_fb` |
 | Visible area | 1072 × 1448 at 300 DPI |
@@ -98,24 +94,25 @@ The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, wher
 | 9 | GLKW16 (night) | 544 ms |
 | 257 | AUTO (picked DU for this content) | 309 ms |
 
-A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms, from an early bring-up test since removed [dev].
+Other measured updates: A2 120 to 144 ms, full-screen GC16 about 570 ms, 1072 × 724 GL16 partial about 565 ms, and 992 × 60 DU partial about 320 ms [dev].
 
-The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. [ui-framework.md](ui-framework.md#e-ink-rendering) has the measurements and the display thread built on them.
+The driver runs one update at a time, even for non-overlapping regions [dev]. Use the [display thread](ui-framework.md#e-ink-rendering) for partial UI updates.
 
 ## Input
 
-- The touch chip differs between units. `/etc/upstart/touch` powers the touch rail through PMIC register `0x12`, probes I2C2 at `0x24` (Parade), then at `0x5d` and `0x14` (Goodix), and loads the matching driver [fw].
-- Our unit has Goodix `goodix-ts` on `/dev/input/event2`, with axes 0–1072 × 0–1448, the same as framebuffer coordinates [dev]. LTE units have an extra SX9310 proximity sensor, which moves touch to `event3` [ko]. Find the device by name in `/proc/bus/input/devices`.
+- `/etc/upstart/touch` probes Parade and Goodix controllers and loads the matching driver [fw].
+- Our Goodix `goodix-ts` uses framebuffer coordinates [dev]. Event numbers vary, including on LTE units [ko]. Find touch by name in `/proc/bus/input/devices`.
 - The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. [benchmarks.md](benchmarks.md#method) lists what an injected contact needs.
 - The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. musl's time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
 
 ## Power and light
 
-- Frontlight: `/sys/class/backlight/bl/brightness`, range 0–2047. Writes take effect and read back exactly [dev].
+- Frontlight: `/sys/class/backlight/bl/brightness`, range 0 to 2047. Writes take effect and read back exactly [dev].
 - Battery: `/sys/class/power_supply/bd71827_bat/` with `capacity`, `status`, `charging`, `voltage_now` (µV) and `temp` (°C). The charger is `bd71827_ac` [dev].
 - Hall sensor: `/sys/bus/platform/drivers/hall_sensor/rex_hall/hall_enable` [ko].
-- `lipc-set-prop com.lab126.powerd preventScreenSaver 1` keeps `powerd` from blanking to the screensaver and suspending [ko]. While it is 1, powerd also ignores the power button (`pbigpss::Prevent screen saver set. Ignoring power button` in its log) [dev], and it ignores the button while it thinks USB drive mode is on, which on our unit includes the USB network (`drive_mode_state:1`) [dev]. The USB network script sets it; the reader app sets it unless `ARISTOTLE_POWERD=1`.
-- powerd ignores the power button until it receives `bootSplashCleanup` from `com.lab126.hal`, which only the stock `framework_setup` job sends [fw]. A boot without the framework must send it (`ui-boot.sh` does).
+- `preventScreenSaver=1` blocks screensaver and suspend [ko], and disables the power button [dev]. The reader sets it unless `ARISTOTLE_POWERD=1`.
+- `powerd` also ignores the button in USB drive mode, including our USB network setup [dev].
+- `powerd` requires `bootSplashCleanup` from `com.lab126.hal` [fw]. `ui-boot.sh` sends it when booting without the framework.
 
 ## Filesystems
 
@@ -131,29 +128,25 @@ The driver runs one update at a time [dev]. A submit blocks while an earlier upd
 
 The C library is glibc 2.20 with the softfp ARM EABI5: soft-float calling convention, VFPv3 and NEON code, `/lib/ld-linux.so.3` [fw]. Static `armv7-unknown-linux-musleabihf` binaries run on it [dev].
 
-Init is upstart. The job graph, simplified [fw]:
+Key jobs [fw]:
 
-```
-system (udevd) → filesystems → system_setup → lab126 → lab126_gui
-    → x (lxinit + awesome) → framework (cvm Java) → framework_ready
-    → pillow (WebKit chrome) / kb / kfxreader / webreader / ...
-```
-
-| Group | Jobs |
+| Job | Role |
 | --- | --- |
-| Core services | `powerd` (suspend, screensaver, battery events), `volumd` (USB mass-storage export), `lipcd` (IPC daemon on D-Bus), `deviced`, `wifid` and `wifis` (wpa_supplicant), `syslog` |
-| GUI stack | `x`, `lab126_gui`, `framework` (Java `cvm`, heap `-Xmx25m`–`49m`), `pillow` (runs as user `framework`), `kb` (on-screen keyboard), `kppreader` (`/app/bin/AaMenuApplication`, React Native), `whisperstore`, `progressivedownloads` |
-| Native renderers | `kfxreader`, `kfxview`, `webreader` |
-| Cloud, telemetry and extras | `todo`, `tmd`, `dmld`, `fastmetrics`, `clickstream_logging`, `perfd`, `stackdumpd`, `otaupd`, `otav3`, `rcm`, `archive`, `scanner`, `stored`, `asr`, `ivona_ttsd`, `ttsorchestrator`, `playermgr`, `btd`, `btmanagerd`, `btfd`, `acsbtfd`, `ffsd`, `demd`, `cmd`, `phd`, `wand` |
-| Developer jobs, inert | `sshd`, `usbnetd`, `usbnet-autostart`, `adb-autostart`, `vnc`. They wait for flag files in `/mnt/base-us` (`ENABLE_USBNET`, `ENABLE_ADB`, `ENABLE_VNC`), and their binaries under `/usr/local` are missing from production images |
+| `powerd` | Suspend, screensaver, and battery events |
+| `volumd` | USB storage export |
+| `lipcd` | Property and event bus |
+| `x`, `framework`, `pillow`, `kb` | Window system, Java framework, UI, and keyboard |
+| `otaupd`, `otav3` | Firmware updates |
 
-Upstart is 0.6.6 [dev]: no `.override` files, no `manual` stanza [fw], so stock jobs cannot be disabled without editing them. A task that starts `on starting X` runs to completion before X's process is executed: Aristotle's OTA job bind-mounts over `/usr/bin/otav3` that way and the real binary never ran [dev, emulator]. `stored` counts its starts per session and reboots the device after more than five that ran under 10 s each (`mesquite_functions`) [fw]; `takeover.sh stop` therefore leaves it, `scanner`, `dmld`, `fastmetrics` and `clickstream_logging` to `framework_ready`.
+Upstart 0.6.6 [dev] supports neither `.override` files nor `manual` [fw]. A job using `on starting X` completes before X starts. The agent uses this ordering to bind-mount over `/usr/bin/otav3` [dev, emulator].
 
-The stock `framework` job runs `chgrp -R javausers` and `chmod -R g=u` on `/var/local`, `/var/log`, `/var/lock`, `/var/tmp` and `/var/run` at every start [fw]; `/var/local` belongs to the `framework` user, `/var/tmp` is world-writable without the sticky bit and `fs.protected_symlinks` is 0 [dev]. [device/README.md](../device/README.md#security) has what that means for Aristotle.
+`stored` reboots after more than five starts lasting under 10 seconds [fw]. `takeover.sh stop` leaves it and related jobs to `framework_ready`.
 
-`lipc` is Lab126's property and event bus on D-Bus, served by `lipc-daemon` and driven with `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, `lipc-send-event` and `lipc-wait-event`. Services are named `com.lab126.<name>`. The probe dumps all of them with their properties.
+The framework recursively changes group ownership and permissions under `/var/local`, `/var/log`, `/var/lock`, `/var/tmp`, and `/var/run` [fw]. `/var/tmp` is world-writable without a sticky bit, and `fs.protected_symlinks` is 0 [dev]. See [Security](../device/README.md#security).
 
-The stock reader keeps per-book state in `<book>.sdr/` and writes highlights to `My Clippings.txt` [fw]. `docs/library.md` describes both formats.
+LIPC is Lab126's D-Bus property and event service. Its commands include `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, and `lipc-wait-event`. Names use `com.lab126.<name>` [fw].
+
+The stock reader stores state in `<book>.sdr/` and highlights in `My Clippings.txt` [fw]. See [Library formats](library.md#stock-files-sidecars-and-my-clippingstxt).
 
 ## USB network
 
@@ -161,35 +154,35 @@ By default the port runs `g_mass_storage`, and `volumd` exports the userstore [d
 
 The Aristotle agent and KUAL › Aristotle › Start USB network replace it with `g_ether` [dev]:
 
-| | |
+| Property | Value |
 | --- | --- |
 | Device MAC, address | `02:61:72:69:73:01`, `usb0` at `192.168.15.244/24` |
 | Host MAC, address | `02:61:72:69:73:02`, `192.168.15.201/24`, no gateway or DHCP |
 | Firewall | the stock iptables rules drop unsolicited input. The scripts accept `usb0` only |
 | SSH | KOReader's `dropbear`, key-only, on `192.168.15.244:22` only |
 
-Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the device off the bus, and the network gadget then needs a physical replug [dev]. After an eject the device leaves mass storage with the cable still in, and only a replug enters it again [dev]. [device/README.md](../device/README.md#network) covers the link and the Wi-Fi policy.
+Use `udisksctl unmount` to eject. Re-entering drive mode requires a physical replug. `udisksctl power-off` also requires a replug [dev]. See [Network policy](../device/README.md#network).
 
 ## Taking over the screen
 
-KOReader's `koreader.sh` either runs `stop lab126_gui` and restarts it on exit, or disables Pillow (`lipc-set-prop com.lab126.pillow disableEnablePillow disable`) and sends `SIGSTOP` to `awesome`. It also stops several cloud jobs to free RAM [ko].
+`device/app/takeover.sh start|stop|status` controls the stock GUI. On our device [dev]:
 
-The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `device/app/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
+- `stop lab126_gui` stops `cvm`, Pillow, and the keyboard. The script also stops cloud and telemetry jobs. Available RAM rises from 236 MB to 392 MB.
+- Xorg, awesome, `lxinit`, and `blanket` remain running.
+- SIGSTOP is not a substitute. The watchdog killed the frozen framework.
+- Restarting the GUI takes 30 to 60 seconds of boot splash.
 
-- `stop lab126_gui` takes down the framework (`cvm`), Pillow and the keyboard. The script also stops 12 cloud and telemetry jobs (`stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd`). Available RAM goes from 236 MB to 392 MB.
-- `x` (Xorg, awesome, `lxinit`, `blanket`, about 22 MB) keeps running, because its job stops only on `stopping dbus or stop_x`. Judging by its command line, `blanket` draws the screensaver when `powerd` suspends, so `x` stays until we own power management. This is not tested.
-- `powerd`, `volumd`, `wifid`, `lipcd`, `dbus`, the USB network and SSH keep running.
-- `start lab126_gui` brings the stock UI back through the boot splash.
-- The flag that keeps the agent's watchdog from restarting the stock GUI, `/var/run/aristotle-takeover`, is on the tmpfs. A reboot during a takeover returns to the stock UI with the watchdog on.
-- Stroke latency is the same with the stock GUI stopped (p50 194–197 ms against 199 ms), so the panel sets it.
+KOReader uses `stop lab126_gui` or disables Pillow and freezes awesome [ko]. KOReader reports that `powerd` continues suspend and screensaver control, and `volumd` owns USB export [ko]. Keep these services deliberately.
 
 ## Host-side artifacts
 
-Large artifacts stay in the cache directory `$ARISTOTLE_CACHE` (`tools/env.sh`) as local working copies. Firmware, decompiled code and probe dumps are never committed (`.github/CONTRIBUTING.md`, "What this project will never include").
+Large artifacts stay under `$ARISTOTLE_CACHE`, set by `tools/env.sh`. Firmware, decompiled code, and probe dumps are not committed ([Contribution rules](../.github/CONTRIBUTING.md#what-this-project-will-never-include)).
 
 | Path | What |
 | --- | --- |
-| `$ARISTOTLE_CACHE/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here |
+| `$ARISTOTLE_CACHE/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | Unpacked boot files and `rootfs.img`. Read without root using `debugfs` |
 | `$ARISTOTLE_CACHE/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
 | `$ARISTOTLE_CACHE/probe/static/` | Output of `tools/probe/`: kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs |
 | `$ARISTOTLE_CACHE/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |
+
+For example, `debugfs -R 'cat /etc/prettyversion.txt' rootfs.img` reads a stock file without root.
