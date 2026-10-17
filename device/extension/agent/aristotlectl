@@ -8,6 +8,10 @@
 #   aristotlectl net off|scoped    Wi-Fi policy: off (default, stock firewall) or
 #                                  only the hosts in /var/local/aristotle/net-allow
 #   aristotlectl net status        mode, allowed addresses, rule counters
+#   aristotlectl net allow add|remove HOST:PORT FEATURE
+#                                  add or remove a net-allow line tagged
+#                                  "# aristotle:FEATURE" (the app's sync and
+#                                  catalog settings); applied now in scoped mode
 #   aristotlectl takeover on|off   tell the watchdog the stock GUI is down on purpose
 #                                  (until off or the next reboot)
 #   aristotlectl gui-restart       restart the stock GUI now
@@ -48,7 +52,19 @@ net)
         sh "$S/net.sh" apply && sh "$S/net.sh" status
         ;;
     status) sh "$S/net.sh" status ;;
-    *) echo "usage: aristotlectl net off|scoped|status" >&2; exit 2 ;;
+    allow)
+        case "${3:-}" in
+        add | remove) ;;
+        *) echo "usage: aristotlectl net allow add|remove HOST:PORT FEATURE" >&2; exit 2 ;;
+        esac
+        sh "$S/net.sh" allow "$3" "${4:-}" "${5:-}" || exit $?
+        # In off mode the list waits for scoped; the agent's tick would
+        # also pick the change up within 15 s.
+        if [ "$(cat "$S/net-mode" 2> /dev/null)" = scoped ]; then
+            sh "$S/net.sh" apply
+        fi
+        ;;
+    *) echo "usage: aristotlectl net off|scoped|status|allow" >&2; exit 2 ;;
     esac
     ;;
 takeover)
@@ -70,7 +86,7 @@ reboot)
     reboot
     ;;
 *)
-    sed -n '3,15p' "$0"
+    sed -n '3,19p' "$0"
     exit 2
     ;;
 esac
