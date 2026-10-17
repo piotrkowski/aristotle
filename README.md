@@ -22,7 +22,7 @@
   <img src="assets/screenshots/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
-Aristotle runs in place of the stock interface. It makes no network connections and has no store or account. Books are copied over USB.
+Aristotle runs in place of the stock interface. It makes no network connections and has no store or account. Books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
 
 ## Features
 
