@@ -3,6 +3,7 @@ name = "aristotle-bench"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 publish.workspace = true
 description = "Measures EPDC update latency per waveform and whether disjoint updates run in parallel"
 

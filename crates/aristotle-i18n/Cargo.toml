@@ -1,9 +1,10 @@
 [package]
 name = "aristotle-i18n"
 version = "0.1.0"
-edition = "2021"
-license = "AGPL-3.0-or-later"
-publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
 description = "Aristotle's UI languages: message catalogs from JSON, checked and embedded at build time, plurals, dates, numbers"
 
 # No runtime dependencies: build.rs reads locales/*.json, checks them against
