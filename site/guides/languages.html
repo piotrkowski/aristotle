@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a language · Aristotle</title>
+<meta name="description" content="Translate Aristotle's interface, and add hyphenation for the languages your books are in.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="wordmark" href="../index.html">Aristotle</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../benchmarks.html">Benchmarks</a>
+      <a href="index.html" aria-current="page">Guides</a>
+      <a href="https://github.com/piotrkowski/aristotle">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="page">
+  <div class="page-head">
+    <p class="crumbs"><a href="index.html">Guides</a></p>
+    <h1>Add a language</h1>
+    <p>Two different things: the language of the interface, and the languages of your books.</p>
+  </div>
+
+  <div class="prose">
+    <h2 id="interface">The interface</h2>
+    <p>The interface is in Polish for now. English and other languages come with translation catalogs, which are being built. This guide will have the steps once they land; until then, <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/ui-framework.md#adding-a-language">Adding a language</a> in the UI framework notes is the place to watch.</p>
+    <p>The plan, from the <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/architecture.md#languages">architecture notes</a>:</p>
+    <ul>
+      <li>One catalog per language, as Rust code: a missing or misspelt message fails to compile.</li>
+      <li>Plural forms per language: English has one and other; Polish has one, few and many (2 książki, 5 książek).</li>
+      <li>The catalog also holds month and weekday names, the decimal separator, and how dates, sizes and durations are written.</li>
+      <li>The language is a setting: Automatic, English, Polski.</li>
+    </ul>
+
+    <h2 id="books">Your books</h2>
+    <p>Books are hyphenated in their own language, whatever the interface language. The default build ships patterns for Polish, English (US and UK), Ancient Greek and Latin. Others can be added at build time, by name in <code>HYPH_LANGS</code> (German is <code>de-1996</code>, French <code>fr</code>):</p>
+<pre><code>HYPH_LANGS="pl en-us en-gb grc la de-1996 fr" tools/build-render.sh device</code></pre>
+    <p>The script pins every file it downloads, so a new language also needs the SHA-256 of its hyph-utf8 licence notice in <code>tools/build-render.sh</code>; it stops with a message naming the language until then. Plato loads every pattern file in the bundle the first time it hyphenates, which is why the default ships only five.</p>
+    <p>The patterns come from Plato's release, which collects them from hyph-utf8. A book's language comes from its metadata; when an EPUB declares several, Aristotle picks the one its text is actually written in.</p>
+    <p>The default build also cuts its fonts to Latin and Greek, polytonic included. <code>FONT_SUBSET=none</code> keeps everything the fonts have, Cyrillic among it.</p>
+  </div>
+
+  <nav class="pager" aria-label="Guides">
+    <a href="dictionaries.html"><span>Previous</span>Add dictionaries</a>
+    <a class="next" href="develop.html"><span>Next</span>Develop</a>
+  </nav>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Not affiliated with Amazon. Kindle and Paperwhite are trademarks of Amazon.com, Inc.</p>
+  </div>
+</footer>
+</body>
+</html>

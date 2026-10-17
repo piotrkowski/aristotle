@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aristotle: a new interface for the Kindle Paperwhite 4</title>
+<meta name="description" content="Aristotle replaces the whole interface of a jailbroken Kindle Paperwhite 4: library, reader and settings, written in Rust for e-ink. Offline by design.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="wordmark" href="index.html">Aristotle</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="guides/index.html">Guides</a>
+      <a href="https://github.com/piotrkowski/aristotle">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="wrap hero">
+    <div class="hero-text">
+      <h1>Your Kindle Paperwhite&nbsp;4, without the store.</h1>
+      <p class="lede">Aristotle replaces the whole interface of a jailbroken Paperwhite 4: the library, the reader and the settings. It is written in Rust with its own toolkit for e-ink, sets books with the document engine of Plato, and has no network code in the reader.</p>
+      <div class="actions">
+        <a class="button" href="guides/install.html">Install</a>
+        <a href="https://github.com/piotrkowski/aristotle/tree/main/docs">Documentation</a>
+        <a href="https://github.com/piotrkowski/aristotle">Source on GitHub</a>
+      </div>
+      <p class="status"><strong>Alpha.</strong> One device: the Paperwhite 4 (2018) on firmware 5.13.x. The stock system stays installed underneath and comes back when you quit. The interface is in Polish for now; English comes with the translation catalogs.</p>
+    </div>
+
+    <figure class="demo" id="demo" data-demo data-root="" aria-label="Interactive demo of Aristotle on a Kindle">
+      <div class="device">
+        <img src="demo/frames/library.png" width="1072" height="1448" alt="The library: Lalka by Bolesław Prus as the book to continue, at 43 %, above a list of four books with progress bars." draggable="false">
+        <div class="hotspots"></div>
+        <div class="flash" aria-hidden="true"></div>
+      </div>
+      <figcaption>
+        <p class="demo-hint" aria-live="polite">The library. With JavaScript on, this screen responds to taps.</p>
+        <div class="demo-bar js-only">
+          <span class="demo-step"></span>
+          <button type="button" data-restart>Start again</button>
+        </div>
+        <p class="demo-note">Frames are host renders of the current interface, pixel for pixel.</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <section class="wrap section" aria-labelledby="features">
+    <div class="section-head">
+      <h2 id="features">What it does</h2>
+      <p>A library, a reader and settings, built for the panel: every action ends in one update of its final state.</p>
+    </div>
+    <ul class="features">
+      <li>
+        <h3>Page turns</h3>
+        <p>One full-screen update with the stock reader's own waveform, so pages do not ghost. The next page is ready before you tap: 0.44 s from release, against 0.57 s for the stock reader.</p>
+      </li>
+      <li>
+        <h3>Night mode</h3>
+        <p>White on black on every screen, switched with one flash.</p>
+      </li>
+      <li>
+        <h3>Dictionaries</h3>
+        <p>Hold a word to look it up offline in StarDict dictionaries. Greek lookups ignore accents and breathings; inflected Greek, Latin and Polish forms find their dictionary form.</p>
+      </li>
+      <li>
+        <h3>Footnotes and highlights</h3>
+        <p>Notes open in a popup. Highlights go to <code>My Clippings.txt</code> in the stock format, so existing tools keep working, and to one Markdown file per book.</p>
+      </li>
+      <li>
+        <h3>Folders and series</h3>
+        <p>Everything in <code>documents/</code>: the book to continue on top, your folders as they are on the device, series in order. Progress from the stock reader and KOReader is picked up.</p>
+      </li>
+      <li>
+        <h3>Typography</h3>
+        <p>Literata, Knuth–Plass line breaking and hyphenation for Polish, English, Ancient Greek and Latin. EPUB, DRM-free MOBI, PDF and TXT.</p>
+      </li>
+    </ul>
+
+    <div class="figures">
+      <figure>
+        <div class="shot"><img src="demo/frames/fig-greek.png" width="1072" height="1448" loading="lazy" alt="A dictionary popup for the Greek word ψυχή from a Greek–Polish dictionary, over a page with Polish, Greek and Latin words."></div>
+        <figcaption>Ancient Greek: ψυχή from a Greek–Polish Wiktionary dictionary.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="demo/frames/fig-footnote.png" width="1072" height="1448" loading="lazy" alt="A footnote popup quoting Plato's Phaedo, with a button to jump to the note."></div>
+        <figcaption>A footnote in a popup, with a jump to the note.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="demo/frames/fig-folders.png" width="1072" height="1448" loading="lazy" alt="The library's Foldery view: folders Filozofia, Mickiewicz, Platon, Powieści and Prus, each with its book count and how many are being read."></div>
+        <figcaption>Folders as they are in <code>documents/</code>.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="night" aria-labelledby="upcycle">
+    <div class="wrap upcycle">
+      <div>
+        <h2 id="upcycle">Upcycle, don't replace.</h2>
+        <p>Millions of older Kindles still work. Their screens and batteries outlast the software Amazon ships for them. Aristotle gives a Paperwhite 4 a second life: a smaller interface that turns pages sooner, on the device you already own.</p>
+        <p>No store, no recommendations, no account, no telemetry. Books arrive over USB.</p>
+      </div>
+      <div>
+        <table class="compare">
+          <caption>Measured on a Paperwhite 4, stock interface and Aristotle</caption>
+          <thead>
+            <tr><th scope="col">What</th><th scope="col" class="num">Stock</th><th scope="col" class="num">Aristotle</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Memory used by the interface</th><td class="num">about 200 MB</td><td class="num ours">about 20 MB</td></tr>
+            <tr><th scope="row">Page turn, from release</th><td class="num">0.57 s</td><td class="num ours">0.44 s</td></tr>
+            <tr><th scope="row">Opening a book</th><td class="num">0.8 s</td><td class="num ours">0.56 s</td></tr>
+          </tbody>
+        </table>
+        <p class="compare-foot">Times come from the panel driver's own log, with touches injected the same way on both interfaces. <a href="benchmarks.html">Method and all measurements</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap section" aria-labelledby="start">
+    <div class="start">
+      <div>
+        <h2 id="start">Try it</h2>
+        <p style="margin-top:1rem">You build Aristotle on a Linux computer and copy it over the USB cable. It needs a jailbroken Kindle with KUAL, MRPI and KOReader.</p>
+        <div class="warning">
+          <p><strong>Changing a Kindle's software can brick it.</strong> No recovery method has been verified for the Paperwhite 4, which is secure-boot locked. Try Aristotle only on a device you can afford to lose. It reads DRM-free books only.</p>
+        </div>
+      </div>
+      <ul class="links">
+        <li><a href="guides/install.html">Install <span>Build, copy, run, uninstall</span></a></li>
+        <li><a href="guides/index.html">Guides <span>Books, dictionaries, development</span></a></li>
+        <li><a href="benchmarks.html">Benchmarks <span>Every number and how it was measured</span></a></li>
+        <li><a href="https://github.com/piotrkowski/aristotle/tree/main/docs">Documentation <span>Architecture, reader, e-ink notes</span></a></li>
+        <li><a href="https://github.com/piotrkowski/aristotle">GitHub <span>Source, issues, licence</span></a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Not affiliated with Amazon. Kindle and Paperwhite are trademarks of Amazon.com, Inc.</p>
+  </div>
+</footer>
+<script src="demo/frames.js"></script>
+<script src="assets/demo.js"></script>
+</body>
+</html>
