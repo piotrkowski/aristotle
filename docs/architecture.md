@@ -37,9 +37,15 @@ See the [glossary](glossary.md) for hardware, rendering, and device terms.
 
 `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n`, not the [HAL](glossary.md#hal), the hardware layer. The renderer uses the HAL and `plato-core`. The app combines these crates, while `aristotle-observe` runs as a separate tool.
 
-Plain `cargo build`, `cargo test`, and `cargo clippy` omit `aristotle-render` and `aristotle`, which link C libraries. Cargo still needs the Plato submodule checked out. The network crate's optional [TLS](glossary.md#tls) feature, `tls`, also builds C through ring, its cryptography library.
+Plain `cargo build`, `cargo test`, and `cargo clippy` omit `aristotle-render` and `aristotle`, which link C libraries. Cargo still needs the Plato submodule checked out. The network crate's optional [TLS](glossary.md#tls) feature, `tls`, also builds C through `ring`, its cryptography library.
 
-`tools/build-plato.sh` builds the C libraries, and `tools/build-render.sh [device|host]` builds the reader bundle. `tools/package.sh zip` adds the KUAL extension to the release zip. See [Building](../.github/CONTRIBUTING.md#building).
+The build scripts have separate roles:
+
+- `tools/build-plato.sh` builds the C libraries.
+- `tools/build-render.sh [device|host]` builds the reader bundle.
+- `tools/package.sh zip` adds the KUAL extension to the release zip.
+
+See [Building](../.github/CONTRIBUTING.md#building).
 
 The release profile uses `opt-level = "s"`, [LTO](glossary.md#lto), one codegen unit, stripped symbols, and `panic = "abort"`. The layout crates use level 3 ([Size budget](reader.md#size-budget)).
 

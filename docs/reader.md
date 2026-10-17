@@ -2,7 +2,7 @@
 
 `crates/aristotle-render` turns books into 8-bit gray pages through [Plato](https://github.com/baskerville/plato) and [MuPDF](glossary.md#mupdf), without Plato's Kobo interface. Its command-line interface (CLI) renders files, shows pages on the device, and measures layout and panel time.
 
-`crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens [EPUB](glossary.md#epub), DRM-free [MOBI](glossary.md#mobi) 7, PDF, and TXT. Measurements are from the host unless marked [dev]. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
+`crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens [EPUB](glossary.md#epub), DRM-free [MOBI](glossary.md#mobi) 7, PDF, and TXT. Measurements are from the host unless marked otherwise. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
 
 <p align="center">
   <img src="images/gallery/reading-light.png#gh-light-mode-only" alt="A page of Chase's English translation of the Nicomachean Ethics, and the opening of Book I in Bywater's Greek">
@@ -37,11 +37,11 @@ The main thread handles input and draws frames, while workers handle slower task
 | `open` | Opens a book and renders its page and neighbors |
 | `paginate`, `prewarm`, `warm-up` | Page numbers, recent-book snapshots, and hyphenation patterns at idle priority |
 | `index-saver` | Writes `library.json` |
-| `snapshot-writer` | Compresses and writes saved pages at nice 10 |
+| `snapshot-writer` | Compresses and writes saved pages at nice level `10` |
 | `dict`, `dict-index` | Dictionary lookup and idle-priority index builds |
 | `page-completions`, `panel-sequence` | Page completion tracking and menu update sequences |
 
-Idle priority means [`SCHED_IDLE`](glossary.md#sched_idle) plus nice 19. `pagecache::lower_priority` uses a direct system call because [musl](glossary.md#musl) stubs `sched_setscheduler`.
+Idle priority means [`SCHED_IDLE`](glossary.md#sched_idle) plus nice level `19`. `pagecache::lower_priority` uses a direct system call because [musl](glossary.md#musl) stubs `sched_setscheduler`.
 
 Plato's font and page objects cannot cross threads. `Session::prepare` returns data without them. `OPEN_GATE` serializes background opens so an abandoned book is dropped before the next layout starts. Partial UI updates use the [HAL](glossary.md#hal) display thread ([UI model](ui-framework.md#model)).
 
@@ -72,7 +72,7 @@ Downloads are pinned by SHA-256. The CLI stores converted MOBI books in `cache/`
 
 ## Building and testing
 
-The host build uses the device's library versions, compiled for x86_64 musl.
+The host build uses the device's library versions, compiled for `x86_64` musl.
 
 ```sh
 . tools/env.sh
@@ -109,9 +109,9 @@ ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/
 ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh
 ```
 
-The bundle lives in `/mnt/us/aristotle/`, while `/var/tmp` is a 64 MB [tmpfs](glossary.md#tmpfs) cleared on reboot [dev]. The launcher stops the stock GUI, then restores it on exit with 30 to 60 seconds of boot splash [dev]. It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
+The bundle lives in `/mnt/us/aristotle/`, while `/var/tmp` is a 64 MB [tmpfs](glossary.md#tmpfs) cleared on reboot.[^1] The launcher stops the stock GUI, then restores it on exit with 30 to 60 seconds of boot splash.[^1] It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
 
-Hold the **Library** title for one second to quit, or run `killall aristotle`. Logs go to `/var/tmp/aristotle.log`. The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
+Hold the *Library* title for one second to quit, or run `killall aristotle`. Logs go to `/var/tmp/aristotle.log`. The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
 
 ## Typesetting
 
@@ -131,14 +131,34 @@ The book's CSS applies. The menu offers seven sizes from 8 to 15 pt, line height
 
 ### Your own fonts
 
-The menu's Font row opens a list of Literata and the families in `/mnt/us/fonts` (`--fonts DIR`), the folder the stock reader takes custom fonts from. Each name is set in its own regular face when that file is up to 2 MB, else in the UI font. Picking one lays the book out again at the same place and shows it under the menu; "Back" returns to the menu. Each is one full update after the A2 outline of the tapped row, which reaches the panel 84 to 87 ms after the release; the relayout itself took 177 to 199 ms on the Apology [dev]. `fonts.rs` does the rest:
+The menu's *Font* row opens a list of Literata and the families in `/mnt/us/fonts` (`--fonts DIR`), the folder the stock reader takes custom fonts from. Each name is set in its own regular face when that file is up to 2 MB, else in the UI font. Picking one lays the book out again at the same place and shows it under the menu; *Back* returns to the menu. Each is one full update after the A2 outline of the tapped row, which reaches the panel 84 to 87 ms after the release; the relayout itself took 177 to 199 ms on the Apology.[^1] `fonts.rs` does the rest:
 
-- **Families.** FreeType reads each TTF and OTF file's family and style names, the same names Plato matches, so what the list shows is what Plato loads. Styles go to regular, italic, bold and bold italic by Plato's names (Regular, Roman, Book; Italic; Bold, Semibold, Medium; Bold Italic), then by common variants (Normal, Oblique), then by the file name (`Family-BoldItalic.ttf`). Of two files for one slot, the one earlier in Plato's list wins. Files FreeType cannot open, files over 20 MB, hidden files and families without a regular face are left out; a family of one file of any style uses it as regular. A family named Literata is hidden behind the built-in one.
-- **Cache.** The folder is read when the list opens, not at start: 372 ms the first time for 15 files (four families) [dev], 4 ms from the cache [dev]. `fonts.json` keeps the list with a hash of the folder's mtime and its font files' names, sizes and mtimes, and is read again only when that changes (FAT keeps mtimes to 2 s, and replacing a file need not touch the folder).
-- **A folder per family.** Plato's `FontFamily::from_name` opens every font file in a directory to find a family name, and each layout thread does it per book. Pointed at the user's folder, every open would pay for every font there. So the chosen family's faces, four at most, are copied to `reading-fonts/<name>-<stamp>/` in the library data directory, and `Style::font_dir` points there. FAT has no links, so a copy it is: about 1.8 MB for Charis' two faces. The stamp hashes the sources' paths, sizes and mtimes, and the copy is made in a `.part` folder and renamed, so an interrupted copy is never used. Older copies of the family are deleted. A regular face whose style name Plato does not know (Normal) is copied alone, because Plato then uses the single file for every style instead of failing.
+- **Families.** FreeType reads each TTF and OTF file's family and style names, the same names Plato matches, so what the list shows is what Plato loads. Styles go to regular, italic, bold and bold italic by Plato's names:
+
+  | Slot | Plato style names |
+  | --- | --- |
+  | Regular | `Regular`, `Roman`, `Book` |
+  | Italic | `Italic` |
+  | Bold | `Bold`, `Semibold`, `Medium` |
+  | Bold italic | `Bold Italic` |
+
+  Matching then uses common variants (`Normal`, `Oblique`), then the file name (`Family-BoldItalic.ttf`). Of two files for one slot, the one earlier in Plato's list wins. The list leaves out:
+
+  - Files FreeType cannot open.
+  - Files over 20 MB.
+  - Hidden files.
+  - Families without a regular face. A family of one file of any style uses it as regular.
+
+  A family named Literata is hidden behind the built-in one.
+- **Cache.** The folder is read when the list opens, not at start: 372 ms the first time for 15 files (four families),[^1] 4 ms from the cache.[^1] `fonts.json` keeps the list with a hash of the folder's mtime and its font files' names, sizes and mtimes, and is read again only when that changes.[^2]
+- **A folder per family.** Plato's `FontFamily::from_name` opens every font file in a directory to find a family name, and each layout thread does it per book. Pointed at the user's folder, every open would pay for every font there.
+
+  The chosen family's faces, four at most, are copied to `reading-fonts/<name>-<stamp>/` in the library data directory, and `Style::font_dir` points there. FAT has no links, so a copy it is: about 1.8 MB for Charis' two faces.
+
+  The stamp hashes the sources' paths, sizes and mtimes, and the copy is made in a `.part` folder and renamed, so an interrupted copy is never used. Older copies of the family are deleted. A regular face whose style name Plato does not know (`Normal`) is copied alone, because Plato then uses the single file for every style instead of failing.
 - **Invalidation.** The font's name and folder are part of the `Style`, so page numbers on disk (`pagecache::style_key`) and snapshots (`snapshot::look`) of another font, or of an older copy of the same one, are not used.
-- **At start** the preferences name the family; the app finds its copy again (a stat per file when the folder is unchanged) and reads in Literata if the family is gone, until it comes back.
-- **Missing letters.** Plato replaces a glyph its font lacks with one from a fallback font chosen by script. Without MuPDF's Noto fonts (`MUPDF_FONTS`), the fork takes Latin and Greek from `serif/Literata-Regular.ttf` (`core: tofu fallback to Literata for Latin and Greek`); before, they fell to the symbol font and showed boxes. Checked on the host with a copy of Gentium Book cut to ASCII: the test book's Polish letters and ψυχή came out in Literata.
+- **At start.** The preferences name the family; the app finds its copy again (a `stat` per file when the folder is unchanged) and reads in Literata if the family is gone, until it comes back.
+- **Missing letters.** Plato replaces a glyph its font lacks with one from a fallback font chosen by script. Without MuPDF's Noto fonts (`MUPDF_FONTS`), the fork takes Latin and Greek from `serif/Literata-Regular.ttf` ("core: tofu fallback to Literata for Latin and Greek"); before, they fell to the symbol font and showed boxes. Checked on the host with a copy of Gentium Book cut to ASCII: the test book's Polish letters and ψυχή came out in Literata.
 
 The header and footer stay in Literata (`style::CHROME_FAMILY`). MuPDF's reflow (TXT, and MOBI the converter can't take) does not take the font. `aristotle --preview` with `--fonts DIR` opens the list, picks the first family and goes back to Literata (`03a` to `03d`).
 
@@ -183,7 +203,7 @@ For changes that must preserve layout, compare `aristotle-render pages BOOK 20` 
 
 A [waveform](glossary.md#waveform) controls how the panel changes its pixels.
 
-A page turn is one full-screen, full-mode update in mode 9, matching the stock reader [dev]. Partial updates and A2 followed by [GL16](glossary.md#gl16) left visible [ghosting](glossary.md#ghosting) during real reading ([Experiment](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` selects faster [DU4](glossary.md#du4) with fewer grays. The CLI retains `--a2-preview` for experiments.
+A page turn is one full-screen, full-mode update in mode 9, matching the stock reader.[^1] Partial updates and A2 followed by [GL16](glossary.md#gl16) left visible [ghosting](glossary.md#ghosting) during real reading ([Experiment](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` selects faster [DU4](glossary.md#du4) with fewer grays. The CLI retains `--a2-preview` for experiments.
 
 A tap turns the page on release unless it lands in the top 12 %, which opens the menu. The left 30 % goes back and the rest goes forward. Horizontal swipes also turn pages, while a hold selects text without turning.
 
@@ -208,13 +228,13 @@ Night mode keeps page-turn and flash modes. See [Night mode](ui-framework.md#nig
   <img src="images/gallery/library-dark.png#gh-dark-mode-only" alt="The library in night mode: the book to continue, the book list with shelves, the folders view, and the Aristotle folder">
 </p>
 
-Startup shows the saved library index, then scans `/mnt/us/documents`. The library has Books, Folders, Series, and a continue-reading card. Settings control the frontlight, night mode, covers, screensaver delay, and USB mode.
+Startup shows the saved library index, then scans `/mnt/us/documents`. The library has *Books*, *Folders*, *Series*, and a continue-reading card. *Settings* control the frontlight, night mode, covers, screensaver delay, and USB mode.
 
 The default screensaver saves progress, turns off the light, and shows a book card. A touch wakes it without taking another action. The app holds [`powerd`](glossary.md#powerd)'s `preventScreenSaver`, so the CPU does not suspend and the power button has no effect.
 
 `ARISTOTLE_POWERD=1` enables the implemented `powerd` event path in `powerd.rs`. It releases `preventScreenSaver`, handles sleep and wake events, and restores stock screensaver behavior on exit. This path has host tests only; device suspend, wake light levels, and battery use are unverified.
 
-Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including SIGTERM and SIGINT. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
+Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including `SIGTERM` and `SIGINT`. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
 
 ## Reading interactions
 
@@ -228,7 +248,7 @@ Progress saves 3 seconds after the last turn, or at most 20 seconds after the fi
 | Gesture | Result |
 | --- | --- |
 | Hold a word for 500 ms | Select the word and show its definition |
-| Hold, then drag | Extend the selection; offer Highlight, Dictionary, Translate, and Cancel on release |
+| Hold, then drag | Extend the selection; offer *Highlight*, *Dictionary*, *Translate*, and *Cancel* on release |
 | Hold a highlight | Show its definition and removal action |
 | Tap a footnote marker | Show the note in a popup |
 | Tap another link | Jump to its target |
@@ -252,9 +272,9 @@ Transient selection feedback uses A2. Completed popups with grays use a full-scr
 
 `dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries; other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
 
-Lookups try listed forms, related headwords, guessed suffix rules, and nearby entries. Guesses are labeled. **Translate** looks up each selected word. Popups show senses first and expand with **More**.
+Lookups try listed forms, related headwords, guessed suffix rules, and nearby entries. Guesses are labeled. *Translate* looks up each selected word. Popups show senses first and expand with *More*.
 
-Device index builds reached 66 MB [dev]. Build large indexes on the host with `aristotle --index-dicts --dict DIR --library OUT`, then copy them to `/mnt/us/.aristotle/dict-index/`.
+Device index builds reached 66 MB.[^1] Build large indexes on the host with `aristotle --index-dicts --dict DIR --library OUT`, then copy them to `/mnt/us/.aristotle/dict-index/`.
 
 ### Footnotes
 
@@ -274,13 +294,13 @@ Device index builds reached 66 MB [dev]. Build large indexes on the host with `a
 
 Annotations in `library.json` have source `aristotle`. They store positions that survive font-size changes, plus chapter and time.
 
-New highlights append to [`My Clippings.txt`](glossary.md#my-clippingstxt) in `/mnt/us/documents/` in the stock en_GB format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. Deleting a highlight does not remove its clippings entry.
+New highlights append to [`My Clippings.txt`](glossary.md#my-clippingstxt) in `/mnt/us/documents/` in the stock `en_GB` format. The *Save highlights to My Clippings.txt* setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. Deleting a highlight does not remove its clippings entry.
 
 Tests and scenarios must use `--test-clippings PATH`, never the user's clippings file. The app has no keyboard for adding annotation notes.
 
 ### Progress line and navigation
 
-The footer shows the chapter and estimated minutes left. `speed.rs` averages forward turns lasting 5 seconds to 10 minutes, starting at 75 seconds per page. **Go to** offers a slider and percentage steps. Reading speed is saved in `reading.json`.
+The footer shows the chapter and estimated minutes left. `speed.rs` averages forward turns lasting 5 seconds to 10 minutes, starting at 75 seconds per page. *Go to* offers a slider and percentage steps. Reading speed is saved in `reading.json`.
 
 ## Settings and files
 
@@ -298,7 +318,16 @@ The footer shows the chapter and estimated minutes left. `speed.rs` averages for
 
 The app reads the frontlight level from the device rather than saving it. See `prefs.rs` for all fields.
 
-The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR` or `$ARISTOTLE_DATA`. It contains the index, covers, preferences, dictionary indexes, page starts, snapshots, converted MOBI cache, the list of font families in the fonts folder (`fonts.json`) and a copy of the chosen family (`reading-fonts/`). `--data` selects renderer assets, not library state. `aristotle --help` lists options.
+The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR` or `$ARISTOTLE_DATA`. It contains:
+
+- The index, covers, and preferences.
+- Dictionary indexes.
+- Page starts and snapshots.
+- Converted MOBI cache.
+- The list of font families in the fonts folder (`fonts.json`).
+- A copy of the chosen family (`reading-fonts/`).
+
+`--data` selects renderer assets, not library state. `aristotle --help` lists options.
 
 ## Timing log
 
@@ -335,3 +364,6 @@ MuPDF keeps Noto Serif for Greek in reflowed text. Plato uses smaller fallback f
 - Plato ignores `margin: auto` for image centering.
 - Memory use during background pagination has not been measured.
 - Selection legibility and popup ghosting have not been checked on the panel.
+
+[^1]: Measured on the device.
+[^2]: FAT keeps mtimes to 2 s, and replacing a file need not touch the folder.

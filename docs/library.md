@@ -2,7 +2,7 @@
 
 `crates/aristotle-library` indexes books and stores reading state. It imports stock Kindle [sidecars](glossary.md#sidecar) and [KOReader](glossary.md#koreader) progress. The crate is pure Rust, and `aristotle-library-cli` runs it on the host or device.
 
-Source marks: [fw] means firmware 5.13.6, [dev] means device files, [host] means host tests, and [KOReader] or [calibre] names an external source. [inference] means unconfirmed.
+Source footnotes distinguish firmware, device files, host tests, and external sources. Inferences are unconfirmed.
 
 <img src="images/library.png" width="325" alt="Library with continue-reading card, views, shelves, and books">
 
@@ -39,7 +39,7 @@ For MOBI, AZW3, and PDF, a matching author folder can split merged names or corr
 
 ## Identity and the index
 
-Book IDs use KOReader's [partial MD5](glossary.md#partial-md5), a hash of sampled content, so they survive moves and renames [KOReader]. Identical copies get `-2`, `-3`, and further suffixes.
+Book IDs use KOReader's [partial MD5](glossary.md#partial-md5), a hash of sampled content, so they survive moves and renames.[^4] Identical copies get `-2`, `-3`, and further suffixes.
 
 `library.json` lives in the data directory, `/mnt/us/.aristotle` on the device. The library writes to a temporary file, syncs it to storage, then renames it. Records contain metadata, file stamps, cover keys, status, progress, settings, and annotations.
 
@@ -61,15 +61,15 @@ Covers are grayscale PGM image thumbnails in `<data>/covers/`, keyed by the cove
 
 The continue-reading card shows the last book opened in Aristotle. Before the first open, it uses the most recently changed progress.
 
-- **Books** has All, Reading, New, and Finished shelves.
-- **Folders** mirrors the book directory, with subfolders before books.
-- **Series** groups books by series name and order.
+- *Books* has *All*, *Reading*, *New*, and *Finished* shelves.
+- *Folders* mirrors the book directory, with subfolders before books.
+- *Series* groups books by series name and order.
 
 Lists use pages, not scrolling. Sort order is recent, title, or author. Search ignores case and diacritics, including `ł`. Every query word must match the title, an author, or the series. Sorting is not locale-specific.
 
 ## Stock files: sidecars and My Clippings.txt
 
-Aristotle reads the Kindle's reading-position sidecars in [KRDS](glossary.md#krds) format, so positions and highlights from the stock reader carry over to Aristotle. Highlights made in Aristotle go to `My Clippings.txt` in the stock format. The format is described here in our own words, from public documentation (jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), `kindle_formats`) and from files on the device, for interoperability. No Amazon code is included.
+Aristotle reads the Kindle's reading-position sidecars in [KRDS](glossary.md#krds) format, so positions and highlights from the stock reader carry over to Aristotle. Highlights made in Aristotle go to `My Clippings.txt` in the stock format. The format is described here in our own words, from public documentation[^5] and from files on the device, for interoperability. No Amazon code is included.
 
 ### Sidecar folders [fw]
 
@@ -83,26 +83,26 @@ For `<name>.<ext>`, the stock reader stores files in `<name>.sdr/`.
 | PDF | `.pdt` | `.pds` |
 | Topaz | `.tas` | `.tal` |
 
-The folder can also contain `.apnx` page maps and KOReader's `metadata.<ext>.lua`. The device's two sideloaded MOBI samples had `.mbs` and `.mbp1` [dev]. Aristotle reads stock sidecars but does not write them.
+The folder can also contain `.apnx` page maps and KOReader's `metadata.<ext>.lua`. The device's two sideloaded MOBI samples had `.mbs` and `.mbp1`.[^2] Aristotle reads stock sidecars but does not write them.
 
 ### KRDS
 
-`sidecar.rs` parses typed objects whose multi-byte values store the most significant byte first, or big-endian order. The layout matches four device `.mbs` and `.mbp1` files [dev] and firmware readers [fw].
+`sidecar.rs` parses typed objects whose multi-byte values store the most significant byte first, or big-endian order. The layout matches four device `.mbs` and `.mbp1` files[^2] and firmware readers.[^1]
 
 | Object | Contents | Source |
 | --- | --- | --- |
-| `lpr` | Last position and epoch milliseconds | [fw][dev] |
-| `fpr` | Furthest position, time, local offset, country, and device | [fw][dev] |
-| `annotation.cache.object` | Typed bookmark, highlight, note, and clip objects | [fw] |
+| `lpr` | Last position and epoch milliseconds | [^1][^2] |
+| `fpr` | Furthest position, time, local offset, country, and device | [^1][^2] |
+| `annotation.cache.object` | Typed bookmark, highlight, note, and clip objects | [^1] |
 
-MOBI positions begin with an uncompressed-text byte offset [dev]. AZW3 uses the same unit [fw]. Annotation layouts are not verified on device data because the samples contain none.
+MOBI positions begin with an uncompressed-text byte offset.[^2] AZW3 uses the same unit.[^1] Annotation layouts are not verified on device data because the samples contain none.
 
 ### What is imported
 
 Scans import sidecars for new books, while `aristotle-library-cli import-sidecars` imports them for all books. Only newer progress replaces saved progress.
 
 - MOBI and AZW3 import `lpr`, with `.apnx` page labels when available. A fraction of at least 0.99 marks completion.
-- Stock annotations retain positions, creation times, and note text. Kindle locations use byte position divided by 150, plus 1 [calibre]. The same unit in firmware 5.x is an inference.
+- Stock annotations retain positions, creation times, and note text. Kindle locations use byte position divided by 150, plus 1.[^6] The same unit in firmware 5.x is an inference.
 - KOReader imports `percent_finished`, `last_xpointer` or `last_page`, and `summary.status`. The partial MD5 must match.
 - `fpr`, PDF and KFX positions, font preferences, and KOReader highlights are not imported.
 
@@ -122,7 +122,7 @@ The stock format is UTF-8 with CRLF line endings, a carriage return followed by 
 
 ## Export
 
-New highlights append to `My Clippings.txt` with stock en_GB labels, regardless of UI language. Existing entries are skipped. Notes use a preceding **Your Note** entry. Bookmarks are not exported, and deleted highlights remain in the file. The `clippings` preference controls this output.
+New highlights append to `My Clippings.txt` with stock `en_GB` labels, regardless of UI language. Existing entries are skipped. Notes use a preceding `Your Note` entry. Bookmarks are not exported, and deleted highlights remain in the file. The `clippings` preference controls this output.
 
 Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. They contain Obsidian front matter, quotes, chapters, locations, dates, and notes. Labels follow the UI language.
 
@@ -132,7 +132,7 @@ Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. They contai
 
 ## Performance
 
-Host release build, 31 books and 29 covers [host]:
+Host release build, 31 books and 29 covers:[^3]
 
 | Run | Time or size |
 | --- | --- |
@@ -146,7 +146,7 @@ These are host results, not PW4 timings.
 
 ## Network: progress sync and catalogs
 
-Both features are off until configured in **Settings > Network**. Worker threads connect only to configured servers and catalogs. The device's host allowlist applies to requests and redirects ([Network policy](../device/README.md#network)).
+Both features are off until configured in *Settings > Network*. Worker threads connect only to configured servers and catalogs. The device's host allowlist applies to requests and redirects ([Network policy](../device/README.md#network)).
 
 Saving a server adds a tagged entry to `net-allow` through `aristotlectl net allow add`. Removing it deletes that entry, not untagged entries. Code lives in `crates/aristotle-net` and the app's `net.rs`, `sync.rs`, and `catalogs.rs`.
 
@@ -166,13 +166,13 @@ There is no on-screen keyboard, so you configure accounts in `sync.json` and `ca
 {"catalogs":[{"name":"calibre","url":"http://192.168.1.10:8080/opds","username":"anna","password":"example"}]}
 ```
 
-On import, the app removes password fields from these [userstore](glossary.md#userstore) files. Credentials go to `/var/local/aristotle/accounts.json`, mode 0600, in a root-owned directory with mode 000. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device [dev]. `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
+On import, the app removes password fields from these [userstore](glossary.md#userstore) files. Credentials go to `/var/local/aristotle/accounts.json`, mode `0600`, in a root-owned directory with mode `000`. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device.[^2] `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
 
 Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for [Basic](glossary.md#basic-auth) and [Digest authentication](glossary.md#digest-auth). Catalog imports match by name and keep a stored password when no replacement is supplied.
 
 ### Progress sync (KOSync)
 
-Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatible servers [KOReader]. The document ID is the partial MD5 without a duplicate suffix. A random device ID is saved once.
+Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatible servers.[^4] The document ID is the partial MD5 without a duplicate suffix. A random device ID is saved once.
 
 | Format | Position sent | Position received |
 | --- | --- | --- |
@@ -197,3 +197,10 @@ HTTPS uses [TLS](glossary.md#tls) through the `tls` feature, enabled in release 
 - Stock annotations and KF8 sidecars have no device-data verification.
 - PDF thumbnails and GIF or WebP cover decoding are unsupported.
 - KOReader imports progress and status, not highlights.
+
+[^1]: Firmware 5.13.6. The `[fw]` marks in headings use the same source.
+[^2]: Device files.
+[^3]: Host tests.
+[^4]: KOReader.
+[^5]: jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), and `kindle_formats`.
+[^6]: calibre.
