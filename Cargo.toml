@@ -9,6 +9,7 @@ members = [
     "crates/aristotle-observe",
     "crates/aristotle-library",
     "crates/aristotle-ui",
+    "crates/aristotle-app",
 ]
 
 [workspace.package]

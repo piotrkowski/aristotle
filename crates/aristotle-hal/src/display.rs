@@ -83,6 +83,9 @@ impl Completions {
 struct Pending {
     rect: Option<Rect>,
     waveform: Option<Waveform>,
+    /// Drive every pixel of the merged rect, not only changed ones; set if
+    /// any merged damage asked for it (see [`Display::damage_full`]).
+    full: bool,
     /// Caller-supplied timestamps carried along for latency accounting.
     tags: Vec<u64>,
     /// Submitted updates whose tags have not been reported as shown yet.
@@ -121,7 +124,7 @@ impl Display {
             .spawn(move || {
                 let (lock, cvar) = &*worker;
                 loop {
-                    let (rect, waveform, tags) = {
+                    let (rect, waveform, full, tags) = {
                         let mut p = lock.lock().expect("display lock");
                         while p.rect.is_none() && !p.shutdown {
                             p = cvar.wait(p).expect("display lock");
@@ -133,11 +136,12 @@ impl Display {
                         (
                             p.rect.take().unwrap(),
                             p.waveform.take().unwrap_or(Waveform::A2),
+                            std::mem::take(&mut p.full),
                             std::mem::take(&mut p.tags),
                         )
                     };
                     // Blocks while the panel finishes the previous update.
-                    let marker = updater.update(rect, waveform).ok().flatten();
+                    let marker = updater.update(rect, waveform, full).ok().flatten();
                     let mut p = lock.lock().expect("display lock");
                     p.submitting = false;
                     if let Some(m) = marker {
@@ -158,8 +162,22 @@ impl Display {
     /// `tags` (for example input timestamps) come back from
     /// [`Display::drain_shown`] once the update carrying them is on the panel.
     pub fn damage(&self, rect: Rect, waveform: Waveform, tags: &[u64]) {
+        self.queue(rect, waveform, false, tags);
+    }
+
+    /// Like [`Display::damage`], but the update drives every pixel in the
+    /// merged rect. Needed to clear ghosting: GC16 flash refreshes, and the
+    /// final GL16 pass of a page turn after the fast A2 pass. With a partial
+    /// update the driver skips pixels that already hold their target value,
+    /// and those are exactly where the previous page's ghost remains.
+    pub fn damage_full(&self, rect: Rect, waveform: Waveform, tags: &[u64]) {
+        self.queue(rect, waveform, true, tags);
+    }
+
+    fn queue(&self, rect: Rect, waveform: Waveform, full: bool, tags: &[u64]) {
         let (lock, cvar) = &*self.shared;
         let mut p = lock.lock().expect("display lock");
+        p.full |= full;
         p.rect = Some(p.rect.map_or(rect, |r| r.union(rect)));
         p.waveform = Some(match p.waveform {
             Some(w) if fidelity(w) >= fidelity(waveform) => w,

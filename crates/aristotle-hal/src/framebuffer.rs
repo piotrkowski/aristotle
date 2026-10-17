@@ -282,10 +282,14 @@ pub struct Updater {
 }
 
 impl Updater {
-    /// Same contract as [`Framebuffer::update`], always a partial update.
-    /// Blocks while the driver is still busy with an earlier update (about
-    /// one waveform duration, measured: 120 ms for A2).
-    pub fn update(&mut self, rect: Rect, waveform: Waveform) -> io::Result<Option<u32>> {
+    /// Same contract as [`Framebuffer::update`]. Blocks while the driver is
+    /// still busy with an earlier update (about one waveform duration,
+    /// measured: 120 ms for A2).
+    ///
+    /// `full` drives every pixel in `rect`, not only the changed ones. That is
+    /// what clears ghosting: a partial update leaves pixels whose value did
+    /// not change alone, including the faint remains of earlier content.
+    pub fn update(&mut self, rect: Rect, waveform: Waveform, full: bool) -> io::Result<Option<u32>> {
         let right = rect.left.saturating_add(rect.width).min(self.width);
         let bottom = rect.top.saturating_add(rect.height).min(self.height);
         if rect.left >= right || rect.top >= bottom {
@@ -303,7 +307,7 @@ impl Updater {
         let mut data = UpdateDataRex {
             update_region: rect,
             waveform_mode: waveform.0,
-            update_mode: UPDATE_MODE_PARTIAL,
+            update_mode: if full { UPDATE_MODE_FULL } else { UPDATE_MODE_PARTIAL },
             update_marker: marker,
             temp: TEMP_USE_AMBIENT,
             ..Default::default()
