@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "name": "Aristotle USB network",
+      "items": [
+        {
+          "name": "Start (SSH over the USB cable)",
+          "action": "sh ./bin/start.sh",
+          "exitmenu": false,
+          "status": false
+        },
+        {
+          "name": "Stop",
+          "action": "sh ./bin/stop.sh",
+          "exitmenu": false,
+          "status": false
+        }
+      ]
+    }
+  ]
+}
