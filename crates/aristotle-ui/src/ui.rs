@@ -21,6 +21,13 @@
 //! full-screen GC16 for new screens, night-mode switches and every n-th page
 //! turn, to clear ghosting.
 //!
+//! 4. **Coalesce.** The minimal rectangles are then merged for transport
+//!    according to [`Coalesce`]. On the stock PW4 driver, which runs one
+//!    update at a time and takes about as long for a small region as for a
+//!    large one, the default sends one A2 update for feedback and one update
+//!    for everything else. The minimal rectangles stay available through
+//!    [`Ui::minimal_damage`] for drivers that can run updates in parallel.
+//!
 //! # Device hand-off
 //!
 //! ```text
@@ -45,6 +52,22 @@ use crate::waveform::Waveform;
 pub struct Damage {
     pub rect: Rect,
     pub waveform: Waveform,
+}
+
+/// How minimal damage rectangles are merged before they are sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Coalesce {
+    /// Send every minimal rectangle.
+    None,
+    /// Merge same-waveform rectangles that overlap or nearly touch
+    /// ([`merge`]).
+    Nearby,
+    /// One update for A2 feedback and one for everything else, with the
+    /// most faithful waveform. Right for the stock PW4 driver: updates run
+    /// strictly one after another and cost a whole waveform each, so two
+    /// small GL16 updates take twice as long as one covering both, and
+    /// GL16 leaves unchanged pixels alone.
+    Single,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +107,10 @@ pub struct Ui {
     gestures: GestureRecognizer,
     pressed: Option<NodeId>,
     snapshot: Vec<Rect>,
+    /// Repaint the whole screen and diff it on the next render.
+    repaint_all: Option<Refresh>,
+    pub coalesce: Coalesce,
+    minimal: Vec<Damage>,
 }
 
 impl Ui {
@@ -101,6 +128,9 @@ impl Ui {
             gestures: GestureRecognizer::default(),
             pressed: None,
             snapshot: Vec::new(),
+            repaint_all: None,
+            coalesce: Coalesce::Single,
+            minimal: Vec::new(),
         }
     }
 
@@ -116,10 +146,24 @@ impl Ui {
     /// Replaces the whole screen, e.g. going from the library to a book.
     /// A context switch gets a flashing GC16, which also clears ghosting.
     pub fn set_tree(&mut self, tree: Tree) -> Tree {
+        self.set_tree_with(tree, Refresh::Full)
+    }
+
+    /// Replaces the tree and refreshes as `refresh` says. With
+    /// `Refresh::Auto` the whole screen is repainted but only the pixels
+    /// that differ are sent, so rebuilding a screen from scratch (say, after
+    /// changing a library filter) costs no more than the visible change.
+    pub fn set_tree_with(&mut self, tree: Tree, refresh: Refresh) -> Tree {
         self.pressed = None;
-        self.full_pending = true;
-        self.snapshot.clear();
-        std::mem::replace(&mut self.tree, tree)
+        match refresh {
+            Refresh::Full => self.full_pending = true,
+            other => self.repaint_all = Some(other),
+        }
+        let old = std::mem::replace(&mut self.tree, tree);
+        self.tree.needs_layout = true;
+        self.ensure_layout();
+        self.snapshot = self.tree.snapshot();
+        old
     }
 
     pub fn night(&self) -> bool {
@@ -139,28 +183,41 @@ impl Ui {
         self.full_pending = true;
     }
 
+    /// Lays out the tree if anything changed since the last layout. Call it
+    /// before reading node rectangles or page counts.
+    pub fn layout(&mut self) {
+        self.ensure_layout();
+    }
+
     fn ensure_layout(&mut self) {
         if self.tree.needs_layout {
             self.tree.layout(self.screen, &mut self.text);
         }
     }
 
-    /// Repaints what changed and returns the damage, smallest first.
+    /// The minimal damage of the last render, before coalescing.
+    pub fn minimal_damage(&self) -> &[Damage] {
+        &self.minimal
+    }
+
+    /// Repaints what changed and returns the damage to send, A2 feedback
+    /// first.
     pub fn render(&mut self) -> Vec<Damage> {
         self.ensure_layout();
         let now = self.tree.snapshot();
         let mut regions: Vec<(Rect, Refresh)> = Vec::new();
-        if now.len() == self.snapshot.len() {
-            for (old, new) in self.snapshot.iter().zip(&now) {
-                if old != new {
-                    regions.push((*old, Refresh::Auto));
-                    regions.push((*new, Refresh::Auto));
-                }
+        // Nodes added since the last render have no old rectangle.
+        for (i, new) in now.iter().enumerate() {
+            let old = self.snapshot.get(i).copied().unwrap_or_default();
+            if old != *new {
+                regions.push((old, Refresh::Auto));
+                regions.push((*new, Refresh::Auto));
             }
-        } else {
-            self.full_pending = true;
         }
         self.snapshot = now;
+        if let Some(refresh) = self.repaint_all.take() {
+            regions.push((self.screen, refresh));
+        }
         let changes = std::mem::take(&mut self.tree.changes);
         let mut rects = Vec::new();
         for ch in changes {
@@ -179,12 +236,26 @@ impl Ui {
             self.pages_since_full = 0;
             self.repaint(self.screen);
             self.front.copy_from(&self.canvas, self.screen);
-            return vec![Damage {
+            self.minimal = vec![Damage {
                 rect: self.screen,
                 waveform: Waveform::GC16,
             }];
+            return self.minimal.clone();
         }
 
+        // Feedback first: where regions overlap, the first one processed
+        // claims the changed pixels, and a press must stay A2. Within a
+        // class, larger regions first, so a panel claims its changes as one
+        // box before the labels on it are looked at.
+        regions.sort_by_key(|(rect, r)| {
+            let class = match r {
+                Refresh::Transient => 0,
+                Refresh::Full => 1,
+                Refresh::Page => 2,
+                Refresh::Auto => 3,
+            };
+            (class, std::cmp::Reverse(rect.area()))
+        });
         let mut damage = Vec::new();
         for (rect, refresh) in regions {
             let Some(r) = rect.intersect(&self.screen) else {
@@ -210,9 +281,30 @@ impl Ui {
             self.front.copy_from(&self.canvas, t);
             damage.push(Damage { rect: t, waveform });
         }
-        let mut merged = merge(damage);
-        merged.sort_by_key(|d| d.rect.area());
-        merged
+        // Regions overlap (a sheet and the labels on it), so drop rectangles
+        // already covered by an equal or more faithful one.
+        let covered = |i: usize, a: &Damage| {
+            damage.iter().enumerate().any(|(j, b)| {
+                j != i
+                    && b.waveform.fidelity() >= a.waveform.fidelity()
+                    && b.rect.intersect(&a.rect) == Some(a.rect)
+                    && (b.rect != a.rect || j < i)
+            })
+        };
+        let damage: Vec<Damage> = damage
+            .iter()
+            .enumerate()
+            .filter(|(i, d)| !covered(*i, d))
+            .map(|(_, d)| *d)
+            .collect();
+        self.minimal = damage.clone();
+        let mut out = match self.coalesce {
+            Coalesce::None => damage,
+            Coalesce::Nearby => merge(damage),
+            Coalesce::Single => single(&damage),
+        };
+        out.sort_by_key(|d| (d.waveform != Waveform::A2, d.rect.area()));
+        out
     }
 
     fn repaint(&mut self, r: Rect) {
@@ -295,6 +387,28 @@ impl Ui {
             Gesture::Swipe { dir, .. } => out.push(UiEvent::Swipe(dir)),
         }
     }
+}
+
+/// One rectangle for A2 feedback and one for the rest; see
+/// [`Coalesce::Single`].
+pub fn single(damage: &[Damage]) -> Vec<Damage> {
+    let mut fast: Option<Damage> = None;
+    let mut rest: Option<Damage> = None;
+    for d in damage {
+        let slot = if d.waveform == Waveform::A2 {
+            &mut fast
+        } else {
+            &mut rest
+        };
+        *slot = Some(match *slot {
+            None => *d,
+            Some(s) => Damage {
+                rect: s.rect.union(&d.rect),
+                waveform: s.waveform.max(d.waveform),
+            },
+        });
+    }
+    fast.into_iter().chain(rest).collect()
 }
 
 /// Merges damage rectangles with the same waveform when they overlap or
@@ -440,6 +554,37 @@ mod tests {
     }
 
     #[test]
+    fn press_feedback_covers_the_whole_target() {
+        // A button with no background or border: only its label paints,
+        // but the A2 inversion must cover the full 9 mm target.
+        let mut btn = NodeId(0);
+        let mut u = ui(|t| {
+            let l = t.label("A", style());
+            btn = t.button(Node::plain(), l, 1);
+            let root = t.align(0.5, 0.5, btn);
+            t.set_root(root);
+        });
+        let r = u.tree.rect(btn);
+        assert_eq!((r.w, r.h), (106, 106));
+        let c = r.center();
+        u.handle_touch(TouchEvent {
+            phase: Phase::Down,
+            id: 0,
+            x: c.x,
+            y: c.y,
+            time_us: 0,
+        });
+        let d = u.render();
+        assert_eq!(
+            d,
+            vec![Damage {
+                rect: r,
+                waveform: Waveform::A2
+            }]
+        );
+    }
+
+    #[test]
     fn tap_outside_targets_is_reported_for_zones() {
         let mut u = ui(|t| {
             let l = t.label("Text", style());
@@ -515,15 +660,20 @@ mod tests {
             t.set_root(root);
         });
         u.tree.set_hidden(overlay, false);
-        let d = u.render();
+        let sent = u.render();
+        let d = u.minimal_damage().to_vec();
         let total: i64 = d.iter().map(|d| d.rect.area()).sum();
         assert_eq!(d.len(), 2, "{d:?}");
         assert!(total <= 600 * 300, "middle of the screen untouched: {d:?}");
-        // Pure black-and-white bars go out with DU.
+        // Pure black-and-white bars go out with DU...
         assert!(d.iter().all(|d| d.waveform == Waveform::DU));
+        // ...as one update spanning both, for the one-at-a-time driver.
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].rect, d[0].rect.union(&d[1].rect));
+        assert_eq!(sent[0].waveform, Waveform::DU);
         u.tree.set_hidden(overlay, true);
-        let d = u.render();
-        assert_eq!(d.len(), 2);
+        u.render();
+        assert_eq!(u.minimal_damage().len(), 2);
     }
 
     #[test]
@@ -537,6 +687,26 @@ mod tests {
         let d = u.render();
         assert_eq!(d[0].waveform, Waveform::GC16);
         assert_eq!(u.screen().get(599, 799), 0);
+    }
+
+    #[test]
+    fn single_keeps_feedback_apart() {
+        let d = |x, y, w, h, wf| Damage {
+            rect: Rect::new(x, y, w, h),
+            waveform: wf,
+        };
+        let out = single(&[
+            d(0, 0, 10, 10, Waveform::DU),
+            d(500, 500, 10, 10, Waveform::GL16),
+            d(100, 100, 50, 50, Waveform::A2),
+        ]);
+        assert_eq!(
+            out,
+            vec![
+                d(100, 100, 50, 50, Waveform::A2),
+                d(0, 0, 510, 510, Waveform::GL16)
+            ]
+        );
     }
 
     #[test]

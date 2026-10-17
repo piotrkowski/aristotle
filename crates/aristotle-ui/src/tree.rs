@@ -219,6 +219,12 @@ impl Node {
         }
     }
 
+    /// A node that only carries looks (background, border, action), for
+    /// constructors such as [`Tree::button`] that supply the kind.
+    pub fn plain() -> Self {
+        Self::new(Kind::Spacer)
+    }
+
     pub fn column(gap: i32) -> Self {
         Self::new(Kind::Column {
             gap,
@@ -283,10 +289,12 @@ impl Node {
     /// Whether this node puts pixels on screen itself (as opposed to only
     /// arranging children). Only such nodes generate damage when they move.
     fn paints(&self) -> bool {
+        // Deliberately independent of `pressed`: press feedback is damaged
+        // through an explicit Transient change, and must not also show up
+        // as a node "appearing" with Auto refresh.
         self.bg.is_some()
             || self.border.is_some()
             || self.inverted
-            || self.pressed
             || matches!(
                 self.kind,
                 Kind::Text { .. }
@@ -490,6 +498,15 @@ impl Tree {
         if self.node(id).hidden != hidden {
             self.node_mut(id).hidden = hidden;
             self.needs_layout = true;
+        }
+    }
+
+    pub fn set_icon_gray(&mut self, id: NodeId, g: u8) {
+        if let Kind::Icon { gray, .. } = &mut self.node_mut(id).kind {
+            if *gray != g {
+                *gray = g;
+                self.invalidate(id, Refresh::Auto);
+            }
         }
     }
 
@@ -898,7 +915,9 @@ impl Tree {
         for &ch in &n.children {
             self.paint_node(ch, p, text);
         }
-        if let Some(b) = n.border {
+        // A zero-width border only lends its radius to the background and
+        // the pressed or inverted state.
+        if let Some(b) = n.border.filter(|b| b.width > 0) {
             p.stroke_round_rect(r, radius, b.width as f32, b.gray);
         }
         // Pressed toggles the inversion, so a selected (inverted) item
@@ -964,7 +983,9 @@ impl Tree {
 
     pub(crate) fn rects_of(&self, id: NodeId, out: &mut Vec<Rect>) {
         let n = self.node(id);
-        if n.paints() {
+        // A target's whole box is its unit of change: press feedback
+        // covers all of it, not just the label inside.
+        if n.paints() || n.action.is_some() {
             out.push(n.rect);
         } else {
             for &c in &n.children {

@@ -69,23 +69,29 @@ fn def(icon: Icon) -> Def {
         Icon::Minus => ("M5 12H19", NONE),
         Icon::Sun => (
             "M16 12A4 4 0 1 1 8 12A4 4 0 1 1 16 12Z\
-             M12 2V4.5M12 19.5V22M2 12H4.5M19.5 12H22\
-             M4.9 4.9L6.6 6.6M17.4 17.4L19.1 19.1M4.9 19.1L6.6 17.4M17.4 6.6L19.1 4.9",
+             M12 2.5V4.5M12 19.5V21.5M2.5 12H4.5M19.5 12H21.5\
+             M5.3 5.3L6.7 6.7M17.3 17.3L18.7 18.7M5.3 18.7L6.7 17.3M17.3 6.7L18.7 5.3",
             NONE,
         ),
         Icon::SunSmall => (
             "M14.5 12A2.5 2.5 0 1 1 9.5 12A2.5 2.5 0 1 1 14.5 12Z\
-             M12 6V7M12 17V18M6 12H7M17 12H18",
+             M12 5V6.5M12 17.5V19M5 12H6.5M17.5 12H19",
             NONE,
         ),
         Icon::Moon => ("M20 14.5A8.5 8.5 0 1 1 9.5 4A7 7 0 0 0 20 14.5Z", NONE),
         Icon::Check => ("M5 12.5L10 17.5L19 7", NONE),
-        Icon::SpacingTight => ("M5 9H19M5 12H19M5 15H19", NONE),
-        Icon::SpacingNormal => ("M5 7H19M5 12H19M5 17H19", NONE),
-        Icon::SpacingLoose => ("M5 4.5H19M5 12H19M5 19.5H19", NONE),
-        Icon::MarginsNarrow => ("M4 3H20V21H4ZM6.5 8H17.5M6.5 12H17.5M6.5 16H17.5", NONE),
-        Icon::MarginsNormal => ("M4 3H20V21H4ZM8 8H16M8 12H16M8 16H16", NONE),
-        Icon::MarginsWide => ("M4 3H20V21H4ZM10 8H14M10 12H14M10 16H14", NONE),
+        Icon::SpacingTight => ("M5 8H19M5 12H19M5 16H19", NONE),
+        Icon::SpacingNormal => ("M5 6H19M5 12H19M5 18H19", NONE),
+        Icon::SpacingLoose => ("M5 3.5H19M5 12H19M5 20.5H19", NONE),
+        Icon::MarginsNarrow => (
+            "M4.5 2.5H19.5V21.5H4.5ZM7.5 8H16.5M7.5 12H16.5M7.5 16H16.5",
+            NONE,
+        ),
+        Icon::MarginsNormal => ("M4.5 2.5H19.5V21.5H4.5ZM9 8H15M9 12H15M9 16H15", NONE),
+        Icon::MarginsWide => (
+            "M4.5 2.5H19.5V21.5H4.5ZM10.5 8H13.5M10.5 12H13.5M10.5 16H13.5",
+            NONE,
+        ),
     };
     Def { stroke, fill }
 }

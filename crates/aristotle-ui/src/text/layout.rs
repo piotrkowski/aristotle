@@ -20,7 +20,8 @@
 //!
 //! Polish typesetting convention is supported: a one-letter word (a, i, o,
 //! u, w, z) never ends a line, because a lone conjunction or preposition at
-//! the right edge reads as an error to Polish readers.
+//! the right edge reads as an error to Polish readers. Initials ("S.") stay
+//! with the name that follows for the same reason.
 
 use super::engine::{ShapedRun, TextEngine, TextStyle};
 use super::hyphen::Hyphenator;
@@ -63,8 +64,13 @@ pub struct ParagraphStyle {
     /// Ask the engine's hyphenator for break points. Soft hyphens in the
     /// text apply regardless.
     pub hyphenate: bool,
-    /// Keep one-letter words off the end of a line (Polish convention).
+    /// Keep one-letter words and initials off the end of a line (Polish
+    /// convention).
     pub no_orphan_letters: bool,
+    /// Even out the lines of ragged text (headings): set it at the
+    /// narrowest width that still needs the same number of lines, so a
+    /// two-line title does not end in one lonely word.
+    pub balance: bool,
 }
 
 impl Default for ParagraphStyle {
@@ -75,6 +81,7 @@ impl Default for ParagraphStyle {
             max_lines: None,
             hyphenate: false,
             no_orphan_letters: true,
+            balance: false,
         }
     }
 }
@@ -301,6 +308,44 @@ pub fn layout_paragraph(
     width: f32,
     hyphenator: &dyn Hyphenator,
 ) -> ParagraphLayout {
+    let full = layout_at(engine, para, width, hyphenator);
+    let n = full.lines.len();
+    if !para.style.balance || n < 2 || para.style.align == Align::Justify {
+        return full;
+    }
+    // Binary search for the narrowest width with the same line count.
+    let (mut lo, mut hi) = (width / 2.0, width);
+    let mut best = full;
+    for _ in 0..8 {
+        let mid = (lo + hi) / 2.0;
+        let l = layout_at(engine, para, mid, hyphenator);
+        if l.lines.len() == n {
+            hi = mid;
+            best = l;
+        } else {
+            lo = mid;
+        }
+    }
+    // Re-centre within the full measure.
+    let shift = match para.style.align {
+        Align::Center => (width - hi) / 2.0,
+        Align::Right => width - hi,
+        _ => 0.0,
+    };
+    for line in &mut best.lines {
+        for piece in &mut line.pieces {
+            piece.x += shift;
+        }
+    }
+    best
+}
+
+fn layout_at(
+    engine: &mut TextEngine,
+    para: &Paragraph,
+    width: f32,
+    hyphenator: &dyn Hyphenator,
+) -> ParagraphLayout {
     // 1. Flatten the spans, dropping soft hyphens but remembering where
     //    they were: they are hyphenation points, not characters to shape.
     let mut text = String::new();
@@ -434,13 +479,17 @@ pub fn layout_paragraph(
         } else if !ws.is_empty() {
             let single_letter = {
                 let mut cs = text[body.clone()].chars();
-                matches!(
-                    (cs.next(), cs.next()),
+                match (cs.next(), cs.next(), cs.next()) {
+                    // A one-letter conjunction or preposition.
                     (
                         Some('a' | 'i' | 'o' | 'u' | 'w' | 'z' | 'A' | 'I' | 'O' | 'U' | 'W' | 'Z'),
-                        None
-                    )
-                )
+                        None,
+                        _,
+                    ) => true,
+                    // An initial, as in "S. Wokulski".
+                    (Some(c), Some('.'), None) => c.is_uppercase(),
+                    _ => false,
+                }
             };
             if para.style.no_orphan_letters && single_letter {
                 // A penalty between box and glue makes the glue an illegal
@@ -982,6 +1031,29 @@ mod tests {
         assert_eq!(l.line_text(1), "Lalka");
         // Centred: the short line starts further right.
         assert!(l.lines[1].pieces[0].x > l.lines[0].pieces[0].x);
+    }
+
+    #[test]
+    fn balanced_heading_has_even_lines() {
+        let mut e = engine();
+        let mut p = Paragraph::plain(
+            "Jak wygląda firma J. Mincel i S. Wokulski przez szkło butelek",
+            body().size(55.0),
+            Align::Center,
+        );
+        let plain = layout_paragraph(&mut e, &p, 760.0, &NoHyphenation);
+        p.style.balance = true;
+        let even = layout_paragraph(&mut e, &p, 760.0, &NoHyphenation);
+        assert_eq!(plain.lines.len(), even.lines.len());
+        let spread = |l: &ParagraphLayout| {
+            let w: Vec<f32> = l.lines.iter().map(|l| l.width).collect();
+            w.iter().cloned().fold(0.0, f32::max) - w.iter().cloned().fold(f32::MAX, f32::min)
+        };
+        assert!(spread(&even) < spread(&plain) / 2.0);
+        // Initials stay with the surname.
+        for i in 0..even.lines.len() {
+            assert!(!even.line_text(i).ends_with(" S."), "{}", even.line_text(i));
+        }
     }
 
     #[test]
