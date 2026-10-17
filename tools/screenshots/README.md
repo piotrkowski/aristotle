@@ -27,7 +27,8 @@ directory, `$ARISTOTLE_CACHE` (`tools/env.sh`), and runs against the pinned
 (`day-library.png`, `night-greek-popup.png`, ...): the English interface, in
 day and night mode, with public-domain books only. To take them, run
 `tools/host/screenshot.sh NAME` for each screen and copy the PNGs there
-under those names.
+under those names. The captures of `docs/screenshots.md` are in its
+`gallery/` subdirectory.
 
 Relative input paths resolve against `base`; `SCREENSHOTS_BASE` overrides it,
 and paths may use `~` and `$VARS`. Each capture is checked for size and mode,
