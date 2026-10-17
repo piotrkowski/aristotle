@@ -20,7 +20,7 @@ scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/
 
 ## Highlights in your notes
 
-Highlights go to `My Clippings.txt` in the stock Kindle format, so existing tools (Obsidian plugins, Readwise importers, your own scripts) keep working. Aristotle also writes one Markdown file per book to `/mnt/us/aristotle-notes/`.
+Highlights go to `My Clippings.txt` in the stock Kindle format, so existing tools (Obsidian plugins, Readwise importers, your own scripts) keep working. Aristotle also writes one Markdown file per book to `/mnt/us/aristotle-notes/`. If you would rather Aristotle left `My Clippings.txt` alone, turn off "Save highlights to My Clippings.txt" in the settings; the Markdown notes are still written.
 
 ## Dictionaries for any language
 

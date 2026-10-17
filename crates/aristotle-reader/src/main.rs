@@ -34,7 +34,9 @@
 //!                   the device instead of indexing there)
 //!   --test-clippings PATH  export highlights to PATH instead of
 //!                   ROOT/My Clippings.txt, and Markdown next to it (test
-//!                   runs must not reach the user's own clippings)
+//!                   runs must not reach the user's own clippings); PATH
+//!                   is written even when the setting "Save highlights to
+//!                   My Clippings.txt" is off
 //!   --preview OUT BOOK  drive the reading interactions on BOOK with
 //!                   synthetic touches on an in-memory panel and write PNGs
 //!                   to OUT (host; see preview.rs)
@@ -354,6 +356,7 @@ fn export_paths(args: &Args) -> ExportPaths {
                 .parent()
                 .unwrap_or(std::path::Path::new("."))
                 .join("aristotle-notes"),
+            test: true,
         },
         None => ExportPaths::for_root(&args.root),
     }
@@ -747,6 +750,7 @@ impl App {
             night: self.prefs.night,
             covers: self.prefs.covers.mode(),
             sleep_minutes: self.prefs.sleep(),
+            clippings: self.prefs.clippings,
             battery: facts.battery_info(),
             storage: facts.storage,
             date: &facts.date,
@@ -802,6 +806,14 @@ impl App {
                 self.set_light_step(step);
             }
             a::NIGHT => self.set_night(!self.prefs.night),
+            a::CLIPPINGS => {
+                self.prefs.clippings = !self.prefs.clippings;
+                self.save_prefs();
+                perf!(
+                    "clippings: {}",
+                    if self.prefs.clippings { "on" } else { "off" }
+                );
+            }
             id if in_range(id, a::LANGUAGE, aristotle_i18n::locales().len()).is_some() => {
                 let i = (id - a::LANGUAGE) as usize;
                 let code = aristotle_i18n::locales()[i].code;

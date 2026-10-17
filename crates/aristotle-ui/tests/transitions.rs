@@ -66,6 +66,7 @@ fn settings_tree(text: &mut TextEngine, night: bool, light: u32) -> (Tree, set_u
         night,
         covers: CoverMode::None,
         sleep_minutes: Some(15),
+        clippings: true,
         battery: None,
         storage: Some((1_000_000_000, 6_000_000_000)),
         date: "sobota, 17 października 2026",

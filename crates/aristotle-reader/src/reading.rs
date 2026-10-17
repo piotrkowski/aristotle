@@ -906,7 +906,7 @@ impl App {
         self.saver.save(&self.lib);
         self.debounce.saved();
         if let Some(rec) = self.lib.book(&id) {
-            marks::export(&self.exports, rec);
+            marks::export(&self.exports, rec, self.prefs.clippings);
         }
         self.reload_marks();
         self.close_overlay()?;
@@ -934,7 +934,7 @@ impl App {
             self.saver.save(&self.lib);
             self.debounce.saved();
             if let Some(rec) = self.lib.book(&id) {
-                marks::export(&self.exports, rec);
+                marks::export(&self.exports, rec, self.prefs.clippings);
             }
         }
         self.reload_marks();
