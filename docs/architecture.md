@@ -20,7 +20,7 @@ device/             what runs on the Kindle: the KUAL extension and agent, the a
                     scripts, the read-only probe, and host-side tests of the scripts
 tools/              what runs on the host: env.sh, the C cross-build, the dev loop (host/),
                     the emulator setup, device scenarios, firmware unpackers (probe/),
-                    licence bundling, screenshots, RE tools
+                    licence bundling, packaging (package.sh), screenshots, RE tools
 third_party/plato   our Plato fork (git submodule, branch aristotle)
 docs/, site/        developer documents and the project site
 ```
@@ -39,7 +39,7 @@ docs/, site/        developer documents and the project site
 
 `aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The app, `aristotle`, depends on all of them but `aristotle-observe`, and takes `aristotle-ui` without its embedded fonts.
 
-The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
+The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`. `tools/package.sh zip` turns the device bundle and the KUAL extension into the release zip.
 
 ## On the device
 
