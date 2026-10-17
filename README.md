@@ -54,6 +54,8 @@ The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benc
 
 ## Install
 
+We recommend installing Aristotle with an AI coding agent such as Claude Code or Codex: point it at [AGENTS.md](AGENTS.md), which lists what it needs to know about the Kindle. While you are there, if you find bugs, ghosting or flickering, please file an [issue](https://github.com/piotrkowski/aristotle/issues) and a pull request ;)
+
 > [!WARNING]
 > Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4. Aristotle is alpha software.
 
