@@ -45,14 +45,25 @@ An older Kindle's screen and battery outlast its software. Aristotle gives a Pap
 
 > [!WARNING]
 > Aristotle needs a **jailbroken** Kindle. Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4.
-> It reads **DRM-free** books only.
+
+Aristotle contains no jailbreak, exploit or DRM-removal code. It runs only on a Kindle you have already jailbroken with the community's tools, and it opens DRM-free books only. It uses the e-ink waveforms and firmware already on your device; it never ships, copies off or uploads them.
 
 ## Install
 
-Aristotle is alpha and runs on one device, the Paperwhite 4 (2018) on firmware 5.13.x.
+Aristotle is alpha and runs on one device:
+
+| Device | Firmware | Status |
+| --- | --- | --- |
+| Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
+| Anything else | | Not supported: the install scripts refuse to run (developers can override with `ARISTOTLE_FORCE=1`) |
+
 The Kindle needs a jailbreak, KUAL, MRPI and KOReader (for its SSH server); you build Aristotle on a Linux computer and copy it over the USB cable.
 The [install guide](https://piotrkowski.github.io/aristotle/guides/install.html) has every step, and how to uninstall.
 The stock interface stays installed: Aristotle stops it while it runs, and it comes back when you quit or reboot.
+Reading positions and highlights carry over between the stock reader and Aristotle, through the stock sidecar files and `My Clippings.txt` ([docs/library.md](docs/library.md)).
+
+Uninstalling removes everything the agent put on the device, including its SSH key.
+There is also a way out without SSH: connect the Kindle as a USB drive, create an empty file named `aristotle-disable` at its root, and restart it. The agent then does not start, and the stock system takes over.
 
 ## Documentation
 
@@ -81,3 +92,5 @@ GNU AGPL 3.0 or later, the same as Plato. See [LICENSE](LICENSE), and [THIRD_PAR
 - [hyph-utf8](https://github.com/hyphenation/tex-hyphen): the hyphenation patterns.
 - Wiktionary, through [wiktionary_stardict](https://github.com/xxyzz/wiktionary_stardict) ([CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/)): the dictionaries.
 - [Project Gutenberg](https://www.gutenberg.org): the sample books.
+
+Aristotle is an independent project, not affiliated with, endorsed or sponsored by Amazon. Kindle, Paperwhite and all related marks are trademarks of Amazon.com, Inc. or its affiliates.
