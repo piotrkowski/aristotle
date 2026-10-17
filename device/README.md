@@ -1,7 +1,7 @@
 # Device-side code
 
-Everything here runs on the Kindle, under its busybox shell. The host-side
-tools that install and drive it are in [`tools/`](../tools/), and the app
+Everything here but the tests runs on the Kindle, under its busybox shell.
+The host-side tools that install and drive it are in [`tools/`](../tools/), and the app
 itself is the `aristotle` crate.
 
 | Path | What | Installed to |
@@ -13,7 +13,7 @@ itself is the `aristotle` crate.
 | `tests/` | Host-side tests of the scripts above, against a fake device root | stays on the host |
 
 `tools/host/install-extensions.sh` copies both extensions, the app bundle from
-`tools/build-render.sh device`, `takeover.sh` and the dev-loop public key to a
+`tools/build-render.sh device` if it is built, `takeover.sh` and the dev-loop public key to a
 Kindle in drive mode, then ejects it. Earlier versions installed the extension
 to `/mnt/us/extensions/aristotle-usbnet/`; the install script removes that
 folder.

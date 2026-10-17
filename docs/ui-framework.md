@@ -305,11 +305,7 @@ Event-to-panel latency on the reference recording, in milliseconds:
 
 ### Remaining latency
 
-The floor is one A2 update, about 120 ms. The p50 of 199 ms is about 80 ms above it, because on average a point arrives halfway through the current update. Ideas not yet tried, most promising first:
-
-- Predict the stroke a few tens of milliseconds ahead and correct the prediction in the next update, as pen tablets do.
-- Start a stroke's first update on touch-down, before any movement.
-- A kernel module or out-of-tree EPDC driver that keeps several LUTs busy at once. i.MX EPDC hardware has several LUTs, but we do not know whether the Lab126 driver serialises by policy or because of a limit of this panel.
+The floor is one A2 update, about 120 ms. In the stroke test the p50 of 199 ms was about 80 ms above it, because on average a point arrived halfway through the current update. Only a driver that keeps several updates busy at once would lower that, through a kernel module or an out-of-tree EPDC driver. i.MX EPDC hardware has several LUTs, but we do not know whether the Lab126 driver serialises by policy or because of a limit of this panel.
 
 ### Code map
 
