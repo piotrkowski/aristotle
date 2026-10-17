@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Aristotle does not work as the docs say it should.
+description: Something in Aristotle does not work as documented.
 labels: ["bug"]
 body:
   - type: textarea
@@ -13,14 +13,14 @@ body:
     id: version
     attributes:
       label: Aristotle version
-      description: The commit you built, or the version under Settings > O czytniku.
+      description: The commit you built, or the version under Settings > About.
     validations:
       required: true
   - type: input
     id: device
     attributes:
       label: Device and firmware
-      description: The model and the firmware version (Settings > Device info on the stock UI).
+      description: The model and firmware version (Settings > Device info on the stock UI).
       placeholder: Kindle Paperwhite 4 (2018), firmware 5.13.6
     validations:
       required: true
@@ -35,15 +35,13 @@ body:
     attributes:
       label: App log
       description: |
-        The lines around the problem from `/var/tmp/aristotle.log` on the device
-        (`run-aristotle.sh` prints it when the app exits). For the SSH agent,
-        `/var/local/aristotle/log` (after Remove agent, `aristotle-agent.log` on the
-        Kindle's USB drive). Remove anything private, such as book titles you
-        would rather not share.
+        The lines around the problem from `/var/tmp/aristotle.log` on the device.
+        `run-aristotle.sh` prints it when the app exits. For the SSH agent, use
+        `/var/local/aristotle/log`, or `aristotle-agent.log` on the USB drive after
+        Remove agent. Remove anything private, such as book titles.
 
-        Never attach the output of the Aristotle probe (`aristotle-probe/` on the
-        USB drive) as it is: it identifies your device and you (serial number, MAC
-        addresses, Wi-Fi networks). If a maintainer asks for something from it,
-        review it first and paste only the lines asked for, with identifiers
+        Never attach the probe output (`aristotle-probe/` on the USB drive) as it
+        is. It contains your serial number, MAC addresses and Wi-Fi networks. If a
+        maintainer asks for part of it, paste only those lines, with identifiers
         removed. Never share the e-ink waveform files.
       render: text

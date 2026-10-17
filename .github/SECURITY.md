@@ -2,62 +2,51 @@
 
 Report security issues privately with **Report a vulnerability** under
 [Advisories](https://github.com/piotrkowski/aristotle/security/advisories/new)
-([how it works](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability)),
-not in a public issue. Include the steps to reproduce, the commit you built and
-the device and firmware.
+([how it works](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability)).
+Do not open a public issue. Include the steps to reproduce, the commit you
+built, and the device and firmware.
 
 ## What runs on the device
 
-Aristotle itself has no network code: the reader is offline and opens no
-ports. The attack surface is the device agent for development and
-installation (`devloop/kindle/aristotle-usbnet/`):
+The reader opens no ports. The attack surface is the device agent
+(`devloop/kindle/aristotle-usbnet/`).
 
-- **SSH as root over the USB cable.** The agent turns the USB port into a
-  network link (`usb0`, the Kindle at `192.168.15.244`) and starts KOReader's
-  `dropbear` with public-key authentication only (`-s`). Anyone holding the
-  private key has root on the device, so keep it to one dedicated key
-  (`install-extensions.sh` installs exactly one) and do not reuse a key you use
-  elsewhere.
-- **Bound to the USB address.** `dropbear` listens on `192.168.15.244:22` only
-  (`-p ADDRESS:PORT`, which KOReader's build, dropbear 2026.92, supports), and
-  the agent opens only `usb0` in the stock firewall. SSH is not reachable over
-  Wi-Fi.
-- **Physical access.** Whoever plugs a cable into the Kindle reaches that port.
-  Without the key they get no further, but the device is not protected against
-  someone who has both the device and the key.
-- **One file on the root filesystem.** The agent installs
-  `/etc/upstart/aristotle-agent.conf`; everything it runs lives in
-  `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes all of it out
-  again: the job, the state directory with the agent's copy of the key, and
-  the agent's key in KOReader's `settings/SSH/authorized_keys` and in the
-  extension. Only the log stays, as `aristotle-agent.log` on the USB drive.
-- **A kill switch without SSH.** A file named `aristotle-disable` at the root
-  of the USB drive keeps the agent from starting at the next boot: no USB
-  network, no SSH, no watchdog, and USB left to the stock system. While the
-  agent runs, the USB port is a network link; KUAL > Aristotle > USB drive
-  mode for 10 minutes makes it a drive to create the file on.
-- **One device.** The scripts that change the device outside the USB drive
-  (installing the agent, the manual USB network, the takeover) refuse to run
-  on anything but a Kindle Paperwhite 4 (2018) on firmware 5.13.x, read from `/proc/usid` and `/etc/prettyversion.txt`.
-  `ARISTOTLE_FORCE=1` overrides that, for developers who mean it.
-- **Wi-Fi is the stock system's by default.** In the default `off` mode the
-  agent adds no Wi-Fi rules, and the stock firewall lets every process,
-  Amazon's included, connect out. The optional `scoped` mode
-  (`aristotlectl net scoped`) drops everything on `wlan0` except DHCP, DNS to
-  the configured resolvers and the hosts in `/var/local/aristotle/net-allow`.
-  It is an IP allowlist, not a proxy: names are resolved to addresses when it
-  is applied, anything else on an allowed address (a shared CDN) is reachable
-  too, TLS SNI is not inspected, DNS queries are not filtered, and the stock
-  firewall applies for the few seconds between boot and the agent's first
-  tick. [docs/network.md](../docs/network.md) has the details and the checks
-  that confirm it on a device. A way through the scoped policy that its
-  documented limits do not cover is a security issue.
+- The agent turns the USB port into a network link (`usb0`, with the Kindle at
+  `192.168.15.244`) and starts KOReader's `dropbear` as root, with public-key
+  authentication only (`-s`). Anyone with a cable and the private key has root
+  on the device. `install-extensions.sh` installs one dedicated key; do not
+  reuse a key you use elsewhere.
+- `dropbear` listens on `192.168.15.244:22` only, and the agent opens only
+  `usb0` in the stock firewall. SSH is not reachable over Wi-Fi.
+- The agent installs one file on the root filesystem,
+  `/etc/upstart/aristotle-agent.conf`. Everything it runs lives in
+  `/var/local/aristotle`. KUAL › Aristotle › Remove agent deletes both, and
+  removes the agent's key from KOReader's `settings/SSH/authorized_keys` and
+  from the extension. Only the log stays, as `aristotle-agent.log` on the USB
+  drive.
+- A file named `aristotle-disable` at the root of the USB drive keeps the agent
+  from starting at the next boot, which leaves USB to the stock system. To
+  create the file while the agent runs, use KUAL › Aristotle › USB drive mode
+  for 10 minutes.
+- The scripts that change the device outside the USB drive refuse to run on
+  anything but a Kindle Paperwhite 4 (2018) on firmware 5.13.x, as read from
+  `/proc/usid` and `/etc/prettyversion.txt`, unless `ARISTOTLE_FORCE=1` is
+  set.
+- In the default Wi-Fi mode, `off`, the agent adds no rules, and the stock
+  firewall lets any process, Amazon's included, connect out. The optional
+  `scoped` mode (`aristotlectl net scoped`) drops everything on `wlan0` except
+  DHCP, DNS to the configured resolvers and the hosts in
+  `/var/local/aristotle/net-allow`. It filters by IP address, so anything else
+  hosted on an allowed address is reachable too. It does not inspect TLS SNI
+  or filter DNS queries, and it applies from the agent's first tick after boot.
+  [docs/network.md](../docs/network.md) describes these limits and how to check
+  the rules on a device. A way past `scoped` that those limits do not cover is
+  a security issue.
 
-The device probe (`probe/device/aristotle-probe`) is read-only, but its
-output identifies the device and its owner (serial number, MAC addresses,
-Wi-Fi networks): review it before sharing any of it, never attach it to a
-public issue as it is, and never share the e-ink waveforms it can copy.
+The device probe (`probe/device/aristotle-probe`) is read-only, but its output
+identifies the device and its owner (serial number, MAC addresses, Wi-Fi
+networks). Review it before sharing any of it, never attach it unedited to a
+public issue, and never share the e-ink waveforms it can copy.
 
-Books are parsed by Plato's engine (Rust) and MuPDF (C), which read
-untrusted files. A malformed book that crashes the reader or worse is a
-security issue too.
+Books are parsed by Plato's engine (Rust) and MuPDF (C) from untrusted files.
+A malformed book that crashes the reader, or worse, is a security issue.
