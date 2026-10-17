@@ -102,3 +102,25 @@ Rendering the next page takes about 106 ms on the device and fits inside the pan
 | Typesetting | no Polish hyphenation | Liang hyphenation for Polish, Knuth–Plass or a good greedy justification | |
 
 These are commitments to measure, not claims. Each will be checked with the same scenarios once the Aristotle reader runs on the device.
+
+## Transitions in the Aristotle app
+
+Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-transitions.txt` (injected taps; `aristotle-observe` counts the taps it injects, since the app grabs the touchscreen). Times run from the finger lifting; page turns fire on touch-down, so they show 0 ms to the first update.
+
+| Interaction | Acknowledged | Settled | Updates | Flash | Waveforms |
+| --- | --- | --- | --- | --- | --- |
+| Page turn (forward or back) | 440 ms (the page) | 440 ms | 1 | no | glkw16 full |
+| Reader menu open | 513–577 ms (the menu) | 513–577 ms | 1 | no | gl16, 95 % of the screen |
+| Reader menu close | 497 ms | 497 ms | 1 | no | glkw16 full |
+| Book → library | 52 ms | 765 ms | 2 | yes | a2 tap mark, gck16 full |
+| Library filter tab | 60–64 ms | 552–741 ms | 2 | no | a2, gl16 |
+| Shelf page | 51–53 ms | 516–535 ms | 2 | every 5th | a2, gl16 (gck16 when flashing) |
+| Sort | 59–61 ms | 743–749 ms | 2 | no | a2, gl16 |
+| Open the "Czytaj dalej" book | 67 ms | 1282 ms | 2 | yes | a2, gck16 full |
+
+What this shows, to fix next:
+
+- Every action ends in exactly one update of its final state, and library controls are acknowledged within about 60 ms. No intermediate states were seen.
+- The menu opens with no acknowledgement: nothing changes for half a second. Its top bar and bottom panel are coalesced into one bounding box of 95 % of the screen, so the unchanged text between them is redrawn too.
+- Opening a book takes 1.3 s to settle (stock: 0.8 s); laying out the chapter dominates.
+- The periodic shelf flash fires on a count, not on content, so it can feel random.

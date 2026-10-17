@@ -167,6 +167,9 @@ struct Observer {
     interactions: Vec<Interaction>,
     open: Option<Interaction>,
     label: String,
+    /// Count only the interactions we inject. Set by scripts: an app that
+    /// grabs the touchscreen (Aristotle does) hides touches from us.
+    injected_only: bool,
 }
 
 fn set_epdc_debug(on: bool) -> io::Result<()> {
@@ -212,12 +215,16 @@ impl Observer {
             interactions: Vec::new(),
             open: None,
             label: String::new(),
+            injected_only: false,
         })
     }
 
     /// Read whatever is pending on both sources, for up to `timeout`.
     fn pump(&mut self, timeout: Duration) -> io::Result<()> {
         for ev in self.touch.poll(timeout)? {
+            if self.injected_only {
+                continue;
+            }
             match ev.phase {
                 Phase::Down if ev.id == 0 => {
                     self.open = Some(Interaction {
@@ -257,6 +264,17 @@ impl Observer {
         Ok(())
     }
 
+    /// Record an interaction we injected between `down_us` and `up_us`.
+    fn injected(&mut self, (x, y): (u32, u32), down_us: u64, up_us: u64) {
+        self.interactions.push(Interaction {
+            label: self.label.clone(),
+            down_us,
+            up_us,
+            x,
+            y,
+        });
+    }
+
     fn pump_for(&mut self, ms: u64) -> io::Result<()> {
         let until = monotonic_us() + ms * 1000;
         while monotonic_us() < until {
@@ -281,14 +299,14 @@ fn ms(us: u64) -> f64 {
 fn report(interactions: &[Interaction], updates: &[Update]) {
     if std::env::var_os("OBSERVE_DEBUG").is_some() {
         eprintln!("parsed {} updates", updates.len());
-        for u in updates.iter().take(5) {
+        for u in updates {
             eprintln!(
                 "  update start {} end {:?} {} {:?}",
                 u.start_us, u.end_us, u.waveform, u.rect
             );
         }
-        for i in interactions.iter().take(3) {
-            eprintln!("  touch down {} up {}", i.down_us, i.up_us);
+        for i in interactions {
+            eprintln!("  touch {} down {} up {}", i.label, i.down_us, i.up_us);
         }
     }
     println!(
@@ -361,6 +379,7 @@ fn run_script(path: &str) -> io::Result<()> {
     let script = io::BufReader::new(File::open(path)?);
     let mut obs = Observer::start()?;
     let mut inj = Injector::open()?;
+    obs.injected_only = true;
     obs.pump_for(300)?;
     for line in script.lines() {
         let line = line?;
@@ -373,9 +392,21 @@ fn run_script(path: &str) -> io::Result<()> {
         };
         match words.first().copied() {
             Some("label") => obs.label = words[1..].join(" "),
-            Some("tap") => inj.tap(n(1), n(2), 60)?,
-            Some("hold") => inj.tap(n(1), n(2), n(3) as u64)?,
-            Some("swipe") => inj.swipe((n(1), n(2)), (n(3), n(4)), n(5) as u64)?,
+            Some("tap") => {
+                let down = monotonic_us();
+                inj.tap(n(1), n(2), 60)?;
+                obs.injected((n(1), n(2)), down, monotonic_us());
+            }
+            Some("hold") => {
+                let down = monotonic_us();
+                inj.tap(n(1), n(2), n(3) as u64)?;
+                obs.injected((n(1), n(2)), down, monotonic_us());
+            }
+            Some("swipe") => {
+                let down = monotonic_us();
+                inj.swipe((n(1), n(2)), (n(3), n(4)), n(5) as u64)?;
+                obs.injected((n(1), n(2)), down, monotonic_us());
+            }
             Some("wait") => obs.pump_for(n(1) as u64)?,
             Some("snap") => snap(words.get(1).copied().unwrap_or("snap"))?,
             Some("go-home") => {
