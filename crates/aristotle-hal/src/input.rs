@@ -4,7 +4,7 @@
 
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::time::Duration;
 
 const EV_SYN: u16 = 0x00;
@@ -302,24 +302,44 @@ impl TouchScreen {
 
     /// Wait up to `timeout` for input and return the touch events it produced.
     pub fn poll(&mut self, timeout: Duration) -> io::Result<Vec<TouchEvent>> {
-        let mut fds = libc::pollfd {
-            fd: self.file.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        // SAFETY: one valid pollfd for the duration of the call.
+        self.poll_with(timeout, None).map(|(events, _)| events)
+    }
+
+    /// [`poll`](Self::poll), also waking when `other` becomes readable (the
+    /// powerd events' descriptor, say). Returns the touch events and whether
+    /// `other` is readable.
+    pub fn poll_with(
+        &mut self,
+        timeout: Duration,
+        other: Option<RawFd>,
+    ) -> io::Result<(Vec<TouchEvent>, bool)> {
+        let mut fds = [
+            libc::pollfd {
+                fd: self.file.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: other.unwrap_or(-1),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
+        let count = if other.is_some() { 2 } else { 1 };
+        // SAFETY: `count` valid pollfds for the duration of the call.
         let n = unsafe {
             libc::poll(
-                &mut fds,
-                1,
+                fds.as_mut_ptr(),
+                count,
                 timeout.as_millis().min(i32::MAX as u128) as i32,
             )
         };
         if n < 0 {
             return Err(io::Error::last_os_error());
         }
-        if n == 0 {
-            return Ok(Vec::new());
+        let other_ready = other.is_some() && fds[1].revents & libc::POLLIN != 0;
+        if fds[0].revents & libc::POLLIN == 0 {
+            return Ok((Vec::new(), other_ready));
         }
         let mut buf = [0u8; std::mem::size_of::<RawEvent>() * 64];
         let len = self.file.read(&mut buf)?;
@@ -331,7 +351,7 @@ impl TouchScreen {
             self.raw_events += 1;
             self.feed(ev, &mut out);
         }
-        Ok(out)
+        Ok((out, other_ready))
     }
 
     fn feed(&mut self, ev: RawEvent, out: &mut Vec<TouchEvent>) {

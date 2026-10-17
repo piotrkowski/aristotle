@@ -18,6 +18,7 @@ use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{
     sample_books, sample_items, CoverMode, Filter, Item, Library, Place, Shelf, StatusLine, View,
 };
+use aristotle_ui::screens::network::{self, SyncView};
 use aristotle_ui::screens::reader::{Reader, Settings as ReaderSettings};
 use aristotle_ui::screens::settings::{self as set_ui, SystemView, Usb};
 use aristotle_ui::screens::sleep;
@@ -72,6 +73,8 @@ fn settings_tree(text: &mut TextEngine, night: bool, light: u32) -> (Tree, set_u
         date: "sobota, 17 października 2026",
         time: "21:38",
         usb: Some(Usb::Network),
+        sync: None,
+        catalogs: 0,
         about: &about,
     };
     set_ui::Settings::build(text, &styles(), &v)
@@ -259,6 +262,45 @@ fn settings_controls_are_one_quiet_update() {
     ids.sync(&mut ui.tree);
     one_flash(&ui.render());
     assert_eq!(ui.screen().get(SCREEN_WIDTH - 2, SCREEN_HEIGHT - 2), 0);
+    assert!(ui.render().is_empty());
+}
+
+fn sync_tree(text: &mut TextEngine, auto: bool, message: &str) -> (Tree, network::Frame) {
+    let v = SyncView {
+        status: STATUS,
+        server: Some("http://192.168.15.201:17200"),
+        username: Some("anna"),
+        has_key: true,
+        auto,
+        message,
+        import_path: "/mnt/us/aristotle/sync.json",
+    };
+    network::build_sync(text, &styles(), &v)
+}
+
+#[test]
+fn network_screens_switch_with_one_flash_and_change_quietly() {
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, _) = settings_tree(&mut text, false, 2);
+    let mut ui = new_ui(tree);
+    // Settings -> sync: one flash.
+    let (tree, f) = sync_tree(&mut ui.text, true, "");
+    ui.set_tree(tree);
+    ui.layout();
+    f.sync(&mut ui.tree);
+    one_flash(&ui.render());
+    // A request starts: the message line and the busy mark, one quiet
+    // update, the list stays.
+    f.set_message(&mut ui.tree, "Checking…");
+    ui.tree.set_hidden(f.busy, false);
+    let u = one_quiet(&ui.render());
+    assert!(u.rect.bottom() < 400, "only the top of the screen: {u:?}");
+    // The answer and the switch flipped: one quiet update.
+    let (tree, f) = sync_tree(&mut ui.text, false, "Logged in as anna.");
+    ui.set_tree_with(tree, Refresh::Auto);
+    ui.layout();
+    f.sync(&mut ui.tree);
+    one_quiet(&ui.render());
     assert!(ui.render().is_empty());
 }
 

@@ -25,18 +25,23 @@
 #   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
 #   address, the resolvers or the list change.
 #
-# State and logs live in /var/local/aristotle (persistent ext3). Nothing here
-# writes to the root filesystem.
+# State and logs live in /var/local/aristotle (persistent ext3), which only
+# root may enter (device/README.md, "Security"). The job starts this script
+# with that directory as the current one and ARISTOTLE_DIR pointing at it
+# through /proc, so what runs cannot be swapped later in the boot. SSH runs
+# the agent's own copy of KOReader's dropbear from there, with its own keys:
+# nothing on the USB drive, which every process may write, runs as root.
+# Nothing here writes to the root filesystem.
 set -u
-umask 022
+umask 077
 
 # R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
-S=$R/var/local/aristotle
+S=${ARISTOTLE_DIR:-$R/var/local/aristotle}
 LOG=$S/log
 KO=$R/mnt/us/koreader
-PIDFILE=$R/var/run/aristotle-dropbear.pid
+PIDFILE=$S/dropbear.pid
 DISABLE=$R/mnt/us/aristotle-disable
 TAKEOVER=$R/var/run/aristotle-takeover
 # How long to wait for the userstore (/mnt/us) before giving up on the kill
@@ -72,8 +77,11 @@ usb_mode() {
     esac
 }
 
+# The pid file is on persistent storage: after a reboot its pid may belong to
+# another process, so check the name too.
 dropbear_alive() {
-    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2> /dev/null
+    p=$(cat "$PIDFILE" 2> /dev/null)
+    [ -n "$p" ] && kill -0 "$p" 2> /dev/null && grep -q dropbear "/proc/$p/cmdline" 2> /dev/null
 }
 
 net_up() {
@@ -96,26 +104,40 @@ net_up() {
     fi
     iptables -C INPUT -i usb0 -j ACCEPT 2> /dev/null || iptables -I INPUT -i usb0 -j ACCEPT
     iptables -C OUTPUT -o usb0 -j ACCEPT 2> /dev/null || iptables -I OUTPUT -o usb0 -j ACCEPT
-    if ! dropbear_alive; then
-        if [ ! -x "$KO/dropbear" ]; then
-            log "ssh: $KO/dropbear not available yet"
-            return 1
-        fi
-        mkdir -p "$KO/settings/SSH"
-        cp "$S/authorized_keys" "$KO/settings/SSH/authorized_keys" 2>> "$LOG"
-        chmod 600 "$KO/settings/SSH/authorized_keys"
-        # KOReader's dropbear reads settings/SSH/authorized_keys relative to
-        # its working directory and keeps its host keys there (-R). -s: keys
-        # only; -p ADDRESS:PORT: listen on usb0's address only, never on
-        # Wi-Fi.
-        if (cd "$KO" && ./dropbear -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
-            # dropbear writes its pid file after forking; give it a moment.
-            sleep 1
-            log "ssh: dropbear started (pid $(cat "$PIDFILE" 2> /dev/null))"
-        else
-            log "ssh: dropbear failed to start"
+    dropbear_alive && return 0
+    # The agent's copy (install.sh); KOReader's if there is none, or if the
+    # copy does not start, so SSH never depends on the copy alone.
+    if [ -x "$S/dropbear" ]; then
+        start_dropbear "$S/dropbear" "$S/ssh" && return 0
+        log "ssh: the agent's copy of dropbear did not start; trying KOReader's"
+    fi
+    if [ -x "$KO/dropbear" ]; then
+        [ -x "$S/dropbear" ] || log "ssh: no copy of dropbear in $S; using KOReader's (install the agent again)"
+        start_dropbear "$KO/dropbear" "$KO" && return 0
+    else
+        log "ssh: no dropbear available yet"
+    fi
+    return 1
+}
+
+# start_dropbear BINARY HOME
+start_dropbear() {
+    mkdir -p "$2/settings/SSH"
+    cp "$S/authorized_keys" "$2/settings/SSH/authorized_keys" 2>> "$LOG"
+    chmod 600 "$2/settings/SSH/authorized_keys"
+    # KOReader's dropbear reads settings/SSH/authorized_keys relative to its
+    # working directory and keeps its host keys there (-R). -s: keys only;
+    # -p ADDRESS:PORT: listen on usb0's address only, never on Wi-Fi.
+    if (cd "$2" && "$1" -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
+        # dropbear writes its pid file after forking; give it a moment.
+        sleep 1
+        if dropbear_alive; then
+            log "ssh: dropbear started from $1 (pid $(cat "$PIDFILE" 2> /dev/null))"
+            return 0
         fi
     fi
+    log "ssh: $1 failed to start"
+    return 1
 }
 
 net_down() {

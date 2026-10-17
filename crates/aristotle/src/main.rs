@@ -46,13 +46,16 @@
 //! Hold the "Biblioteka" title for a second to quit. Timings go to stderr
 //! as `[perf ...]` lines; see docs/reader.md.
 
+mod catalogs;
 mod device;
 mod dict;
 mod marks;
+mod net;
 mod open;
 mod overlay;
 mod pagecache;
 mod panel;
+mod powerd;
 mod prefs;
 mod preview;
 mod prewarm;
@@ -63,6 +66,7 @@ mod session;
 mod shelf;
 mod snapshot;
 mod speed;
+mod sync;
 mod turns;
 
 use std::cell::Cell;
@@ -75,7 +79,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use aristotle_hal::input::{monotonic_us, Phase as HalPhase, TouchScreen, Transform};
-use aristotle_hal::power::{self, Battery, Frontlight, LIGHT_STEPS};
+use aristotle_hal::power::{Battery, Frontlight, LIGHT_STEPS};
 use aristotle_hal::system;
 use aristotle_library::{Library, ScanOptions, Status};
 use aristotle_render::page::Page;
@@ -151,6 +155,11 @@ struct Args {
     test_clippings: Option<PathBuf>,
     /// `--lang CODE`: the UI language, stored in the preferences.
     lang: Option<String>,
+    /// The folder of the binary, where `sync.json` and `catalogs.json`
+    /// are read from.
+    bundle: PathBuf,
+    /// The private folder for passwords (`net::accounts_dir`).
+    accounts: PathBuf,
 }
 
 fn usage() -> &'static str {
@@ -181,6 +190,8 @@ fn parse_args() -> Result<Args, Error> {
         index_dicts: false,
         test_clippings: None,
         lang: None,
+        bundle: exe_dir.clone(),
+        accounts: net::accounts_dir(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -288,19 +299,10 @@ fn run() -> Result<(), Error> {
     let mut touch =
         TouchScreen::open(w, h, Transform::default()).context("can't open the touchscreen")?;
     touch.grab(true)?;
-    // Our screensaver replaces the stock one, which powerd would otherwise
-    // draw over our screen. The previous value is put back on exit.
-    let screensaver_was = power::screensaver_prevented().ok();
-    if let Err(e) = power::prevent_screensaver(true) {
-        eprintln!("aristotle: can't hold off the stock screensaver: {e}");
-    }
-    let mut app = build_app(
-        &args,
-        panel,
-        prefs,
-        start_dictionaries(&args),
-        screensaver_was,
-    )?;
+    // Our screensaver replaces the stock one, and powerd's events drive it
+    // (powerd.rs). Put back as found on exit.
+    let sleep_ctl = powerd::Sleep::start();
+    let mut app = build_app(&args, panel, prefs, start_dictionaries(&args), sleep_ctl)?;
     perf!("startup: first frame submitted");
     open::warm_up();
 
@@ -369,7 +371,7 @@ fn build_app(
     panel: Panel,
     prefs: Prefs,
     dict: Service,
-    screensaver_was: Option<bool>,
+    sleep_ctl: powerd::Sleep,
 ) -> Result<App, Error> {
     let (w, h) = panel.size();
     aristotle_i18n::set_language(&prefs.language);
@@ -418,11 +420,17 @@ fn build_app(
         asleep: None,
         last_touch: Instant::now(),
         clock: String::new(),
-        screensaver_was,
+        sleep_ctl,
         swallow: false,
         dict: Some(dict),
         speed: Speed::load(&args.library),
         exports: export_paths(args),
+        net: net::Net::new(net::Paths {
+            state: args.accounts.clone(),
+            import: args.bundle.clone(),
+        }),
+        sync: sync::SyncState::default(),
+        catalogs: catalogs::CatalogState::default(),
     };
     app.apply_night();
     app.show_library(Refresh::Full)?;
@@ -489,6 +497,8 @@ enum Screen {
         ids: Option<set_ui::Settings>,
         page: usize,
     },
+    /// Progress sync and the catalogs (catalogs.rs).
+    Network(Box<catalogs::NetScreen>),
 }
 
 struct App {
@@ -519,8 +529,8 @@ struct App {
     last_touch: Instant,
     /// The time the status line shows, to refresh it each minute.
     clock: String,
-    /// `preventScreenSaver` before we set it.
-    screensaver_was: Option<bool>,
+    /// powerd: its screensaver and suspend events, the idle timer.
+    sleep_ctl: powerd::Sleep,
     /// The touch that woke the screensaver: ignored until it lifts.
     swallow: bool,
     /// Dictionary lookups (a thread of their own).
@@ -528,6 +538,12 @@ struct App {
     speed: Speed,
     /// Where highlights are exported.
     exports: ExportPaths,
+    /// Network settings and requests (net.rs).
+    net: net::Net,
+    /// Progress sync (sync.rs).
+    sync: sync::SyncState,
+    /// The catalog screens' requests (catalogs.rs).
+    catalogs: catalogs::CatalogState,
 }
 
 /// What a handler wants the loop to do next.
@@ -709,6 +725,7 @@ impl App {
         match &self.screen {
             Screen::Library { view, .. } => self.ui.tree.page(view.list).0,
             Screen::Settings { ids: Some(ids), .. } => self.ui.tree.page(ids.list).0,
+            Screen::Network(ns) => ns.frame.as_ref().map_or(0, |f| self.ui.tree.page(f.list).0),
             _ => 0,
         }
     }
@@ -754,6 +771,19 @@ impl App {
 
     fn show_settings(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
         let facts = Facts::read(&self.battery, &self.root);
+        let sync_account = self
+            .net
+            .accounts
+            .sync
+            .as_ref()
+            .filter(|s| !s.server.is_empty())
+            .map(|s| {
+                aristotle_i18n::tf!(
+                    aristotle_i18n::Msg::SettingsSyncOn,
+                    user = s.username,
+                    server = s.server
+                )
+            });
         self.clock = facts.clock.clone();
         let light = self
             .light
@@ -771,6 +801,8 @@ impl App {
             date: &facts.date,
             time: &facts.clock,
             usb: facts.usb,
+            sync: sync_account.as_deref(),
+            catalogs: self.net.accounts.catalogs.len(),
             about: &facts.about,
         };
         let (tree, ids) = set_ui::Settings::build(&mut self.ui.text, &self.styles, &view);
@@ -821,6 +853,16 @@ impl App {
                 self.set_light_step(step);
             }
             a::NIGHT => self.set_night(!self.prefs.night),
+            a::SYNC => {
+                return self
+                    .open_network(catalogs::NetView::Sync, page)
+                    .map(|_| Flow::Continue)
+            }
+            a::CATALOGS => {
+                return self
+                    .open_network(catalogs::NetView::Catalogs, page)
+                    .map(|_| Flow::Continue)
+            }
             a::CLIPPINGS => {
                 self.prefs.clippings = !self.prefs.clippings;
                 self.save_prefs();
@@ -877,7 +919,8 @@ impl App {
     // --- Screensaver ------------------------------------------------------
 
     fn sleep_deadline(&self) -> Option<Instant> {
-        if self.asleep.is_some() {
+        // Asleep, or powerd was asked and has a few seconds to answer.
+        if self.asleep.is_some() || self.sleep_ctl.sleep_pending() {
             return None;
         }
         self.prefs
@@ -885,9 +928,10 @@ impl App {
             .map(|m| self.last_touch + Duration::from_secs(m as u64 * 60))
     }
 
-    /// Nobody has touched the screen for the chosen time: save, put the
-    /// light out and show the screensaver.
-    fn fall_asleep(&mut self) -> Result<(), Error> {
+    /// powerd went to its screensaver (power button, cover, idle time), or
+    /// it did not answer ours: save, put the light out and show the
+    /// screensaver. `by_powerd`: powerd will suspend the CPU in a minute.
+    fn fall_asleep(&mut self, by_powerd: bool) -> Result<(), Error> {
         // The screensaver replaces the screen: no redraw for a book still
         // opening, a book opening without a snapshot is given up, and no
         // snapshots are made ahead of time while asleep.
@@ -899,6 +943,7 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
+        self.sync_push(false, false);
         self.save_snapshot();
         self.saver.save(&self.lib);
         self.debounce.saved();
@@ -910,24 +955,34 @@ impl App {
             .map(|rec| shelf::screen_book(&self.lib, &rec, &mut self.covers, photos));
         let tree = sleep::build(&self.styles, book.as_ref(), photos);
         self.ui.set_tree(tree);
-        perf!("sleep: screensaver after {} min", self.prefs.sleep_minutes);
+        self.sleep_ctl.asleep(by_powerd);
+        perf!(
+            "sleep: screensaver ({})",
+            if by_powerd { "powerd" } else { "own" }
+        );
         self.render_ui()
     }
 
-    /// A touch on the screensaver: the light and the screen come back.
-    fn wake(&mut self) -> Result<(), Error> {
+    /// powerd left its screensaver, or a touch woke ours: the light and
+    /// the screen come back.
+    fn wake(&mut self, by_powerd: bool) -> Result<(), Error> {
         if let Some(step) = self.asleep.take() {
             self.set_light_step(step);
         }
         self.last_touch = Instant::now();
+        self.sleep_ctl.awake(by_powerd, self.last_touch);
         self.prewarm.input();
-        perf!("sleep: woken");
+        perf!(
+            "sleep: woken ({})",
+            if by_powerd { "powerd" } else { "touch" }
+        );
         match &self.screen {
             Screen::Library { .. } => self.show_library(Refresh::Full),
             Screen::Settings { page, .. } => {
                 let page = *page;
                 self.show_settings(Refresh::Full, page)
             }
+            Screen::Network(_) => self.show_network(Refresh::Full),
             // (A book still opening was finished before the screensaver.)
             Screen::Reader(_) | Screen::Opening => self.reader_after_sleep(),
         }
@@ -966,19 +1021,27 @@ impl App {
             if self.opening.is_some() || self.pending.is_some() {
                 timeout = timeout.min(Duration::from_millis(10));
             }
+            if self.net.busy() {
+                timeout = timeout.min(Duration::from_millis(100));
+            }
             if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
                 timeout = timeout.min(d.saturating_duration_since(Instant::now()));
             }
-            let events = match touch.poll(timeout.max(Duration::from_millis(1))) {
-                Ok(e) => e,
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
-            };
+            if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
+                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
+            }
+            let (events, _) =
+                match touch.poll_with(timeout.max(Duration::from_millis(1)), self.sleep_ctl.fd()) {
+                    Ok(e) => e,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e.into()),
+                };
             for ev in &events {
                 if self.on_touch(ev)? == Flow::Quit {
                     return Ok(());
                 }
             }
+            self.on_power()?;
             if self.asleep.is_none() {
                 let ticked = self.ui.tick(monotonic_us());
                 for ev in ticked {
@@ -993,16 +1056,58 @@ impl App {
             }
             self.panel.poll();
             self.background()?;
-            if self.sleep_deadline().is_some_and(|d| Instant::now() >= d) {
-                self.fall_asleep()?;
+            let now = Instant::now();
+            if self.sleep_deadline().is_some_and(|d| now >= d) && self.sleep_ctl.request_sleep(now)
+            {
+                self.fall_asleep(false)?;
+            }
+            match self.sleep_ctl.tick(Instant::now(), self.asleep.is_some()) {
+                powerd::Action::Sleep if self.asleep.is_none() => self.fall_asleep(false)?,
+                powerd::Action::Wake if self.asleep.is_some() => self.wake(false)?,
+                _ => {}
             }
         }
+    }
+
+    /// powerd's events: its screensaver, waking, suspending.
+    fn on_power(&mut self) -> Result<(), Error> {
+        use aristotle_hal::powerd::PowerEvent as P;
+        for ev in self.sleep_ctl.events() {
+            match ev {
+                P::GoingToScreenSaver(src) => {
+                    perf!("power: goingToScreenSaver {src}");
+                    if self.asleep.is_none() {
+                        self.fall_asleep(true)?;
+                    } else {
+                        self.sleep_ctl.powerd_took_over();
+                    }
+                }
+                P::OutOfScreenSaver(src) => {
+                    perf!("power: outOfScreenSaver {src}");
+                    if self.asleep.is_some() {
+                        self.wake(true)?;
+                        self.ui.reset_gestures();
+                        if let Screen::Reader(r) = &mut self.screen {
+                            r.gestures.reset();
+                        }
+                    }
+                }
+                P::ReadyToSuspend(delay) => {
+                    perf!("power: readyToSuspend {delay}");
+                    if self.asleep.is_none() {
+                        self.sleep_ctl.resync();
+                    }
+                }
+                other => perf!("power: {other:?}"),
+            }
+        }
+        Ok(())
     }
 
     /// Whether the UI tree (not the page-turn path) owns input right now.
     fn ui_driven(&self) -> bool {
         match &self.screen {
-            Screen::Library { .. } | Screen::Settings { .. } => true,
+            Screen::Library { .. } | Screen::Settings { .. } | Screen::Network(_) => true,
             Screen::Reader(r) => r.menu_open || !r.overlay.is_none(),
             Screen::Opening => self.opening.as_ref().is_some_and(|o| o.menu_open),
         }
@@ -1018,6 +1123,7 @@ impl App {
             self.finish_pending(result)?;
         }
         self.poll_lookup()?;
+        self.poll_net()?;
         // Snapshots ahead of time: only on the library screen (not the
         // settings), with no book opening and no screensaver.
         if matches!(self.screen, Screen::Library { .. })
@@ -1054,6 +1160,7 @@ impl App {
                 match &self.screen {
                     Screen::Library { .. } => self.show_library_at(Refresh::Auto, page)?,
                     Screen::Settings { .. } => self.show_settings(Refresh::Auto, page)?,
+                    Screen::Network(_) => self.show_network(Refresh::Auto)?,
                     Screen::Reader(_) | Screen::Opening => self.clock = clock,
                 }
             }
@@ -1063,9 +1170,12 @@ impl App {
 
     fn on_touch(&mut self, ev: &aristotle_hal::input::TouchEvent) -> Result<Flow, Error> {
         if self.asleep.is_some() {
-            // Any touch wakes; the rest of that touch does nothing.
+            // Any touch wakes (through powerd when it is powerd's
+            // screensaver); the rest of that touch does nothing.
             if ev.phase == HalPhase::Down {
-                self.wake()?;
+                if self.sleep_ctl.touch_asleep(Instant::now()) {
+                    self.wake(false)?;
+                }
                 self.ui.reset_gestures();
                 if let Screen::Reader(r) = &mut self.screen {
                     r.gestures.reset();
@@ -1081,6 +1191,7 @@ impl App {
             return Ok(Flow::Continue);
         }
         self.last_touch = Instant::now();
+        self.sleep_ctl.touched();
         let ev = ui_event(ev);
         self.prewarm.input();
         if self.opening.is_some() {
@@ -1109,6 +1220,7 @@ impl App {
         match &self.screen {
             Screen::Library { .. } => self.on_library_event(ev),
             Screen::Settings { .. } => self.on_settings_event(ev),
+            Screen::Network(_) => self.on_network_event(ev),
             Screen::Reader(r) => {
                 let reading_action =
                     matches!(ev, UiEvent::Action { id, .. } if id >= overlay::FIRST_ACTION);
@@ -1254,6 +1366,7 @@ impl App {
         let Some(rec) = self.lib.book(id).cloned() else {
             return Ok(());
         };
+        self.sync_before_open(id);
         let t0 = Instant::now();
         let style = self.prefs.style();
         let src = match Source::new(&self.lib, &rec, &self.mobi_cache) {
@@ -1769,6 +1882,7 @@ impl App {
         }));
         self.speed.page_shown(Instant::now());
         self.page_changed();
+        self.sync_book_opened();
     }
 
     /// Store the current page (and the next, if rendered) for the next
@@ -2130,6 +2244,7 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
+        self.sync_push(true, false);
         let snapshot = self.snapshot_parts();
         // The library goes out first; copying the pages and serialising the
         // index wait until it is submitted.
@@ -2154,12 +2269,11 @@ impl App {
             let now = aristotle_library::library::now();
             app.lib.set_progress(&r.session.id, r.session.progress(now));
         }
+        app.sync_push(true, true);
         if let Some(step) = app.asleep.take() {
             app.set_light_step(step);
         }
-        if app.screensaver_was == Some(false) {
-            let _ = power::prevent_screensaver(false);
-        }
+        app.sleep_ctl.restore();
         app.save_snapshot();
         app.saver.save(&app.lib);
         app.speed.save();
@@ -2339,6 +2453,8 @@ mod tests {
             index_dicts: false,
             test_clippings: None,
             lang: None,
+            bundle: library.to_path_buf(),
+            accounts: library.join("accounts"),
         };
         let panel = Panel::memory(1072, 1448, prefs::STOCK_TURN);
         build_app(
@@ -2346,7 +2462,7 @@ mod tests {
             panel,
             Prefs::default(),
             start_dictionaries(&args),
-            None,
+            powerd::Sleep::none(),
         )
         .unwrap()
     }

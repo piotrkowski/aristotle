@@ -2,8 +2,8 @@
 //! System facts for the settings screen: storage, memory, firmware, local
 //! time, and the USB mode of the device agent.
 //!
-//! Everything here is read-only except [`set_usb_mode`], which asks the
-//! agent (`device/extension/agent/`) to switch through its own
+//! Everything here is read-only except [`set_usb_mode`] and [`net_allow`],
+//! which ask the agent (`device/extension/agent/`) through its own
 //! `aristotlectl`, the same command a developer runs over SSH.
 
 use std::fs;
@@ -124,9 +124,17 @@ pub enum UsbMode {
 /// The agent's state directory.
 pub const AGENT_DIR: &str = "/var/local/aristotle";
 
+/// The agent's directory: [`AGENT_DIR`], or `$ARISTOTLE_AGENT_DIR` for a
+/// development copy (with `AGENT_TEST_ROOT` set for its scripts, as in
+/// `device/tests/`). The Wi-Fi policy files `net-mode` and `net-allow`
+/// are read from here.
+pub fn agent_dir() -> PathBuf {
+    std::env::var_os("ARISTOTLE_AGENT_DIR").map_or_else(|| PathBuf::from(AGENT_DIR), PathBuf::from)
+}
+
 /// The installed agent's state directory and control script.
-fn agent() -> Option<(&'static Path, PathBuf)> {
-    let dir = Path::new(AGENT_DIR);
+fn agent() -> Option<(PathBuf, PathBuf)> {
+    let dir = agent_dir();
     let ctl = dir.join("aristotlectl");
     ctl.exists().then_some((dir, ctl))
 }
@@ -174,6 +182,36 @@ pub fn set_usb_mode(storage_minutes: Option<u32>) -> io::Result<()> {
         Ok(())
     } else {
         Err(io::Error::other(format!("{}: {status}", ctl.display())))
+    }
+}
+
+/// Add (`add`) or remove a `net-allow` entry the app needs, tagged with
+/// its feature: `aristotlectl net allow add|remove ENTRY FEATURE`, applied
+/// at once in `scoped` mode. Returns the script's message. `NotFound`
+/// when the agent is not installed, in which case the stock firewall lets
+/// everything out and nothing needs adding.
+pub fn net_allow(add: bool, entry: &str, feature: &str) -> io::Result<String> {
+    let (_, ctl) = agent().ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+    let out = Command::new("/bin/sh")
+        .arg(&ctl)
+        .args([
+            "net",
+            "allow",
+            if add { "add" } else { "remove" },
+            entry,
+            feature,
+        ])
+        .stdin(Stdio::null())
+        .output()?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if out.status.success() {
+        Ok(text)
+    } else {
+        Err(io::Error::other(format!(
+            "{}: {}",
+            ctl.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )))
     }
 }
 

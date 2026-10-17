@@ -51,6 +51,8 @@ pub mod act {
     pub const NAV_TOC: ActionId = 3100;
     pub const NAV_MARKS: ActionId = 3101;
     pub const NAV_GOTO: ActionId = 3102;
+    /// Go to the position another device synced.
+    pub const SYNC_GO: ActionId = 3200;
 }
 
 /// The selection over the page: inverted word boxes, and handles while

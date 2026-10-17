@@ -33,6 +33,7 @@ docs/, site/        developer documents and the project site
 | `aristotle-ui` | The e-ink toolkit and the screens, with the `aristotle-ui-preview` binary ([UI framework](ui-framework.md)) |
 | `aristotle-i18n` | Message catalogs, plurals, dates and numbers |
 | `aristotle-library` | Finds, indexes and describes EPUB, MOBI/AZW3, PDF, TXT and CBZ files. Covers, clippings, export, and `aristotle-library-cli` ([Library](library.md)) |
+| `aristotle-net` | HTTP through the device's allowlist with Basic and Digest auth, the KOSync and OPDS clients, the network settings file. Pure Rust; the `tls` feature adds rustls and ring, which compile C ([Library](library.md#network-progress-sync-and-catalogs)) |
 | `aristotle-render` | Plato's document engine and MuPDF: opening, pagination, page rendering, footnotes ([Reader](reader.md)) |
 | `aristotle` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
 | `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches. `bench` measures EPDC latency per waveform, streamed updates and page-turn strategies |

@@ -40,6 +40,8 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
 - Highlights go to `My Clippings.txt` in the stock format and to Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
+- Reading positions sync with KOReader through a KOSync server (EPUB chapters, PDF pages).
+- Books download from OPDS catalogs, such as calibre's content server, into the library.
 
 | Speed | Stock | Aristotle |
 |---|--:|--:|
@@ -62,7 +64,7 @@ Aristotle is alpha software.
 | Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
 | Other devices | | Not supported. The install scripts refuse to run unless `ARISTOTLE_FORCE=1` is set. |
 
-The Kindle also needs KUAL, the launcher that holds Aristotle's menu. In short: download the zip from the latest [release](https://github.com/piotrkowski/aristotle/releases), unzip it to the root of the Kindle's USB drive, and open KUAL › Aristotle › Start Aristotle. **[docs/install.md](docs/install.md)** has every step, the optional agent, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
+The Kindle also needs KUAL, the launcher that holds Aristotle's menu. In short: download the zip from the latest [release](https://github.com/piotrkowski/aristotle/releases), unzip it to the root of the Kindle's USB drive, and open KUAL › Aristotle › Start Aristotle; Return to the Kindle interface goes back. With the optional agent, Start Aristotle at boot: on makes it the Kindle's interface, and Amazon's updates stay off. **[docs/install.md](docs/install.md)** has every step, the optional agent, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 

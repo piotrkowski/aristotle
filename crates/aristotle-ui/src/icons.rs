@@ -69,11 +69,15 @@ pub enum Icon {
     MarginsWide,
     /// The UI language: a globe.
     Language,
+    /// Progress sync: two arrows chasing each other round.
+    Sync,
+    /// A download: an arrow into a tray.
+    Download,
 }
 
 impl Icon {
     /// Every icon, in the order of the preview sheet.
-    pub const ALL: [Icon; 38] = [
+    pub const ALL: [Icon; 40] = [
         Icon::Library,
         Icon::ArrowLeft,
         Icon::Menu,
@@ -112,6 +116,8 @@ impl Icon {
         Icon::MarginsNormal,
         Icon::MarginsWide,
         Icon::Language,
+        Icon::Sync,
+        Icon::Download,
     ];
 
     /// The English name, for the preview sheet and debugging.
@@ -155,6 +161,8 @@ impl Icon {
             Icon::MarginsNormal => "margins-2",
             Icon::MarginsWide => "margins-3",
             Icon::Language => "language",
+            Icon::Sync => "sync",
+            Icon::Download => "download",
         }
     }
 }
@@ -257,6 +265,12 @@ fn def(icon: Icon) -> Def {
             "M21 12A9 9 0 1 1 3 12A9 9 0 1 1 21 12ZM3 12H21M12 3A4 9 0 0 1 12 21A4 9 0 0 1 12 3Z",
             NONE,
         ),
+        Icon::Sync => (
+            "M19.5 12A7.5 7.5 0 0 1 6.7 17.3M4.5 12A7.5 7.5 0 0 1 17.3 6.7\
+             M17.5 2.5V6.9H13.1M6.5 21.5V17.1H10.9",
+            NONE,
+        ),
+        Icon::Download => ("M12 3.5V15M7 10L12 15L17 10M4 16V20H20V16", NONE),
     };
     Def { stroke, fill }
 }

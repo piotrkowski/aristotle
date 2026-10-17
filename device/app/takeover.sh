@@ -24,8 +24,9 @@
 # so a reboot in the middle of a takeover, or after it, always returns the
 # stock system. The flag that keeps the agent's watchdog from restarting the
 # stock GUI, /var/run/aristotle-takeover, is on the /var tmpfs too. Kept running on purpose: powerd
-# (power keys, battery, suspend), volumd (USB mass storage), wifid, lipcd and
-# dbus, plus our USB network and SSH.
+# (power keys, battery, screensaver and suspend, which the app follows),
+# volumd (USB mass storage), wifid, lipcd and dbus, plus our USB network and
+# SSH.
 #
 # start and pause refuse to run, and change nothing, unless the device is a
 # Kindle Paperwhite 4 (2018) on firmware 5.13.x (the KUAL extension's guard.sh,
@@ -41,8 +42,14 @@ R=${AGENT_TEST_ROOT:-}
 # kppreader, webreader, kfxreader, ... Their "stop on" stanzas follow it.
 GUI=lab126_gui
 # Background services that only serve the stock UI or Amazon's cloud.
-# Same list KOReader stops to reclaim RAM, plus telemetry.
-EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
+# Same list KOReader stops to reclaim RAM, plus telemetry. `stop` starts the
+# first group again; the second starts on its own on framework_ready, once
+# the stock GUI is back [fw]. Starting stored by hand before that counts as
+# a restart in its own monitor, which reboots the device after five quick
+# ones in a session [fw: mesquite_functions].
+EXTRA_LAB126="todo tmd rcm archive otav3 otaupd perfd"
+EXTRA_FRAMEWORK="stored scanner dmld fastmetrics clickstream_logging"
+EXTRA="$EXTRA_LAB126 $EXTRA_FRAMEWORK"
 TAKEOVER=$R/var/run/aristotle-takeover
 # The device guard: beside this script in the app bundle and the KUAL
 # extension, in ../extension/ in the repository (device/app/), or in the
@@ -93,17 +100,20 @@ start)
         i=$((i + 1))
     done
     pgrep -x cvm > /dev/null && echo "warning: cvm still running after 30 s"
-    # Keep powerd from blanking to the screensaver while we own the screen.
-    lipc-set-prop com.lab126.powerd preventScreenSaver 1
+    # The screensaver and sleep are the app's business from here: it
+    # unloads blanket's screensaver and follows powerd's events.
     echo "takeover: stock GUI stopped"
     mem
     ;;
 stop)
     # Earlier versions kept the flag in the agent's persistent state.
     rm -f "$TAKEOVER" "$R/var/local/aristotle/takeover"
-    for job in $EXTRA; do
+    for job in $EXTRA_LAB126; do
         start "$job" > /dev/null 2>&1
     done
+    # The app unloads blanket's screensaver while it runs; a crash would
+    # leave the stock GUI without one.
+    lipc-set-prop com.lab126.blanket load screensaver 2> /dev/null
     start "$GUI" > /dev/null 2>&1
     echo "takeover: stock GUI starting (takes about 20 s)"
     ;;

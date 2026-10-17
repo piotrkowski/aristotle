@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written for the tests in the shape of Project Gutenberg's OPDS
+     search results: xml:base, OpenSearch, "subsection" links to book feeds. -->
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:dcterms="http://purl.org/dc/terms/"
+      xmlns:opds="http://opds-spec.org/"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+      xml:base="https://www.gutenberg.org">
+<id>https://www.gutenberg.org/ebooks/search.opds/?query=austen</id>
+<updated>2026-10-17T18:00:00Z</updated>
+<title>Project Gutenberg: Books: austen</title>
+<subtitle>Free ebooks since 1971.</subtitle>
+<author><name>Project Gutenberg</name><uri>https://www.gutenberg.org</uri></author>
+<icon>https://www.gutenberg.org/gutenberg/favicon.png</icon>
+<link rel="search" type="application/opensearchdescription+xml" title="Project Gutenberg Catalog Search" href="https://www.gutenberg.org/catalog/osd-books.xml"/>
+<link rel="self" title="This Page" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?query=austen"/>
+<link rel="alternate" type="text/html" title="HTML Page" href="/ebooks/search/?query=austen"/>
+<link rel="start" title="Start Page" type="application/atom+xml;profile=opds-catalog" href="/ebooks.opds/"/>
+<link rel="next" title="Next Page" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?query=austen&amp;start_index=26"/>
+<opensearch:itemsPerPage>25</opensearch:itemsPerPage>
+<opensearch:startIndex>1</opensearch:startIndex>
+<entry>
+<updated>2026-10-17T18:00:00Z</updated>
+<title>Pride and Prejudice</title>
+<content type="text">Jane Austen</content>
+<id>https://www.gutenberg.org/ebooks/1342.opds</id>
+<link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/ebooks/1342.opds"/>
+<link type="image/jpeg" rel="http://opds-spec.org/image/thumbnail" href="/cache/epub/1342/pg1342.cover.small.jpg"/>
+</entry>
+<entry>
+<updated>2026-10-17T18:00:00Z</updated>
+<title>Emma</title>
+<content type="text">Jane Austen</content>
+<id>https://www.gutenberg.org/ebooks/158.opds</id>
+<link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/ebooks/158.opds"/>
+</entry>
+<entry>
+<updated>2026-10-17T18:00:00Z</updated>
+<title>Sort Alphabetically by Title</title>
+<content type="text"></content>
+<id>https://www.gutenberg.org/ebooks/search.opds/?query=austen&amp;sort_order=title</id>
+<link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/ebooks/search.opds/?query=austen&amp;sort_order=title"/>
+</entry>
+</feed>

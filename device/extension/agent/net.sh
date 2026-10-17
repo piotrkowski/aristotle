@@ -19,6 +19,11 @@
 #                         every REFRESH_SECS to follow DNS changes
 #   net.sh status         mode, what the hosts resolved to, the chains with
 #                         their packet counters
+#   net.sh allow add|remove ENTRY FEATURE
+#                         add "ENTRY   # aristotle:FEATURE" to net-allow, or
+#                         remove the lines with that entry and that tag
+#                         (lines without the tag stay); aristotlectl net
+#                         allow calls this, then applies in scoped mode
 #
 # Pure pieces, also run by the host-side test (device/tests/net.sh):
 #
@@ -33,7 +38,10 @@ set -u
 set -f
 
 R=${AGENT_TEST_ROOT:-}
-S=$R/var/local/aristotle
+# The agent's directory, through /proc when the agent or aristotlectl runs
+# us (see boot.sh).
+S=${ARISTOTLE_DIR:-$R/var/local/aristotle}
+umask 077
 IF=wlan0
 RESOLV=$R/etc/resolv.conf
 REFRESH_SECS=${REFRESH_SECS:-900}
@@ -243,6 +251,71 @@ tick() {
     fi
 }
 
+# allow add|remove ENTRY FEATURE: what the app's settings do when a sync
+# server or a catalog is saved or deleted. Only lines the feature added
+# carry its tag, so removing never touches a line the user wrote. Adding
+# an entry the feature already has changes nothing.
+allow() {
+    action=$1 entry=$2 feature=$3
+    case "$feature" in
+    '' | *[!a-z0-9-]*)
+        echo "net: bad feature '$feature' (a-z, 0-9, -)" >&2
+        return 2
+        ;;
+    esac
+    # One word that parse() takes as it is.
+    case "$entry" in
+    '' | *' '* | *'	'* | *'#'*)
+        echo "net: bad entry '$entry'" >&2
+        return 2
+        ;;
+    esac
+    if [ "$(echo "$entry" | parse 2> /dev/null | grep -c .)" != 1 ]; then
+        echo "net: bad entry '$entry'" >&2
+        return 2
+    fi
+    mkdir -p "$S"
+    touch "$S/net-allow"
+    tag="aristotle:$feature"
+    # Lines whose first word is the entry and whose comment is the tag.
+    tagged() {
+        awk -v e="$entry" -v t="$tag" '{
+            c = ""; i = index($0, "#"); if (i) c = substr($0, i + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", c)
+            line = $0; if (i) line = substr($0, 1, i - 1)
+            split(line, w, /[ \t]+/); first = w[1]; if (first == "") first = w[2]
+            print ((first == e && c == t) ? "y" : "n") "\t" $0
+        }' "$S/net-allow"
+    }
+    case "$action" in
+    add)
+        if tagged | grep -q '^y'; then
+            echo "$entry is already allowed for $feature"
+            return 0
+        fi
+        # A file without a final newline gets one first.
+        [ -n "$(tail -c 1 "$S/net-allow")" ] && echo >> "$S/net-allow"
+        printf '%-27s # %s\n' "$entry" "$tag" >> "$S/net-allow"
+        echo "allowed $entry for $feature"
+        log "allow: $entry added for $feature"
+        ;;
+    remove)
+        if ! tagged | grep -q '^y'; then
+            echo "$entry was not allowed for $feature"
+            return 0
+        fi
+        tagged | awk -F '\t' '$1 == "n" { sub(/^n\t/, ""); print }' > "$S/net-allow.new" &&
+            mv -f "$S/net-allow.new" "$S/net-allow"
+        echo "removed $entry for $feature"
+        log "allow: $entry removed for $feature"
+        ;;
+    *)
+        echo "usage: net.sh allow add|remove ENTRY FEATURE" >&2
+        return 2
+        ;;
+    esac
+}
+
 status() {
     echo "mode: $(mode)"
     if [ "$(mode)" = scoped ]; then
@@ -262,8 +335,9 @@ rules) rules "${2:-off}" ;;
 apply) apply ;;
 tick) tick ;;
 status) status ;;
+allow) allow "${2:-}" "${3:-}" "${4:-}" ;;
 *)
-    sed -n '16,30p' "$0"
+    sed -n '16,35p' "$0"
     exit 2
     ;;
 esac

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The screens: library and shelves, settings, the screensaver, and the
-//! reader page and menu.
+//! The screens: library and shelves, settings, the network screens (sync,
+//! catalogs), the screensaver, and the reader page and menu.
 //!
 //! These are real trees built from the toolkit. The reader app feeds them
 //! from the library index and the device; the desktop preview and the
 //! tests feed them sample data.
 
 pub mod library;
+pub mod network;
 pub mod reader;
 pub mod settings;
 pub mod sleep;

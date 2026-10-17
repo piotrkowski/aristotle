@@ -1,0 +1,3 @@
+# Test vectors, not secrets: md5("test") and a sample sync key in tests.
+6fe25314717a177923f69ea75cc12af34278e008:crates/aristotle-net/src/store.rs:generic-api-key:445
+6fe25314717a177923f69ea75cc12af34278e008:crates/aristotle-net/src/kosync.rs:generic-api-key:372

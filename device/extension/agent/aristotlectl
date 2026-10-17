@@ -8,18 +8,51 @@
 #   aristotlectl net off|scoped    Wi-Fi policy: off (default, stock firewall) or
 #                                  only the hosts in /var/local/aristotle/net-allow
 #   aristotlectl net status        mode, allowed addresses, rule counters
+#   aristotlectl net allow add|remove HOST:PORT FEATURE
+#                                  add or remove a net-allow line tagged
+#                                  "# aristotle:FEATURE" (the app's sync and
+#                                  catalog settings); applied now in scoped mode
 #   aristotlectl takeover on|off   tell the watchdog the stock GUI is down on purpose
 #                                  (until off or the next reboot)
 #   aristotlectl gui-restart       restart the stock GUI now
+#   aristotlectl app status        Aristotle at boot: on or off, running, failures
+#   aristotlectl app start         start Aristotle as at boot (needs autostart's copy)
+#   aristotlectl app stop [--keep-takeover]
+#                                  stop the Aristotle started at boot or by app start,
+#                                  not counted as a crash; back to the stock GUI
+#                                  unless --keep-takeover
 #   aristotlectl log [N]           last N log lines (default 40)
 #   aristotlectl reboot            reboot; the agent brings SSH back on boot
 set -u
 # R stands in for / in the host-side test (device/tests/agent.sh); it
 # is empty on the device.
 R=${AGENT_TEST_ROOT:-}
-S=$R/var/local/aristotle
 # On the /var tmpfs: a reboot always clears it.
 TAKEOVER=$R/var/run/aristotle-takeover
+
+# Work from the agent's directory once it has passed the same check as the
+# upstart jobs: root's, nothing for group or others (device/README.md,
+# "Security").
+if [ -z "${ARISTOTLE_DIR:-}" ]; then
+    D=$R/var/local/aristotle
+    if [ -L "$D" ] || ! cd "$D" 2> /dev/null; then
+        echo "aristotlectl: $D missing; is the agent installed?" >&2
+        exit 1
+    fi
+    st=$(stat -c '%u %a' .)
+    o=${st% *}
+    m=${st#* }
+    if [ -z "$st" ] || [ "$o" != "${AGENT_TEST_OWNER:-0}" ] || [ $((0$m & 077)) != 0 ]; then
+        echo "aristotlectl: $D is not root's alone (owner $o, mode $m); install the agent again" >&2
+        exit 1
+    fi
+    export ARISTOTLE_DIR=/proc/$$/cwd
+fi
+S=$ARISTOTLE_DIR
+
+app_running() {
+    initctl status aristotle-ui 2> /dev/null | grep -q start/running
+}
 
 case "${1:-status}" in
 status)
@@ -27,6 +60,7 @@ status)
     printf 'usb-mode: %s\n' "$(cat "$S/usb-mode" 2> /dev/null || echo net)"
     printf 'net: %s\n' "$(cat "$S/net-mode" 2> /dev/null || echo off)"
     printf 'takeover: %s\n' "$([ -e "$TAKEOVER" ] && echo on || echo off)"
+    printf 'autostart: %s\n' "$([ -e "$S/autostart" ] && echo on || echo off)"
     printf 'stock GUI: cvm %s, Xorg %s\n' \
         "$(pgrep -f /usr/java/bin/cvm > /dev/null && echo up || echo down)" \
         "$(pgrep -x Xorg > /dev/null && echo up || echo down)"
@@ -48,7 +82,19 @@ net)
         sh "$S/net.sh" apply && sh "$S/net.sh" status
         ;;
     status) sh "$S/net.sh" status ;;
-    *) echo "usage: aristotlectl net off|scoped|status" >&2; exit 2 ;;
+    allow)
+        case "${3:-}" in
+        add | remove) ;;
+        *) echo "usage: aristotlectl net allow add|remove HOST:PORT FEATURE" >&2; exit 2 ;;
+        esac
+        sh "$S/net.sh" allow "$3" "${4:-}" "${5:-}" || exit $?
+        # In off mode the list waits for scoped; the agent's tick would
+        # also pick the change up within 15 s.
+        if [ "$(cat "$S/net-mode" 2> /dev/null)" = scoped ]; then
+            sh "$S/net.sh" apply
+        fi
+        ;;
+    *) echo "usage: aristotlectl net off|scoped|status|allow" >&2; exit 2 ;;
     esac
     ;;
 takeover)
@@ -64,13 +110,60 @@ gui-restart)
     start lab126_gui > /dev/null 2>&1
     echo "stock GUI restarting (about 2 minutes)"
     ;;
+app)
+    case "${2:-status}" in
+    status)
+        printf 'autostart: %s\n' "$([ -e "$S/autostart" ] && echo on || echo off)"
+        if app_running; then
+            printf 'running: yes, pid %s\n' "$(cat "$S/app.pid" 2> /dev/null || echo '?')"
+        else
+            echo "running: no (as far as the boot job knows)"
+        fi
+        printf 'failed launches in a row: %s\n' "$(cat "$S/ui-fails" 2> /dev/null || echo 0)"
+        tail -5 "$S/ui.log" 2> /dev/null
+        ;;
+    start)
+        if [ ! -f "$R/etc/upstart/aristotle-ui.conf" ] || [ ! -x "$S/app/aristotle" ]; then
+            echo "aristotlectl: no boot job or no copy of the app; turn autostart on first (KUAL > Aristotle)" >&2
+            exit 1
+        fi
+        if app_running; then
+            echo "already running"
+            exit 0
+        fi
+        : > "$S/ui-request"
+        start aristotle-ui > /dev/null 2>&1 || { rm -f "$S/ui-request"; echo "start aristotle-ui failed" >&2; exit 1; }
+        echo "starting (see aristotlectl app status)"
+        ;;
+    stop)
+        if ! app_running; then
+            echo "not running"
+            exit 0
+        fi
+        if [ "${3:-}" = --keep-takeover ]; then echo keep > "$S/ui-stop"; else echo stock > "$S/ui-stop"; fi
+        p=$(cat "$S/app.pid" 2> /dev/null)
+        [ -n "$p" ] && kill -TERM "$p" 2> /dev/null
+        i=0
+        while app_running && [ $i -lt 30 ]; do
+            sleep 1
+            i=$((i + 1))
+        done
+        if app_running; then
+            echo "still running after 30 s" >&2
+            exit 1
+        fi
+        echo "stopped"
+        ;;
+    *) echo "usage: aristotlectl app status|start|stop [--keep-takeover]" >&2; exit 2 ;;
+    esac
+    ;;
 log) tail -"${2:-40}" "$S/log" ;;
 reboot)
     sync
     reboot
     ;;
 *)
-    sed -n '3,15p' "$0"
+    sed -n '3,25p' "$0"
     exit 2
     ;;
 esac

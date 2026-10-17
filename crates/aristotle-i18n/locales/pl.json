@@ -96,7 +96,14 @@
     "about_software": "Program",
     "about_reader": "Czytnik",
     "about_firmware": "System Kindle",
-    "about_memory": "Pamięć RAM"
+    "about_memory": "Pamięć RAM",
+    "section_network": "Sieć",
+    "sync": "Synchronizacja postępów",
+    "sync_off": "Wspólne miejsce w książce z KOReaderem",
+    "sync_on": "{user} na {server}",
+    "catalogs": "Katalogi",
+    "catalogs_none": "Książki z katalogów OPDS",
+    "catalogs_count": {"one": "{n} katalog", "few": "{n} katalogi", "many": "{n} katalogów"}
   },
   "sleep": {
     "wake_hint": "Dotknij ekranu, aby wrócić"
@@ -134,7 +141,12 @@
     "no_highlights": "Nie ma jeszcze zakreśleń ani zakładek. Przytrzymaj słowo, aby je zaznaczyć.",
     "bookmark": "Zakładka",
     "go_to_title": "Przejdź do miejsca",
-    "go": "Przejdź"
+    "go": "Przejdź",
+    "sync_title": "Pozycja z innego urządzenia",
+    "sync_body": "{device}: {percent} książki. Przejść tam?",
+    "sync_body_chapter": "{device}: {percent} książki, rozdział „{chapter}”. Przejść tam?",
+    "sync_go": "Przejdź",
+    "sync_stay": "Zostań tutaj"
   },
   "dict": {
     "none": "Brak słowników. Skopiuj słowniki StarDict (.ifo, .idx, .dict.dz) do /mnt/us/dictionaries.",
@@ -150,5 +162,62 @@
     "source": "źródło",
     "tag": "zakreślenia",
     "note": "Notatka"
+  },
+  "sync": {
+    "title": "Synchronizacja postępów",
+    "intro": "Gdy zamykasz książkę, miejsce lektury trafia na serwer KOSync. Wraca, gdy otworzysz książkę tutaj albo w KOReaderze.",
+    "server": "Serwer",
+    "user": "Nazwa użytkownika",
+    "password": "Hasło",
+    "not_set": "Nie ustawiono",
+    "password_saved": "Zapisane, tylko jako klucz MD5",
+    "auto": "Synchronizuj automatycznie",
+    "auto_hint": "Pobieraj pozycję przy otwieraniu książki, wysyłaj przy zamykaniu",
+    "log_in": "Zaloguj",
+    "register": "Załóż konto",
+    "forget": "Zapomnij ten serwer",
+    "import": "Wczytaj sync.json",
+    "import_hint": "Czyta {path}",
+    "state_off": "Nie ma jeszcze serwera.",
+    "state_unchecked": "Jeszcze nie zalogowano.",
+    "state_checking": "Sprawdzam…",
+    "state_ok": "Zalogowano jako {user}.",
+    "state_registered": "Konto założone, zalogowano jako {user}.",
+    "imported": "Wczytano z {path}.",
+    "nothing_to_import": "Nie ma pliku {path}.",
+    "type_later": "Wpisywanie przyjdzie razem z klawiaturą ekranową. Do tego czasu zapisz ustawienia w {path}.",
+    "error_taken": "Ta nazwa użytkownika jest już zajęta.",
+    "error_closed": "Serwer nie przyjmuje nowych kont.",
+    "error_file": "Nie mogę odczytać {path}: {error}"
+  },
+  "catalogs": {
+    "title": "Katalogi",
+    "add": "Dodaj katalog",
+    "import": "Wczytaj catalogs.json",
+    "import_hint": "Czyta {path}",
+    "empty": "Nie ma jeszcze katalogów.",
+    "loading": "Wczytuję…",
+    "empty_feed": "Nic tu nie ma.",
+    "search": "Szukaj",
+    "results": "Wyniki dla „{terms}”",
+    "no_formats": "Brak pliku, który ten czytnik otworzy",
+    "download": "Pobierz {format}",
+    "downloading": "Pobieram… {percent}",
+    "downloaded": "Zapisano jako {path}.",
+    "read_now": "Czytaj",
+    "removed": "Usunięto {name}.",
+    "not_feed": "To nie jest katalog OPDS.",
+    "too_large": "Książka jest większa niż {size}.",
+    "no_space": "Za mało wolnego miejsca."
+  },
+  "net": {
+    "not_allowed": "{host} nie ma na liście dozwolonych hostów. Dodaj go poleceniem aristotlectl net allow.",
+    "unreachable": "Nie mogę połączyć się z serwerem. Czy Wi-Fi jest włączone?",
+    "timeout": "Serwer nie odpowiedział na czas.",
+    "no_https": "Ta wersja nie obsługuje HTTPS. Użyj adresu http://.",
+    "clock": "Certyfikat serwera nie pasuje do czasu w czytniku. Sprawdź datę i godzinę.",
+    "tls": "Bezpieczne połączenie nie powiodło się: {detail}",
+    "refused": "Serwer odrzucił nazwę użytkownika lub hasło.",
+    "other": "Błąd: {detail}"
   }
 }
