@@ -1,0 +1,126 @@
+# Reading interactions of the Aristotle reader, on the test book "Próba
+# czytania": contents, dictionary popups (Polish, Greek, a Greek form, the
+# dictionary switcher), selecting by dragging, highlighting, a Latin gloss,
+# a footnote, the bookmark corner, the highlights list, go to 50 %.
+#
+# Coordinates come from `aristotle --preview` on the same book with the
+# default typography (10 pt, normal spacing and margins: reader.json absent
+# or at its defaults); regenerate this file with it after layout changes
+# (docs/reader.md, "Reading interactions").
+#
+# Setup, once:
+#   devloop/host/make-reading-test-epub.py proba-czytania.epub
+#   copy it to /mnt/us/documents/Aristotle/, and build the dictionary
+#   indexes on the host (aristotle --index-dicts) into
+#   /mnt/us/.aristotle/dict-index/ (else the device builds them at start;
+#   lookups say "Słownik jest indeksowany" until then).
+# Run, the app in front with the book open:
+#   ssh kindle sh /mnt/us/aristotle/run-aristotle.sh --open "Próba czytania"
+#   /var/tmp/aristotle-observe run /var/tmp/reading.txt
+# Snapshots go to /var/tmp/snap-NAME.raw (devloop/host/fb2png.py).
+wait 3000
+snap 00-open
+label menu
+tap 536 70
+wait 1500
+snap 01-menu
+label contents
+tap 215 178
+wait 1500
+snap 02-contents
+label first chapter
+tap 536 171
+wait 1500
+snap 03-chapter-1
+label hold dusza
+hold 559 302 700
+wait 2000
+snap 04-dict-polish
+label close
+tap 300 260
+wait 1500
+snap 05-closed
+label hold psyche
+hold 875 302 700
+wait 2000
+snap 06-dict-greek
+label other dictionary
+tap 930 834
+wait 1500
+snap 07-dict-greek-switched
+label close
+tap 300 260
+wait 1500
+label hold logou
+hold 347 673 700
+wait 2000
+snap 08-dict-greek-form
+label close
+tap 300 260
+wait 1500
+label select
+drag 403 356 933 356 700 600
+wait 2000
+snap 09-selection-drag
+snap 10-selection-actions
+label highlight
+tap 162 1377
+wait 1500
+snap 11-highlighted
+label select latin
+drag 809 828 955 828 700 600
+wait 2000
+label gloss
+tap 583 191
+wait 1500
+snap 12-gloss
+label close
+tap 369 581
+wait 1500
+label footnote
+tap 338 356
+wait 1500
+snap 13-footnote
+label close
+tap 586 1377
+wait 1500
+label bookmark
+tap 1030 45
+wait 1500
+snap 14-bookmark
+label menu
+tap 536 70
+wait 1500
+label highlights
+tap 535 178
+wait 1500
+snap 15-highlights
+label back
+tap 145 60
+wait 1500
+label menu
+tap 536 70
+wait 1500
+label go to
+tap 856 178
+wait 1500
+label +10
+tap 548 1233
+wait 1500
+label +10
+tap 548 1233
+wait 1500
+label +10
+tap 548 1233
+wait 1500
+label +10
+tap 548 1233
+wait 1500
+label +10
+tap 548 1233
+wait 1500
+snap 16-goto
+label go
+tap 161 1361
+wait 1500
+snap 17-after-goto
