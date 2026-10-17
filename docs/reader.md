@@ -142,7 +142,7 @@ Page numbers require full pagination. Until `set_pagination` supplies them, the 
 
 ### Snapshots
 
-At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with zstd. A snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, and progress.
+At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with zstd. A snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, UI language, and progress. A snapshot saved before a language change is not shown.
 
 The main thread copies pixels. `snapshot-writer` compresses and writes them, keeping slow filesystem syncs off the input path. Scans remove snapshots for missing books.
 
