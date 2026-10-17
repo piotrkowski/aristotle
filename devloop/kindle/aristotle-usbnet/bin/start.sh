@@ -53,7 +53,9 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2> /dev/null; then
     say "usbnet: already up, ssh root@$DEV_IP"
     exit 0
 fi
-# -s: public keys only. The KOReader build reads settings/SSH/authorized_keys
-# relative to its working directory and stores host keys there (-R).
-cd "$KO" && ./dropbear -E -R -s -p 22 -P "$PIDFILE" || fail "dropbear failed"
+# -s: public keys only. -p ADDRESS:PORT listens on the USB address only, never
+# on Wi-Fi (KOReader's dropbear 2026.92 lists "-p [address:]port"). The
+# KOReader build reads settings/SSH/authorized_keys relative to its working
+# directory and stores host keys there (-R).
+cd "$KO" && ./dropbear -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" || fail "dropbear failed"
 say "usbnet up: ssh root@$DEV_IP"
