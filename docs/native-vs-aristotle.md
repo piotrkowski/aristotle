@@ -64,16 +64,35 @@ Other stock observations:
 
 "Visible" means the first update showing the new page has finished. In the two-step strategies the page is first thresholded to pure black and white, then upgraded to the anti-aliased page. Blitting a page into the framebuffer takes well under a millisecond (`Framebuffer::blit`).
 
-In a slow demo of all five (`devloop/kindle/pageturn-demo.sh`), the owner judged them all fast and saw no objectionable ghosting or flicker.
+In a slow demo of all five (`devloop/kindle/pageturn-demo.sh`), the owner judged them all fast and saw no objectionable ghosting or flicker. That demo was misleading: its two pages differ only by a 37-row shift, so little residue could build up.
 
-**Decision:** the default page turn is A2, then GL16, so the page is readable about 3.8 times sooner than on stock. GL16 alone and REAGL stay available as settings. A full GC16 refresh every N pages is a setting too; N will be tuned by watching ghost build-up over long reading sessions.
+### What real reading showed (superseding the first decision)
+
+In the first real reading session (`aristotle-app`, then `aristotle-render` on "Pan Tadeusz"), the owner saw heavy ghosting and "shadowing" with A2 then GL16. Two mistakes compounded:
+
+- Both updates were **partial**. A partial update drives only pixels whose value changes, so pixels the A2 pass had already set to white kept the previous page's ghost.
+- **A2 leaves residue** that GL16 does not clear, even as a full update. A2 preview followed by a full mode-9 pass still looked like "drawing twice" to the owner and was rejected.
+
+The driver log of the stock reader then showed what it does on every page turn: **one full-mode update of the whole screen with waveform mode 9** (`glkw16`, which FBInk calls a night-mode waveform, but stock uses it in day mode), and **mode 8** (`gck16`) for its flashing full refresh. Both trigger the driver's extra "Algorithm processing" and "ACD data" steps, Lab126's ghost reduction. Sending the identical request from our code makes ours indistinguishable in the log, and the owner confirmed the ghosting was gone.
+
+With the next page rendered while the panel refreshes (`Screen::submit`/`finish`), a turn costs only the panel. Measured on "Pan Tadeusz", median of 6 turns:
+
+| Single-step turn | Tap to page shown | Settled |
+| --- | --- | --- |
+| Stock reader | 565 ms | 830 ms |
+| **Aristotle, mode 9 full (stock-identical update)** | **503 ms** | **503 ms** |
+| Aristotle, DU4 (mode 7) full | 317 ms | 317 ms |
+
+Rendering the next page takes about 106 ms on the device and fits inside the panel time.
+
+**Decision:** page turns use one full mode-9 update of the whole screen, the stock reader's own request, with the next page prerendered. That is as clean as stock and 11 % faster to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 stays a setting for anyone who prefers speed (about 1.8 times faster than stock), pending the owner's verdict on its look. Two-step turns with an A2 preview are off.
 
 ## Targets for Aristotle
 
 | Interaction | Stock | Target | How |
 | --- | --- | --- | --- |
-| Page turn, visible | 565 ms | **≤ 200 ms** (150 ms measured on real text) | A2 black and white page first, then a GL16 anti-aliasing upgrade |
-| Page turn, settled | 830 ms | ≤ 700 ms (630 ms measured) | One GL16 upgrade; no separate footer update, because the footer is drawn in the same frame |
+| Page turn, visible | 565 ms | **≤ 510 ms** (503 ms measured; 317 ms with DU4) | One full mode-9 update like stock, next page prerendered, turn triggered on touch-down |
+| Page turn, settled | 830 ms | ≤ 510 ms (503 ms measured) | The footer is drawn in the same frame, so there is no second update |
 | Touch feedback | none before the result | ≤ 150 ms | A2 highlight on touch-down (`aristotle-ui`) |
 | Open a book | 0.8 s settled | ≤ 0.6 s | Layout cached per book; first page rendered from cache |
 | Menu or toolbar | 0.75–1.4 s settled | ≤ 0.5 s | DU-only UI chrome, no gray gradients |

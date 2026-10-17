@@ -8,11 +8,16 @@
 #   ssh kindle sh -s pause  < devloop/kindle/takeover.sh
 #   ssh kindle sh -s resume < devloop/kindle/takeover.sh
 #
-# start/stop take the stock GUI down and bring it back: most RAM is freed, but
-# the way back shows the boot splash for 30-60 s while Java restarts.
-# pause/resume freeze it instead (SIGSTOP, as KOReader and slint-kindle-backend
-# do): nothing is freed, but returning is instant. Use pause for the dev loop
-# and short sessions.
+# start/stop take the stock GUI down and bring it back: most RAM is freed, and
+# the way back shows the boot splash for 30-60 s while Java restarts. This is
+# the reliable path; launchers use it.
+#
+# pause/resume (EXPERIMENTAL) freeze the stock GUI instead (SIGSTOP, as KOReader
+# and slint-kindle-backend do). On our PW4 the frozen framework was killed,
+# most likely by Amazon's pmond watchdog (the poll_daemons job). The GUI then
+# failed to come back (no Xorg, awesome or pillow) until a reboot. pause now
+# refuses unless the stock UI is fully up, and holds poll_daemons while frozen.
+# It is still unproven; don't build on it.
 #
 # Nothing is written to the root filesystem: everything here is runtime state,
 # so a reboot always returns the stock system. Kept running on purpose: powerd
@@ -66,6 +71,13 @@ stop)
     echo "takeover: stock GUI starting (takes about 20 s)"
     ;;
 pause)
+    # Freezing a GUI that is still starting wedged it until reboot: require
+    # the framework, the window manager and Pillow to be running.
+    for p in cvm awesome pillowd; do
+        pgrep -x "$p" > /dev/null || { echo "takeover: $p not running; refusing to pause (use start)" >&2; exit 1; }
+    done
+    # pmond kills processes that stop answering, which includes a frozen cvm.
+    stop poll_daemons > /dev/null 2>&1
     # Hide the stock chrome, then freeze everything that draws: the window
     # manager, the Java framework and the React Native apps.
     lipc-set-prop com.lab126.pillow disableEnablePillow disable 2> /dev/null
@@ -79,9 +91,16 @@ resume)
     for p in $FROZEN; do
         killall -CONT "$p" 2> /dev/null
     done
+    start poll_daemons > /dev/null 2>&1
     lipc-set-prop com.lab126.pillow disableEnablePillow enable 2> /dev/null
-    # The stock UI does not know we drew over it: reopen Home so it repaints.
+    # The stock UI does not know we drew over it. Reopen Home so the booklet
+    # repaints, and ask Pillow to show its bars again, as KOReader does: the
+    # status bar and toolbar are Pillow windows that do not repaint on their own.
     lipc-set-prop com.lab126.appmgrd start app://com.lab126.booklet.home 2> /dev/null
+    for bar in default_status_bar search_bar; do
+        lipc-set-prop com.lab126.pillow interrogatePillow \
+            "{\"pillowId\": \"$bar\", \"function\": \"nativeBridge.showMe();\"}" 2> /dev/null
+    done
     echo "takeover: stock GUI resumed"
     ;;
 status)
