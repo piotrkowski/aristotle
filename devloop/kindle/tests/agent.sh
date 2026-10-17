@@ -278,6 +278,7 @@ echo "boot: no kill switch, the agent starts"
 r=$(booted boot)
 boot "$r"
 check "USB network and SSH come up" "wait_for $r/calls '^dropbear ' && called $r 'modprobe g_ether'"
+check "with the fixed MACs" "called $r 'modprobe g_ether dev_addr=02:61:72:69:73:01 host_addr=02:61:72:69:73:02'"
 check "mode logged" "grep -q 'mode: net' $r/var/local/aristotle/log"
 kill "$(cat "$r/jobs/boot.pid")" 2> /dev/null
 

@@ -9,6 +9,13 @@
 # An SSH session survives it: the running dropbear is handed to the new agent,
 # not restarted.
 #
+# The USB network is handed over as it runs too: g_ether keeps the MACs the
+# old agent loaded it with (02:61:72:69:73:01 and :02), until the next
+# reboot loads it with the new ones (02:61:72:69:73:01 and :02). Re-run
+# devloop/host/setup-host-net.sh on the host after the migration: it keeps
+# a profile for the old host MAC as well as the new one, so the host stays
+# connected now and after the reboot.
+#
 #  1. Checks: a PW4 on firmware 5.13.x (../guard.sh), root, an old agent
 #     present, no new one, USB mode "net", the new agent's files beside this
 #     script. Nothing has changed if one fails.
