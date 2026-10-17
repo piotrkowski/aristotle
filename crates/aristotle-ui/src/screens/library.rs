@@ -680,13 +680,7 @@ impl Library {
         let mut ap = Paragraph::plain(&b.author, s.small().line_height(1.2), Align::Left);
         ap.style.max_lines = Some(1);
         let author = t.text(ap);
-        let series = b.series.as_ref().map(|(name, i)| {
-            if in_series {
-                format!("Tom {}", series_number(*i))
-            } else {
-                format!("{name} · tom {}", series_number(*i))
-            }
-        });
+        let series = b.series.as_ref().and_then(|(name, i)| series_label(name, *i, in_series));
         let status = match b.status {
             Status::Reading => {
                 let bar = t.add(progress(b.progress, 12), []);
@@ -833,9 +827,31 @@ pub fn sample_items(books: &[Book], view: View) -> Vec<Item> {
     }
 }
 
+/// The series line of a library card: "Name · tom n", or "Tom n" inside the
+/// series' own view. A missing index arrives as 0 (and a 0 or negative one
+/// numbers nothing), so it is never shown as "tom 0": the name alone, or no
+/// line inside the series.
+fn series_label(name: &str, index: f32, in_series: bool) -> Option<String> {
+    let numbered = index > 0.0;
+    match (in_series, numbered) {
+        (true, true) => Some(format!("Tom {}", series_number(index))),
+        (true, false) => None,
+        (false, true) => Some(format!("{name} · tom {}", series_number(index))),
+        (false, false) => Some(name.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn series_index_zero_is_never_shown() {
+        assert_eq!(series_label("Gazeta", 0.0, false).as_deref(), Some("Gazeta"));
+        assert_eq!(series_label("Gazeta", 0.0, true), None);
+        assert_eq!(series_label("Dialogi", 3.0, false).as_deref(), Some("Dialogi · tom 3"));
+        assert_eq!(series_label("Dialogi", 3.0, true).as_deref(), Some("Tom 3"));
+    }
     use crate::geom::{SCREEN_HEIGHT, SCREEN_WIDTH};
     use crate::text::{FamilyId, Fonts};
     use crate::ui::Ui;
