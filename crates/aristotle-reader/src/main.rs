@@ -368,9 +368,13 @@ impl App {
             &model.shelf(&clock, level),
         );
         self.ui.set_tree_with(tree, refresh);
-        self.screen = Screen::Library { model, view };
+        let old = std::mem::replace(&mut self.screen, Screen::Library { model, view });
         self.enter_library_ui();
-        self.render_ui()
+        let submitted = self.render_ui();
+        // A closed book is freed only now: the display lists of a laid-out
+        // chapter are many allocations, and the library should not wait.
+        drop(old);
+        submitted
     }
 
     /// Bring the index in line with the books on the device.
@@ -931,8 +935,23 @@ impl App {
     /// open, with the progress it belongs to; see snapshot.rs. Call before
     /// saving the index.
     fn save_snapshot(&mut self) {
+        if let Some((key, current, next)) = self.snapshot_parts() {
+            self.snapshots.save(key, current, next);
+        }
+    }
+
+    /// What [`App::save_snapshot`] stores, without copying any pixels yet;
+    /// sets the progress it belongs to.
+    #[allow(clippy::type_complexity)]
+    fn snapshot_parts(
+        &mut self,
+    ) -> Option<(
+        snapshot::Key,
+        (snapshot::PageInfo, Rc<Page>),
+        Option<(snapshot::PageInfo, Rc<Page>)>,
+    )> {
         let Screen::Reader(r) = &mut self.screen else {
-            return;
+            return None;
         };
         let s = &mut r.session;
         let progress = s.progress(aristotle_library::library::now());
@@ -943,14 +962,12 @@ impl App {
         }
         let key = snapshot::Key::new(&s.id, s.stamp(), &s.style, progress.locator);
         let here = s.current;
-        let Ok(current) = s.page(here) else {
-            return;
-        };
+        let current = s.page(here).ok()?;
         let next = s
             .known_next(here)
             .and_then(|l| s.rendered(l).map(|p| (open::page_info(s, l), p)));
         let info = open::page_info(s, here);
-        self.snapshots.save(key, (info, current), next);
+        Some((key, (info, current), next))
     }
 
     fn light_level(&self) -> f32 {
@@ -1178,10 +1195,16 @@ impl App {
             self.lib
                 .set_progress(&r.session.id, r.session.progress(now));
         }
-        self.save_snapshot();
+        let snapshot = self.snapshot_parts();
+        // The library goes out first; copying the pages and serialising the
+        // index wait until it is submitted.
+        self.show_library(Refresh::Full)?;
+        if let Some((key, current, next)) = snapshot {
+            self.snapshots.save(key, current, next);
+        }
         self.saver.save(&self.lib);
         self.debounce.saved();
-        self.show_library(Refresh::Full)
+        Ok(())
     }
 
     /// Save progress and leave a white screen for the stock UI.
