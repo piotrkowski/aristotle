@@ -14,6 +14,11 @@
 //!   page itself changed behind the open menu (new font size, chapter jump),
 //!   the frame goes out as a full mode-9 update of the whole screen like a
 //!   page turn ([`Content::Page`]).
+//! - **Night mode** keeps all of the above, so page turns stay one full
+//!   mode-9 update and flashes full mode 8 (the waveforms FBInk names
+//!   night waveforms). Gray chrome updates switch from GL16 to GLKW16
+//!   (mode 9, partial). Pages are inverted in the copy to the framebuffer
+//!   (software night) or by the EPDC (hardware night, [`Panel::set_night`]).
 //!
 //! The driver runs one update at a time and reads the framebuffer when it
 //! processes an update, so a new page is only blitted once the previous
@@ -31,6 +36,8 @@ use aristotle_hal::framebuffer::{Framebuffer, Rect as FbRect, Waveform as FbWave
 use aristotle_render::page::Page;
 use aristotle_ui::ui::{Damage, Ui};
 use aristotle_ui::{Rect, Waveform};
+
+use crate::prefs::NightMethod;
 
 /// The stock UI's full flashing refresh (GC16 equivalent on the PW4).
 pub const FLASH: FbWaveform = FbWaveform::GCK16;
@@ -114,6 +121,8 @@ pub struct Panel {
     page: Option<InFlight>,
     /// Waveform for page turns.
     pub turn: FbWaveform,
+    /// Night mode and how it inverts, `None` by day.
+    night: Option<NightMethod>,
 }
 
 fn fb_rect(r: Rect) -> FbRect {
@@ -136,7 +145,36 @@ impl Panel {
             completions,
             page: None,
             turn: FbWaveform(turn_mode),
+            night: None,
         })
+    }
+
+    /// Switch night mode. With [`NightMethod::Software`] the caller inverts
+    /// the UI (`Ui::set_night`) and book pages are inverted here on their way
+    /// to the framebuffer; with [`NightMethod::Hardware`] every update from
+    /// now on carries the EPDC inversion flag and nothing is inverted in
+    /// memory. Either way the caller follows with a full refresh.
+    pub fn set_night(&mut self, night: Option<NightMethod>) {
+        self.wait_idle();
+        self.fb.set_hw_invert(night == Some(NightMethod::Hardware));
+        self.night = night;
+    }
+
+    /// Whether our pixels must be inverted in memory (software night).
+    pub fn inverts_pixels(&self) -> bool {
+        self.night == Some(NightMethod::Software)
+    }
+
+    /// The waveform for a UI damage hint. In night mode the gray updates of
+    /// the chrome use GLKW16 (mode 9), the gray waveform Lab126 made for
+    /// dark pages (FBInk, KOReader `waveform_night` on Rex and Zelda), as a
+    /// partial update; DU and A2 stay, they only move pixels to black or
+    /// white.
+    fn chrome_waveform(&self, w: Waveform) -> FbWaveform {
+        match w {
+            Waveform::GL16 if self.night.is_some() => FbWaveform::GLKW16,
+            other => FbWaveform(other.mode()),
+        }
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -159,8 +197,8 @@ impl Panel {
                 // No wait: the driver latched the last page when it started
                 // it, and the display thread queues behind it by itself.
                 self.blit_ui(ui, d.rect);
-                self.display
-                    .damage(fb_rect(d.rect), FbWaveform(d.waveform.mode()), &[]);
+                let wf = self.chrome_waveform(d.waveform);
+                self.display.damage(fb_rect(d.rect), wf, &[]);
             }
         }
         Ok(())
@@ -172,7 +210,11 @@ impl Panel {
     pub fn show_page(&mut self, page: &Page, flash: bool, label: &str) -> io::Result<Duration> {
         let waited = self.wait_idle();
         let rect = self.fb.full_screen();
-        self.fb.blit(&page.data, page.stride, rect);
+        if self.inverts_pixels() {
+            self.fb.blit_inverted(&page.data, page.stride, rect);
+        } else {
+            self.fb.blit(&page.data, page.stride, rect);
+        }
         let wf = if flash { FLASH } else { self.turn };
         let m = self.fb.update(rect, wf, true)?;
         self.track(m, label);
@@ -239,9 +281,12 @@ impl Panel {
         Ok(())
     }
 
-    /// Leave a clean white screen behind for the stock UI.
+    /// Leave a clean white screen behind for the stock UI, in day mode
+    /// whatever ours was.
     pub fn clear(&mut self) -> io::Result<()> {
         self.wait_idle();
+        self.fb.set_hw_invert(false);
+        self.night = None;
         let all = self.fb.full_screen();
         self.fb.fill(all, 0xff);
         let m = self.fb.update(all, FLASH, true)?;

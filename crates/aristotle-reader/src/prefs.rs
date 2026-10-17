@@ -1,13 +1,17 @@
-//! Reader preferences: the menu's typography steps, mapped onto
-//! aristotle-render's [`Style`], and the page-turn waveform.
+//! Preferences: the menu's typography steps (mapped onto aristotle-render's
+//! [`Style`]), the page-turn waveform, night mode, library covers and view,
+//! and the screensaver delay.
 //!
 //! Stored as `reader.json` in the library data directory. They are global,
 //! not per book: the owner sets a comfortable size once. Unknown or missing
-//! fields fall back to the defaults, so the file can grow.
+//! fields fall back to the defaults, so the file can grow, and a file from
+//! an older version keeps its values. The frontlight is not stored here: the
+//! LM3695 keeps its level, and the app reads it back.
 
 use std::path::Path;
 
 use aristotle_render::style::Style;
+use aristotle_ui::screens::library::{CoverMode, View};
 use aristotle_ui::screens::reader::Settings;
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +33,47 @@ pub const STOCK_TURN: u32 = 9;
 /// as an option; the owner decides on the panel.
 pub const DU4_TURN: u32 = 7;
 
+/// How night mode inverts the screen (`docs/ui-framework.md`, "Night mode").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NightMethod {
+    /// Our pixels are inverted before they reach the framebuffer: the UI
+    /// canvas by `Ui::set_night`, book pages in the copy to the framebuffer.
+    #[default]
+    Software,
+    /// The framebuffer keeps day pixels and every update asks the PXP to
+    /// invert (`EPDC_FLAG_ENABLE_INVERSION`).
+    Hardware,
+}
+
+/// Library covers, as stored.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Covers {
+    #[default]
+    None,
+    Cards,
+    Photos,
+}
+
+impl Covers {
+    pub fn mode(self) -> CoverMode {
+        match self {
+            Covers::None => CoverMode::None,
+            Covers::Cards => CoverMode::Cards,
+            Covers::Photos => CoverMode::Photos,
+        }
+    }
+
+    pub fn from_mode(m: CoverMode) -> Covers {
+        match m {
+            CoverMode::None => Covers::None,
+            CoverMode::Cards => Covers::Cards,
+            CoverMode::Photos => Covers::Photos,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
@@ -37,6 +82,15 @@ pub struct Prefs {
     pub margins: usize,
     /// EPDC waveform mode for page turns.
     pub turn_mode: u32,
+    pub night: bool,
+    pub night_method: NightMethod,
+    pub covers: Covers,
+    /// Minutes without a touch before the screensaver; 0 is never.
+    pub sleep_minutes: u32,
+    /// Library view: 0 books, 1 folders, 2 series.
+    pub library_view: usize,
+    /// Index into `shelf::SORTS`.
+    pub sort: usize,
 }
 
 impl Default for Prefs {
@@ -46,6 +100,12 @@ impl Default for Prefs {
             spacing: 1,
             margins: 1,
             turn_mode: STOCK_TURN,
+            night: false,
+            night_method: NightMethod::Software,
+            covers: Covers::None,
+            sleep_minutes: 15,
+            library_view: 0,
+            sort: 0,
         }
     }
 }
@@ -72,6 +132,8 @@ impl Prefs {
         self.size = self.size.min(FONT_PT.len() - 1);
         self.spacing = self.spacing.min(LINE_HEIGHT.len() - 1);
         self.margins = self.margins.min(MARGIN_MM.len() - 1);
+        self.library_view = self.library_view.min(View::ALL.len() - 1);
+        self.sort = self.sort.min(crate::shelf::SORTS.len() - 1);
         self
     }
 
@@ -85,13 +147,15 @@ impl Prefs {
         s
     }
 
-    /// The menu's view of these preferences, with the frontlight level.
+    /// The menu's view of these preferences, with the frontlight level
+    /// (0 to 1).
     pub fn menu_settings(&self, light: f32) -> Settings {
         Settings {
             size: self.size,
             spacing: self.spacing,
             margins: self.margins,
             light,
+            night: self.night,
             ..Settings::default()
         }
     }
@@ -103,23 +167,31 @@ impl Prefs {
         self.margins = s.margins;
         *self = self.clone().clamped();
     }
-}
 
-/// Frontlight: the menu slider is perceptual (0 to 1), the LM3695 takes raw
-/// steps. Perceived brightness grows roughly with the square root of the
-/// drive current, so the slider squares its value.
-pub fn light_to_raw(v: f32, max: u32) -> u32 {
-    let v = v.clamp(0.0, 1.0);
-    (v * v * max as f32).round() as u32
-}
+    /// The screensaver delay as the settings screen offers it.
+    pub fn sleep(&self) -> Option<u32> {
+        (self.sleep_minutes > 0).then_some(self.sleep_minutes)
+    }
 
-pub fn raw_to_light(raw: u32, max: u32) -> f32 {
-    (raw as f32 / max.max(1) as f32).clamp(0.0, 1.0).sqrt()
+    pub fn set_sleep(&mut self, minutes: Option<u32>) {
+        self.sleep_minutes = minutes.unwrap_or(0);
+    }
+
+    /// The library place to open at start.
+    pub fn view(&self) -> View {
+        View::ALL[self.library_view.min(View::ALL.len() - 1)]
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aristotle_ui::screens::settings::SLEEP_MINUTES;
+
+    /// Whether `minutes` is one of the delays the settings screen offers.
+    fn offered_sleep(minutes: Option<u32>) -> bool {
+        SLEEP_MINUTES.contains(&minutes)
+    }
 
     #[test]
     fn defaults_are_the_renderer_defaults() {
@@ -128,7 +200,11 @@ mod tests {
         assert_eq!(s.font_size, d.font_size);
         assert_eq!(s.line_height, d.line_height);
         assert_eq!(s.margin_mm, d.margin_mm);
-        assert_eq!(Prefs::default().turn_mode, 9);
+        let p = Prefs::default();
+        assert_eq!(p.turn_mode, 9);
+        assert!(!p.night);
+        assert_eq!(p.covers, Covers::None, "covers are off by default");
+        assert!(offered_sleep(p.sleep()));
     }
 
     #[test]
@@ -159,6 +235,12 @@ mod tests {
             spacing: 0,
             margins: 2,
             turn_mode: DU4_TURN,
+            night: true,
+            night_method: NightMethod::Hardware,
+            covers: Covers::Cards,
+            sleep_minutes: 30,
+            library_view: 1,
+            sort: 2,
         };
         p.save(&dir).unwrap();
         assert_eq!(Prefs::load(&dir), p);
@@ -166,16 +248,48 @@ mod tests {
         let q = Prefs::load(&dir);
         assert_eq!(q.size, FONT_PT.len() - 1);
         assert_eq!(q.turn_mode, STOCK_TURN);
+        assert!(!q.night);
     }
 
     #[test]
-    fn light_mapping_round_trips() {
-        assert_eq!(light_to_raw(0.0, 2047), 0);
-        assert_eq!(light_to_raw(1.0, 2047), 2047);
-        assert_eq!(light_to_raw(0.5, 2047), 512);
-        for raw in [0, 1, 100, 512, 2047] {
-            let back = light_to_raw(raw_to_light(raw, 2047), 2047);
-            assert!(back.abs_diff(raw) <= 1, "{raw} -> {back}");
+    fn settings_persist_as_readable_json() {
+        let dir = crate::testdir("prefs-json");
+        let mut p = Prefs {
+            night: true,
+            covers: Covers::Photos,
+            ..Prefs::default()
+        };
+        p.set_sleep(None);
+        p.save(&dir).unwrap();
+        let text = std::fs::read_to_string(dir.join(Prefs::FILE)).unwrap();
+        assert!(text.contains(r#""night": true"#), "{text}");
+        assert!(text.contains(r#""night_method": "software""#), "{text}");
+        assert!(text.contains(r#""covers": "photos""#), "{text}");
+        let q = Prefs::load(&dir);
+        assert_eq!(q.sleep(), None, "never is kept");
+        assert_eq!(q.covers.mode(), CoverMode::Photos);
+        // An older file without the new fields keeps its typography and
+        // gets the defaults for the rest.
+        std::fs::write(
+            dir.join(Prefs::FILE),
+            br#"{"size": 3, "spacing": 2, "margins": 0, "turn_mode": 7}"#,
+        )
+        .unwrap();
+        let old = Prefs::load(&dir);
+        assert_eq!((old.size, old.turn_mode), (3, 7));
+        assert_eq!(old.sleep_minutes, Prefs::default().sleep_minutes);
+        assert_eq!(old.night_method, NightMethod::Software);
+        // Out-of-range library choices are clamped.
+        std::fs::write(dir.join(Prefs::FILE), br#"{"library_view": 9, "sort": 9}"#).unwrap();
+        let q = Prefs::load(&dir);
+        assert_eq!(q.view(), View::Series);
+        assert_eq!(q.sort, crate::shelf::SORTS.len() - 1);
+    }
+
+    #[test]
+    fn cover_modes_round_trip() {
+        for m in CoverMode::ALL {
+            assert_eq!(Covers::from_mode(m).mode(), m);
         }
     }
 }

@@ -262,7 +262,8 @@ pub struct Shelf<'a> {
     /// The list; `action::ITEM + i` opens `items[i]`. In the books view
     /// the screen applies the filter itself.
     pub items: &'a [Item],
-    /// Name of the current sort order, shown on the sort button.
+    /// Name of the current sort order, shown on the sort button; empty
+    /// hides the button (a series keeps its own order).
     pub sort: &'a str,
     pub status: StatusLine<'a>,
     pub covers: CoverMode,
@@ -442,7 +443,11 @@ impl Library {
                 let sub = t.label(&format!("{kind} · {}", books_label(count)), s.small());
                 let words = t.add(Node::column(2).flex(1), [title, sub]);
                 let g = t.gap(Space::XS, 1);
-                let header = t.add(Node::row(0), [back, g, words, sort]);
+                let mut parts = vec![back, g, words];
+                if !shelf.sort.is_empty() {
+                    parts.push(sort);
+                }
+                let header = t.add(Node::row(0), parts);
                 // The back arrow's 9 mm target overhangs the margin.
                 let header = t.pad(Insets::new(0, 0, 0, -26), header);
                 let g = t.gap(1, Space::S);

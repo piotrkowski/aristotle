@@ -218,6 +218,21 @@ pub fn prevent_screensaver(on: bool) -> io::Result<()> {
     }
 }
 
+/// Whether `preventScreenSaver` is set now (`lipc-get-prop`), so a caller
+/// can put it back as it found it.
+pub fn screensaver_prevented() -> io::Result<bool> {
+    use std::process::{Command, Stdio};
+    let out = Command::new("lipc-get-prop")
+        .args(["-i", "com.lab126.powerd", "preventScreenSaver"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()?;
+    if !out.status.success() {
+        return Err(io::Error::other(format!("lipc-get-prop: {}", out.status)));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim() != "0")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

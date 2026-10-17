@@ -288,7 +288,7 @@ fn library_screens(out: &Path) {
         place: Place::Series { name: "Trylogia" },
         hero: None,
         items: &witcher,
-        sort: "Seria",
+        sort: "",
         status: STATUS,
         covers: CoverMode::None,
     });
