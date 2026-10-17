@@ -37,7 +37,7 @@ flowchart TD
 | --- | --- |
 | `canvas` | Gray pixels, clipping, pixel differences, and 16-level quantization |
 | `geom` | `Rect`, `Size`, `Insets`, and units at 300 DPI |
-| `waveform` | `A2`, `DU`, `GL16`, `GC16`, with Zelda mode numbers 6, 1, 3, 2 |
+| `waveform` | `A2`, `DU`, `GL16`, `GLKW16`, `GC16`, with Zelda mode numbers 6, 1, 3, 9, 2 |
 | `text` | Fonts, shaping, rasterization, and line breaks |
 | `tree` | Nodes, layout, painting, hit tests, and changes |
 | `ui` | Tree, canvas, previous pixels, damage, and gesture dispatch |
@@ -65,7 +65,11 @@ Use tree setters such as `set_text`, `set_hidden`, and `set_progress`. They reco
 
 An identical automatic repaint produces no damage. Explicit full refreshes bypass the pixel comparison. Press feedback uses A2. Black-and-white changes use DU, gray changes use GL16, and full refreshes use GC16 hints.
 
-The app maps GC16 to a full-screen mode-8 flash. GL16 over book content, including completed gray popups, becomes a full-screen page refresh. Other partial hints go to `Display::damage`, which queues work without waiting for the panel. See [E-ink rendering](#e-ink-rendering).
+A2 is only an acknowledgement. `Ui` remembers what A2 showed. The next render with any other damage adds that area as a GLKW16 hint, a cleaning update. A partial DU or GL16 update would skip pixels whose value did not change, and A2 over gray text leaves residue in exactly those pixels. `request_clean_refresh` sends the whole screen as GLKW16, and `render_clean` sends one frame's changes as GLKW16.
+
+The app maps GC16 to a full-screen mode-8 flash. GLKW16 becomes mode 9 in full mode, the stock page-turn update, for the rectangle or for the whole screen when it covers half of it. GL16 over book content, including completed gray popups, becomes a full-screen page refresh. Other partial hints go to `Display::damage`, which queues work without waiting for the panel. See [E-ink rendering](#e-ink-rendering).
+
+`panel::GhostBudget` counts partial updates since the last full-screen update. After 6 DU or GL16 updates (KOReader's default full-refresh interval), or partial and cleaning updates adding up to 3 screens (an inference), the next settled update is a mode-8 flash. A2 never becomes a flash.
 
 ## Input
 
@@ -81,15 +85,21 @@ The app draws a complete frame before it submits an update.
 
 | Change | Update policy |
 | --- | --- |
-| Touch-down on a control | A2 inversion, or an outline around covers |
-| Library or settings change | Partial DU or GL16 |
+| Touch-down on a control | Partial A2 inversion, or an outline around covers |
+| Release after a touch-down | One full-mode mode-9 update of the control and the change, full screen when it covers half of it |
+| Library or settings change without a touch | Partial DU or GL16, within the ghost budget |
 | Screen switch | One full mode-8 flash |
-| List page | Flash when covers or cards require it |
-| Page turn, menu close, restyle | One full mode-9 update |
-| Reader menu open | Partial A2 over both bars, then a full-mode gray update per bar |
+| List page (library, settings, catalogs) | One full-screen mode-9 update, or a mode-8 flash with covers or cards |
+| Page turn, menu close, popup close, restyle | One full mode-9 update |
+| Reader menu open | One full-screen mode-9 update |
+| Dictionary or footnote popup open, list in the reader | One full mode-9 update |
+| Popup page, dictionary tab, suggestion | One full-mode mode-9 update of the popup |
+| Selection by a hold, dictionary still looking | One full-mode mode-9 update of the selection |
+| Selection drag | Partial A2 per step, then one full mode-9 update on lift |
+| Ghost budget spent | The next settled update is one full mode-8 flash |
 | Night-mode switch | One flash into the new state |
 
-`mask_extents` places menu edges between text lines. `Panel::present_overlay` runs the updates on `panel-sequence`, leaving the page between the bars untouched by the gray updates.
+`mask_extents` places menu edges between text lines. `Panel::present_overlay` runs the menu's update on `panel-sequence`. Only the bars are copied to the framebuffer, so the page between them stays as it is. The menu used to appear as A2 followed by a full-mode GL16 update per bar, and GL16 did not clear what A2 left over gray text.
 
 `tests/transitions.rs` checks UI hints. Tests in `panel.rs` check hardware requests. `tools/scenarios/aristotle-ui.txt` exercises screens on the device. [Benchmarks](benchmarks.md) records measured interactions, including older menu behavior.
 
@@ -198,8 +208,9 @@ The PW4 uses Zelda mode numbers from FBInk's `mxcfb-kindle.h`, not PW2 numbers. 
 | DU | 1 | 309 ms |
 | GL16 | 3 | 544 ms |
 | GC16 | 2 | 544 ms |
+| GLKW16 | 9 | 544 ms |
 
-A2 is fast but leaves residue. DU handles black and white. Gray updates take longer. Real reading uses full mode 9 to avoid ghosting ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)).
+A2 is fast but leaves residue. DU handles black and white. Gray updates take longer. Real reading uses full mode 9 to avoid ghosting ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)). The stock UI sends its controls as mode 257, AUTO, and flashes with mode 8 [dev]. Aristotle uses mode 9 in full mode where it cleans; that mode 9 clears A2 residue on a region is an inference from the page-turn results.
 
 ### Display thread
 
