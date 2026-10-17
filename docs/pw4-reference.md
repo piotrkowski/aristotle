@@ -125,6 +125,10 @@ system (udevd) → filesystems → system_setup → lab126 → lab126_gui
 
 `lipc` is Lab126's property and event bus on top of D-Bus, served by `lipc-daemon`. On-device tools: `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, `lipc-send-event`, `lipc-wait-event`. Services are named `com.lab126.<name>`, for example `com.lab126.powerd`, `com.lab126.appmgrd` and `com.lab126.pillow`. The probe dumps every service and property.
 
+### Reader sidecars and clippings [fw]
+
+The stock reader keeps per-book state in `<book>.sdr/` next to each book, as two files in the "KRDS" serialisation (`ReaderContentSDK.jar`). MOBI 7 books use `.mbs`/`.mbp1`, KF8 books `.azw3f`/`.azw3r`, KFX books `.yjf`/`.yjr` and PDFs `.pdt`/`.pds`. They hold the last and furthest read position, bookmarks, highlight and note positions, note text and font preferences. The legacy `.mbp` is only read once for migration and then deleted. `My Clippings.txt` is written by `Clipping` in `ReaderSDK-impl.jar`, with localised labels for en, en_GB, de, es, fr, it, ja, nl, pt, ru and zh; there is no Polish bundle in 5.13.6. Layouts, and what Aristotle imports, are in `docs/library.md`.
+
 ### How KOReader takes over the screen [ko]
 
 KOReader's `koreader.sh` on our device shows the existing practice:
