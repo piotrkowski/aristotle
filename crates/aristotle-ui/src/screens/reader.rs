@@ -258,12 +258,23 @@ pub struct MenuSpec<'a> {
     pub families: Option<[FamilyId; 3]>,
     /// Offer night mode.
     pub night: bool,
+    /// Extra white below the top bar and above the bottom sheet, so their
+    /// edges fall into the gap between two lines of the page instead of
+    /// cutting a line through its letters ([`mask_extents`]).
+    pub top_extra: i32,
+    pub bottom_extra: i32,
 }
 
 /// Nodes of the reader menu that change while it is open.
 pub struct Menu {
     /// The whole overlay; hidden while reading.
     pub root: NodeId,
+    /// The top bar and the bottom sheet, the two opaque parts.
+    pub top: NodeId,
+    pub sheet: NodeId,
+    /// The extra white built in, from [`MenuSpec`].
+    pub top_extra: i32,
+    pub bottom_extra: i32,
     pub progress: NodeId,
     pub page_label: NodeId,
     pub chapter_label: NodeId,
@@ -300,7 +311,8 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let top = t.fixed(None, Some(120), Some(top));
     let top = t.pad(Insets::vh(0, m - 16), top);
     let line = t.rule(2, INK);
-    let top = t.add(Node::column(0).bg(255), [top, line]);
+    let extra = t.gap(1, spec.top_extra.max(0));
+    let top = t.add(Node::column(0).bg(255), [top, extra, line]);
 
     // Bottom sheet.
     let label = |t: &mut Tree, s: &str| {
@@ -406,12 +418,17 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let rows = t.add(Node::column(14), rows);
     let rows = t.pad(Insets::new(20, m, 34, m), rows);
     let line = t.rule(2, INK);
-    let sheet = t.add(Node::column(0).bg(255), [line, rows]);
+    let extra = t.gap(1, spec.bottom_extra.max(0));
+    let sheet = t.add(Node::column(0).bg(255), [line, extra, rows]);
 
     let fill = t.spacer(1);
     let root = t.add(Node::column(0).hidden(true), [top, fill, sheet]);
     Menu {
         root,
+        top,
+        sheet,
+        top_extra: spec.top_extra.max(0),
+        bottom_extra: spec.bottom_extra.max(0),
         progress: bar,
         page_label,
         chapter_label,
@@ -419,6 +436,46 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
         size_steps,
         night_toggle,
     }
+}
+
+/// How much white the menu's two parts need beyond their nominal edges so
+/// that neither edge cuts a line of `page` through its letters.
+///
+/// `page` is 8-bit gray, `stride` bytes per row, `width` × `height`. The top
+/// bar's nominal bottom edge is `top_edge`, the sheet's nominal top edge
+/// `sheet_edge`. The edge (and its 2 px rule) moves outwards, over the page,
+/// into the first band of four blank rows within `reach` pixels; then the
+/// bar hides whole lines only. Returns `(top_extra, bottom_extra)`, 0 when
+/// the edge is already in white or no gap is near (a full-page image).
+pub fn mask_extents(
+    page: &[u8],
+    stride: usize,
+    width: usize,
+    height: usize,
+    top_edge: i32,
+    sheet_edge: i32,
+    reach: i32,
+) -> (i32, i32) {
+    const BAND: i32 = 4;
+    let blank = |y: i32| -> bool {
+        if y < 0 || y as usize >= height {
+            return true;
+        }
+        let row = &page[y as usize * stride..y as usize * stride + width];
+        row.iter().all(|&v| v >= 0xd0)
+    };
+    let band = |y: i32| (y..y + BAND).all(blank);
+    // The bar's rule takes the two rows below the band's start.
+    let top = (0..reach)
+        .find(|&d| band(top_edge + d))
+        .map(|d| d + 2)
+        .unwrap_or(0);
+    // The sheet's rule takes the two rows above its edge.
+    let bottom = (0..reach)
+        .find(|&d| band(sheet_edge - d - BAND))
+        .map(|d| d + BAND - 2)
+        .unwrap_or(0);
+    (top, bottom)
 }
 
 /// Handles to the reader's nodes and its pagination.
@@ -563,6 +620,8 @@ impl Reader {
             title: "Lalka",
             families: Some(families),
             night: true,
+            top_extra: 0,
+            bottom_extra: 0,
         };
         let ids = build_menu(&mut t, st, &spec, &settings);
         let menu = ids.root;
@@ -792,6 +851,36 @@ mod tests {
             time_us: 60_000,
         }));
         ev
+    }
+
+    #[test]
+    fn menu_edges_move_into_the_gaps_between_lines() {
+        // A page of 20 px lines of "ink" with 10 px gaps from y = 100.
+        let (w, h) = (50usize, 600usize);
+        let mut page = vec![255u8; w * h];
+        for line in 0..15 {
+            let y0 = 100 + line * 30;
+            for y in y0..y0 + 20 {
+                page[y * w..y * w + w].fill(0);
+            }
+        }
+        // Nominal edges cut lines: the top bar ends at 110 (inside the line
+        // 100..120) and the sheet starts at 345 (inside the line 340..360).
+        let (top, bottom) = mask_extents(&page, w, w, h, 110, 345, 60);
+        let bar_end = 110 + top;
+        let sheet_start = 345 - bottom;
+        let blank = |y: usize| page[y * w..y * w + w].iter().all(|&v| v == 255);
+        // Every row the masks do not cover, next to their edges, is white,
+        // and the 2 px rules sit on white rows.
+        assert!(blank(bar_end as usize) && blank(bar_end as usize - 1));
+        assert!(blank(bar_end as usize - 2));
+        assert!(blank(sheet_start as usize - 1));
+        assert!(blank(sheet_start as usize) && blank(sheet_start as usize + 1));
+        assert!(top > 0 && top < 40, "{top}");
+        assert!(bottom > 0 && bottom < 40, "{bottom}");
+        // A full-page picture has no gap: the edges stay.
+        let dark = vec![0u8; w * h];
+        assert_eq!(mask_extents(&dark, w, w, h, 110, 345, 60), (0, 0));
     }
 
     #[test]

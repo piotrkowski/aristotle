@@ -487,7 +487,7 @@ impl Book {
         match self.engine {
             Engine::Plato => {
                 if let Some(map) = self.mobi.as_ref().and_then(|m| m.posmap.as_ref()) {
-                    Position::Kindle(map.position(location as u64))
+                    Position::Kindle(map.position_at_or_after(location as u64))
                 } else if let (None, Some(spine)) = (&self.mobi, &self.spine) {
                     let (item, offset) = spine.coordinates(location);
                     Position::Spine { item, offset }

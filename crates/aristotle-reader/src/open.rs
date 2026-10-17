@@ -19,8 +19,11 @@
 //!    were not known when the snapshot was taken) the real page replaces it
 //!    with one full mode-9 update, never a partial fix-up.
 //!
-//! Without a snapshot there is nothing to show early, so the book is opened
-//! on the main thread, as before.
+//! Without a snapshot ([`Pending`]) there is nothing to show early: the
+//! tapped card stays inverted, the worker opens the book, and the library
+//! keeps taking input; tapping anything else gives the book up. When the
+//! worker is done, its page goes out with one mode-8 flash. Snapshots made
+//! ahead of time (`prewarm.rs`) keep this case rare.
 
 use std::path::Path;
 use std::rc::Rc;
@@ -36,6 +39,7 @@ use aristotle_render::page::Page;
 use aristotle_render::plato_core::anyhow::{format_err, Error};
 use aristotle_render::plato_core::document::html::layout::HYPHENATION_PATTERNS;
 use aristotle_render::style::Style;
+use aristotle_ui::screens::library as ui_lib;
 use aristotle_ui::screens::reader::{Menu, Settings};
 use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
 use aristotle_ui::theme::Styles;
@@ -43,7 +47,8 @@ use aristotle_ui::tree::{NodeId, Refresh};
 use aristotle_ui::ui::Ui;
 
 use crate::prefs::Prefs;
-use crate::session::{Prepared, Session, Source};
+use crate::session::{Prepared, Session, Source, OPEN_GATE};
+use crate::shelf::{Covers, Nav, ShelfModel};
 use crate::snapshot::PageInfo;
 use crate::turns::TurnGestures;
 use crate::{ms, progress, snapshot};
@@ -69,30 +74,38 @@ pub struct Worker {
 /// Open `src` with `style` on a thread, with the pages around the saved
 /// position rendered too.
 pub fn spawn(src: Source, style: Style) -> Worker {
+    spawn_with(src, style, true)
+}
+
+/// [`spawn`], rendering the pages on either side only with `neighbours`.
+pub fn spawn_with(mut src: Source, style: Style, neighbours: bool) -> Worker {
     let (tx, rx) = mpsc::channel();
     let tid = Arc::new(AtomicI32::new(0));
     let abandoned = Arc::new(AtomicBool::new(false));
     let done = Arc::new(AtomicBool::new(false));
-    let spawned = thread::Builder::new().name("open".into()).spawn({
-        let (src, style, tx) = (src.clone(), style.clone(), tx.clone());
-        let (tid, abandoned, done) = (tid.clone(), abandoned.clone(), done.clone());
+    // Dropping the worker cancels the open between its steps.
+    src.cancel = Some(abandoned.clone());
+    let work = {
+        let (tid, done) = (tid.clone(), done.clone());
         move || {
             // SAFETY: a plain system call.
             tid.store(
                 unsafe { libc::syscall(libc::SYS_gettid) } as i32,
                 Ordering::SeqCst,
             );
-            if abandoned.load(Ordering::SeqCst) {
-                return;
-            }
-            let result = Session::prepare(src, style, true);
+            // One background open at a time: an abandoned one finishes its
+            // current step and drops its book first.
+            let _gate = OPEN_GATE.lock().unwrap_or_else(|e| e.into_inner());
+            let result = Session::prepare(src, style, neighbours);
             done.store(true, Ordering::SeqCst);
+            // Nobody waiting any more: the book is dropped here, in the gate.
             let _ = tx.send(result);
         }
-    });
-    if spawned.is_err() {
-        let _ = tx.send(Session::prepare(src, style, true));
-        done.store(true, Ordering::SeqCst);
+    };
+    // If the thread can't start, the work (and its sender) is dropped and
+    // the worker reports an error.
+    if let Err(e) = thread::Builder::new().name("open".into()).spawn(work) {
+        eprintln!("aristotle: can't start the open thread: {e}");
     }
     Worker {
         rx,
@@ -104,12 +117,16 @@ pub fn spawn(src: Source, style: Style) -> Worker {
 }
 
 impl Worker {
-    /// The result, if the worker is done.
+    /// The result, if the worker is done. The channel only closes without
+    /// a result when the thread could not be started (a panic aborts the
+    /// whole app: release builds use panic=abort).
     pub fn poll(&self) -> Option<Result<Prepared, Error>> {
         match self.rx.try_recv() {
             Ok(r) => Some(r),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(format_err!("the open thread died"))),
+            Err(TryRecvError::Disconnected) => {
+                Some(Err(format_err!("the open thread did not run")))
+            }
         }
     }
 
@@ -117,7 +134,7 @@ impl Worker {
     pub fn wait(&self) -> Result<Prepared, Error> {
         self.rx
             .recv()
-            .unwrap_or_else(|_| Err(format_err!("the open thread died")))
+            .unwrap_or_else(|_| Err(format_err!("the open thread did not run")))
     }
 }
 
@@ -198,6 +215,16 @@ pub fn compare(shown: &Page, real: &Page, style: &Style) -> Verdict {
     }
 }
 
+/// A book without a snapshot opening on a worker while the library stays
+/// on screen, its card inverted.
+pub struct Pending {
+    pub id: String,
+    pub title: String,
+    pub worker: Worker,
+    pub card: Option<NodeId>,
+    pub tapped: Instant,
+}
+
 /// A book shown from its snapshot while the worker opens it.
 pub struct Opening {
     pub title: String,
@@ -266,6 +293,7 @@ pub fn page_info(session: &mut Session, location: usize) -> PageInfo {
         fraction,
         chapter,
         label,
+        last: session.known_last(location),
     }
 }
 
@@ -304,27 +332,22 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
     let rec = lib.book(&id).cloned().expect("found above");
     println!("book        {} ({})", rec.meta.title, rec.id);
 
-    let mut text = Some(TextEngine::new(Fonts::embedded()));
     let styles = Styles::new(FamilyId(0));
-    let mut ui: Option<Ui> = None;
+    let blank = Rc::new(Page::white(&style));
+    let (tree, _, _) = crate::reader_tree(&styles, &rec.meta.title, &settings, blank);
+    let mut ui = Ui::new(
+        tree,
+        TextEngine::new(Fonts::embedded()),
+        style.width,
+        style.height,
+    );
+    ui.render();
     // The reader's first frame, as App::open_book draws it: returns the time.
-    let mut frame = |page: Rc<Page>| {
+    let frame = |ui: &mut Ui, page: Rc<Page>| {
         let t = Instant::now();
         let (tree, _, _) = crate::reader_tree(&styles, &rec.meta.title, &settings, page);
-        match &mut ui {
-            Some(ui) => {
-                ui.set_tree_with(tree, Refresh::Full);
-            }
-            None => {
-                ui = Some(Ui::new(
-                    tree,
-                    text.take().expect("once"),
-                    style.width,
-                    style.height,
-                ))
-            }
-        }
-        let damage = ui.as_mut().expect("set").render();
+        ui.set_tree_with(tree, Refresh::Full);
+        let damage = ui.render();
         assert!(!damage.is_empty());
         t.elapsed()
     };
@@ -343,7 +366,7 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
         let t0 = Instant::now();
         let (mut session, times) = Session::open(&lib, &rec, style.clone(), &mobi_cache)?;
         let page = session.page(session.current)?;
-        let t_frame = frame(page);
+        let t_frame = frame(&mut ui, page);
         println!(
             "  run {run}: book {:6.1} ms, position {:6.1} ms, first page {:5.1} ms, UI frame {:4.1} ms -> submit after {:6.1} ms",
             ms(times.open),
@@ -402,11 +425,12 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
     let rec = lib.book(&id).cloned().expect("found above");
     for run in 1..=2 {
         let t0 = Instant::now();
-        let src = Source::new(&lib, &rec, &mobi_cache)?;
+        let mut src = Source::new(&lib, &rec, &mobi_cache)?;
         let mut snap = find_snapshot(&src, &style)
             .ok_or_else(|| format_err!("the snapshot just saved does not match"))?;
+        src.exact = Some(snap.info.location);
         let (read, decode) = (snap.read, snap.decode);
-        let t_frame = frame(snap.page.clone());
+        let t_frame = frame(&mut ui, snap.page.clone());
         let t_submit = t0.elapsed();
         let worker = spawn(src, style.clone());
         let t = Instant::now();
@@ -459,6 +483,88 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
             ms(t0.elapsed()),
             verdict,
             next_verdict
+        );
+    }
+
+    println!("\nback to the library: building its frame before the flash");
+    let mut covers = Covers::default();
+    let status = ui_lib::StatusLine {
+        clock: "12:00",
+        battery: None,
+        charging: false,
+    };
+    for run in 1..=3 {
+        let t = Instant::now();
+        let mode = prefs.covers.mode();
+        let model = ShelfModel::build(&lib, &Nav::default(), mode, &mut covers);
+        let t_model = t.elapsed();
+        let t = Instant::now();
+        let (tree, _view) =
+            ui_lib::Library::build_shelf(&mut ui.text, &styles, &model.shelf(status, mode));
+        let t_tree = t.elapsed();
+        let t = Instant::now();
+        ui.set_tree_with(tree, Refresh::Full);
+        let t_layout = t.elapsed();
+        let t = Instant::now();
+        ui.render();
+        println!(
+            "  run {run}: {} books; model and covers {:.1} ms, tree {:.1} ms, layout {:.1} ms, paint {:.1} ms",
+            lib.books().len(),
+            ms(t_model),
+            ms(t_tree),
+            ms(t_layout),
+            ms(t.elapsed())
+        );
+    }
+
+    println!("\nprewarm: snapshots made ahead of time (one thread, idle priority in the app)");
+    let never = AtomicBool::new(false);
+    // Every book a third of the way in, if not opened yet.
+    let unread: Vec<String> = lib
+        .books()
+        .iter()
+        .filter(|b| b.progress.is_none())
+        .map(|b| b.id.clone())
+        .collect();
+    for (i, b) in unread.iter().enumerate() {
+        let p = progress::progress_at(&Position::Fraction(0.3), 0.3, 1 + i as i64);
+        lib.set_progress(b, p);
+    }
+    for rec in crate::prewarm::candidates(&lib) {
+        let Some((src, key)) = crate::prewarm::job_for(&lib, rec, &style, &mobi_cache) else {
+            continue;
+        };
+        let t = Instant::now();
+        let made = crate::prewarm::make(src, style.clone(), key, &never);
+        let t_make = t.elapsed();
+        let n = match made {
+            Ok(Some(n)) => n,
+            Ok(None) => continue,
+            Err(e) => {
+                println!("  {}: {e:#}", rec.meta.title);
+                continue;
+            }
+        };
+        // Then open it as the app would and check the snapshot.
+        let mut src = Source::new(&lib, rec, &mobi_cache)?;
+        let snap = find_snapshot(&src, &style)
+            .ok_or_else(|| format_err!("the prewarmed snapshot does not match"))?;
+        src.exact = Some(snap.info.location);
+        let prepared = spawn(src, style.clone()).wait()?;
+        let (at, right) = reconcile(snap.info.location, None, false, prepared.current, None);
+        let mut session = Session::from_prepared(prepared)?;
+        let page = session.page(at)?;
+        let verdict = if right {
+            compare(&snap.page, &page, &style)
+        } else {
+            Verdict::Page
+        };
+        println!(
+            "  {:40} made in {:6.1} ms, {:3} KB; opened from it: snapshot {:?}",
+            rec.meta.title.chars().take(40).collect::<String>(),
+            ms(t_make),
+            n / 1024,
+            verdict
         );
     }
     Ok(())
