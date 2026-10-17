@@ -157,6 +157,8 @@ struct Args {
     /// The folder of the binary, where `sync.json` and `catalogs.json`
     /// are read from.
     bundle: PathBuf,
+    /// The private folder for passwords (`net::accounts_dir`).
+    accounts: PathBuf,
 }
 
 fn usage() -> &'static str {
@@ -188,6 +190,7 @@ fn parse_args() -> Result<Args, Error> {
         test_clippings: None,
         lang: None,
         bundle: exe_dir.clone(),
+        accounts: net::accounts_dir(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -431,7 +434,7 @@ fn build_app(
         speed: Speed::load(&args.library),
         exports: export_paths(args),
         net: net::Net::new(net::Paths {
-            state: net::accounts_dir(),
+            state: args.accounts.clone(),
             import: args.bundle.clone(),
         }),
         sync: sync::SyncState::default(),
@@ -2398,6 +2401,8 @@ mod tests {
             index_dicts: false,
             test_clippings: None,
             lang: None,
+            bundle: library.to_path_buf(),
+            accounts: library.join("accounts"),
         };
         let panel = Panel::memory(1072, 1448, prefs::STOCK_TURN);
         build_app(

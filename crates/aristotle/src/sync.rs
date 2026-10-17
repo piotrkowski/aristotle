@@ -76,16 +76,17 @@ pub struct SyncState {
 }
 
 /// Whether a pulled position is worth a question: another device's, and
-/// stored after the reader last read here.
+/// somewhere else. Timestamps are not compared: the server stamps with its
+/// clock and the device's own may be off. They need not be: a book that
+/// moved here is pushed when it closes, so the server keeps another
+/// device's record only if that device wrote after our last push.
 pub fn worth_asking(remote: &Position, device_id: &str, local: Option<&Progress>) -> bool {
     if remote.device_id == device_id && remote.device == DEVICE {
         return false;
     }
-    match (remote.timestamp, local) {
-        (Some(ts), Some(l)) => ts > l.updated,
-        // No time on the server's side: only a different percentage.
-        (None, Some(l)) => (remote.percentage - l.fraction as f64).abs() >= 0.001,
-        (_, None) => remote.percentage > 0.0,
+    match local {
+        Some(l) => (remote.percentage - l.fraction as f64).abs() >= 0.001,
+        None => remote.percentage > 0.0,
     }
 }
 
@@ -543,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn asks_only_about_newer_positions_from_elsewhere() {
+    fn asks_about_other_devices_positions_elsewhere() {
         let me = "0123456789ABCDEF0123456789ABCDEF";
         // Our own position: never.
         assert!(!worth_asking(
@@ -551,15 +552,15 @@ mod tests {
             me,
             Some(&local(0.1, 100))
         ));
-        // Another device, stored after we last read: ask (also backwards).
+        // Another device elsewhere: ask, forwards or backwards, whatever
+        // the clocks say.
         assert!(worth_asking(
-            &remote("Kobo", "X", 0.05, Some(200)),
+            &remote("Kobo", "X", 0.05, Some(50)),
             me,
             Some(&local(0.4, 100))
         ));
-        // Older than our last reading: no.
-        assert!(!worth_asking(
-            &remote("Kobo", "X", 0.9, Some(50)),
+        assert!(worth_asking(
+            &remote("Kobo", "X", 0.9, None),
             me,
             Some(&local(0.4, 100))
         ));
@@ -569,14 +570,9 @@ mod tests {
             me,
             Some(&local(0.4, 100))
         ));
-        // No timestamp: only a different percentage.
+        // The same place: no.
         assert!(!worth_asking(
-            &remote("Kobo", "X", 0.4, None),
-            me,
-            Some(&local(0.4, 100))
-        ));
-        assert!(worth_asking(
-            &remote("Kobo", "X", 0.6, None),
+            &remote("Kobo", "X", 0.4, Some(200)),
             me,
             Some(&local(0.4, 100))
         ));
