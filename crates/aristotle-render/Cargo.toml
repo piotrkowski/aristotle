@@ -6,17 +6,9 @@ license = "AGPL-3.0-or-later"
 publish = false
 description = "E-book page renderer for Aristotle on the PW4, built on Plato's document engine"
 
-# A workspace of its own, excluded from the root one: plato-core needs the
-# Plato submodule (our fork) and static C libraries
-# (tools/build-plato.sh), which a fresh checkout does not have. Keeping this
-# crate out of the root workspace lets `cargo build` there work everywhere.
-# Build with tools/build-render.sh; see README.md and docs/reader.md.
-#
-# The reader app (crates/aristotle-reader, binary `aristotle`) links Plato
-# too, so it is a member of this workspace: one lock file and one build of
-# the C-backed dependencies for both.
-[workspace]
-members = [".", "../aristotle-reader"]
+# Not a default member of the workspace: plato-core links static C libraries
+# (tools/build-plato.sh), which a fresh checkout does not have. Build with
+# tools/build-render.sh; see README.md and docs/reader.md.
 
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
@@ -29,27 +21,3 @@ plato-core = { path = "../../third_party/plato/crates/core" }
 # and to write converted MOBI books (stored). Deflate only, as in plato-core
 # (the fork's "core: zip deflate only"): EPUBs use no other codec.
 zip = { version = "7.0.0", default-features = false, features = ["deflate-flate2"] }
-
-[profile.release]
-# Optimise for size, except the crates that lay out and draw pages: those
-# are CPU-bound on a single Cortex-A9 core and sit inside the page-turn
-# budget. Measured in docs/reader.md, "Size budget" ("z" is much slower).
-opt-level = "s"
-lto = "fat"
-codegen-units = 1
-panic = "abort"
-strip = true
-
-[profile.release.package.plato-core]
-opt-level = 3
-
-[profile.release.package.aristotle-render]
-opt-level = 3
-# The override would otherwise leave the renderer's binary unstripped.
-strip = true
-
-[profile.release.package.paragraph-breaker]
-opt-level = 3
-
-[profile.release.package.kl-hyphenate]
-opt-level = 3

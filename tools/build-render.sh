@@ -1,6 +1,6 @@
 #!/bin/sh
-# Build the aristotle-render workspace (crates/aristotle-render and the
-# reader app, crates/aristotle-reader) and assemble its bundle:
+# Build the workspace members that link Plato (crates/aristotle-render and
+# the reader app, crates/aristotle-reader) and assemble their bundle:
 #
 #   $OUT/aristotle-render      static binary: the renderer CLI
 #   $OUT/aristotle             static binary: the reader app
@@ -79,7 +79,7 @@ export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar"
 # environment, and skips the bundle (tests need the host target).
 CARGO_CMD=${CARGO_CMD:-build}
 cargo "$CARGO_CMD" --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
-    --manifest-path "$REPO/crates/aristotle-render/Cargo.toml" --workspace
+    --manifest-path "$REPO/Cargo.toml" -p aristotle-render -p aristotle-reader
 [ "$CARGO_CMD" = build ] || exit 0
 
 DL="$TOOLS/downloads"

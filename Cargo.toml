@@ -10,10 +10,26 @@ members = [
     "crates/aristotle-library",
     "crates/aristotle-ui",
     "crates/aristotle-app",
+    "crates/aristotle-render",
+    "crates/aristotle-reader",
 ]
-# Separate workspace (aristotle-render with the reader app as a member):
-# needs the patched Plato source and static C libraries.
-exclude = ["crates/aristotle-render", "crates/aristotle-reader"]
+# Everything but the two crates that link Plato and its C libraries: plain
+# `cargo build`, `cargo test` and `cargo clippy` work on any host. Build those
+# two with tools/build-render.sh after tools/build-plato.sh.
+default-members = [
+    "crates/aristotle-hal",
+    "crates/aristotle-hello",
+    "crates/aristotle-touch",
+    "crates/aristotle-bench",
+    "crates/aristotle-pen",
+    "crates/aristotle-observe",
+    "crates/aristotle-library",
+    "crates/aristotle-ui",
+    "crates/aristotle-app",
+]
+# Plato's own workspace (our fork, a submodule): plato-core is a path
+# dependency, not a member.
+exclude = ["third_party"]
 
 [workspace.package]
 edition = "2021"
@@ -24,8 +40,25 @@ publish = false
 libc = "0.2"
 
 [profile.release]
+# Optimise for size, except the crates that lay out and draw pages: those
+# are CPU-bound on a single Cortex-A9 core and sit inside the page-turn
+# budget. Measured in docs/reader.md, "Size budget" ("z" is much slower).
 opt-level = "s"
 lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[profile.release.package.plato-core]
+opt-level = 3
+
+[profile.release.package.aristotle-render]
+opt-level = 3
+# The override would otherwise leave the renderer's binary unstripped.
+strip = true
+
+[profile.release.package.paragraph-breaker]
+opt-level = 3
+
+[profile.release.package.kl-hyphenate]
+opt-level = 3

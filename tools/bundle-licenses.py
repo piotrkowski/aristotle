@@ -74,7 +74,7 @@ def git(*args: str) -> str:
 
 def rust_crates() -> list[dict]:
     """Packages the two binaries depend on for TARGET (normal and build)."""
-    manifest = REPO / "crates/aristotle-render/Cargo.toml"
+    manifest = REPO / "Cargo.toml"
     meta = json.loads(
         subprocess.run(
             ["cargo", "metadata", "--format-version", "1", "--locked",
@@ -83,7 +83,11 @@ def rust_crates() -> list[dict]:
         ).stdout
     )
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
-    seen, todo = set(), list(meta["workspace_members"])
+    roots = ("aristotle-render", "aristotle-reader")
+    todo = [p["id"] for p in meta["packages"]
+            if p["name"] in roots and p["id"] in meta["workspace_members"]]
+    assert len(todo) == len(roots), todo
+    seen = set()
     while todo:
         pid = todo.pop()
         if pid in seen:
@@ -231,7 +235,7 @@ def main() -> None:
         + "Sources:\n"
         + "\n".join(c_sources)
         + "\n\nHyphenation patterns: https://github.com/baskerville/plato/releases/tag/0.9.45\n"
-        "Rust crates: crates.io, versions in crates/aristotle-render/Cargo.lock\n"
+        "Rust crates: crates.io, versions in Cargo.lock\n"
         "Build: tools/build-plato.sh, then tools/build-render.sh device\n"
     )
 

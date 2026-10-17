@@ -5,9 +5,8 @@ edition = "2021"
 license = "AGPL-3.0-or-later"
 publish = false
 description = "Aristotle's reader app for the PW4: library, Plato-rendered pages, menu, progress"
-# Member of the aristotle-render workspace, which links Plato's C libraries;
-# the root workspace excludes both. Build with tools/build-render.sh.
-workspace = "../aristotle-render"
+# Links Plato's C libraries, so not a default member of the workspace.
+# Build with tools/build-render.sh.
 
 [[bin]]
 name = "aristotle"
