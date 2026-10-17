@@ -27,7 +27,9 @@ trap '' HUP INT TERM
 start=0
 [ -f "$LOG" ] && start=$(wc -l < "$LOG")
 echo "=== aristotle $(date) $*" >> "$LOG"
-sh "$DIR/takeover.sh" start
+# takeover.sh refuses anything but a PW4 on firmware 5.13.x; then the app does
+# not start either.
+sh "$DIR/takeover.sh" start || exit 1
 "$DIR/aristotle" "$@" >> "$LOG" 2>&1
 status=$?
 echo "=== exit $status" >> "$LOG"

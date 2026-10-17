@@ -95,6 +95,10 @@ device() {
     printf '2026-01-01 00:00:00 agent: boot\n' > "$r/var/local/aristotle/log"
     touch "$r/var/local/aristotle/takeover"
     printf '<extension/>\n' > "$r/mnt/us/extensions/aristotle-usbnet/config.xml"
+    # A PW4 on 5.13.6 (made-up serial with the device code 0PP), which the
+    # device guard accepts.
+    printf 'G000PP0123456789\n' > "$r/proc/usid"
+    printf 'Kindle 5.13.6 (~~otaVersion~~)\n' > "$r/etc/prettyversion.txt"
     # Background processes must not hold the caller's $(...) pipe open.
     sleep 300 > /dev/null 2>&1 &
     echo $! > "$r/jobs/aristotle.pid"
@@ -184,6 +188,15 @@ run "$r" migrate.sh
 check "exit status 1" "[ $? = 1 ]"
 check "no backup, no new state" "! ls -d $r/var/local/aristotle-migrate/2* > /dev/null 2>&1 && [ ! -e $r/var/local/aristotle ]"
 check "root filesystem untouched" "[ ! -e $r/mntroot.log ]"
+check "old job still running" "running $r aristotle"
+
+echo "not a PW4: refused, nothing changed"
+r=$(device guard)
+printf 'G001Q00123456789\n' > "$r/proc/usid"
+run "$r" migrate.sh
+check "exit status 1" "[ $? = 1 ]"
+check "says why" "grep -q 'not a Kindle Paperwhite 4' $r.migrate.sh.out"
+check "nothing changed" "[ ! -e $r/var/local/aristotle-migrate ] && [ ! -e $r/var/local/aristotle ] && [ ! -e $r/mntroot.log ]"
 check "old job still running" "running $r aristotle"
 
 echo "without CONFIRM=yes: refused"

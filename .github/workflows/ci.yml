@@ -37,4 +37,4 @@ jobs:
       - name: Shell scripts parse
         run: git ls-files -z '*.sh' | xargs -0 -n1 sh -n
       - name: Device agent tests (host-side, stubbed)
-        run: sh devloop/kindle/tests/migrate.sh && sh devloop/kindle/tests/net.sh
+        run: sh devloop/kindle/tests/migrate.sh && sh devloop/kindle/tests/net.sh && sh devloop/kindle/tests/agent.sh

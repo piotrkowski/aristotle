@@ -9,8 +9,9 @@
 # An SSH session survives it: the running dropbear is handed to the new agent,
 # not restarted.
 #
-#  1. Checks: root, an old agent present, no new one, USB mode "net", the new
-#     agent's files beside this script. Nothing has changed if one fails.
+#  1. Checks: a PW4 on firmware 5.13.x (../guard.sh), root, an old agent
+#     present, no new one, USB mode "net", the new agent's files beside this
+#     script. Nothing has changed if one fails.
 #  2. Backup to /var/local/aristotle-migrate/<UTC stamp>/: the old job file
 #     and a copy of /var/local/aristotle.
 #  3. Copies the state (key, USB mode, takeover and watchdog flags, log) into
@@ -112,6 +113,10 @@ case "${CONFIRM:-}:${1:-}" in
 yes:* | *:kual) ;;
 *) echo "This replaces the agent's upstart job on the root filesystem. Run with CONFIRM=yes." >&2; exit 2 ;;
 esac
+# Only on the device it was written for (../guard.sh; ARISTOTLE_FORCE=1 skips).
+[ -f "$EXT/guard.sh" ] || { echo "migrate: $EXT/guard.sh missing; nothing changed" >&2; exit 1; }
+. "$EXT/guard.sh"
+device_guard || exit 1
 mkdir -p "$BACKUPS" || { echo "cannot create $BACKUPS" >&2; exit 1; }
 say "migrate: start ($HERE)"
 [ "$(id -u)" = 0 ] || refuse "must run as root"
