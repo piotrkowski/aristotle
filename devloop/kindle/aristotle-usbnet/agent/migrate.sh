@@ -106,10 +106,12 @@ job_pid() {
 
 # dropbear from the new pid file is alive and has a listening socket on
 # DEV_IP:22. /proc/net/tcp prints the address as a little-endian hex word.
+# Older agents started dropbear on every address (0.0.0.0:22); the handed-over
+# process keeps that until the next boot, which binds it to DEV_IP only.
 dropbear_ok() {
     [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2> /dev/null || return 1
     hex=$(echo "$DEV_IP" | awk -F. '{printf "%02X%02X%02X%02X", $4, $3, $2, $1}')
-    grep -q " $hex:0016 00000000:0000 0A " "$R/proc/net/tcp"
+    grep -q -e " $hex:0016 00000000:0000 0A " -e " 00000000:0016 00000000:0000 0A " "$R/proc/net/tcp"
 }
 
 usb0_ok() {

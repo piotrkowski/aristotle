@@ -157,6 +157,24 @@ run "$r" rollback.sh
 check "exit status 0" "[ $? = 0 ]"
 old_state "$r" "$dropbear"
 
+echo "dropbear of an older agent listens on every address: migration succeeds"
+r=$(device wildcard)
+printf '  sl  local_address rem_address   st\n   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1 1\n' \
+    > "$r/proc/net/tcp"
+run "$r" migrate.sh
+check "exit status 0" "[ $? = 0 ]"
+check "new job running" "running $r aristotle-agent && ! running $r aristotle"
+
+echo "dropbear listens elsewhere only: automatic rollback"
+r=$(device elsewhere)
+dropbear=$(cat "$r/var/run/aristotle-dropbear.pid")
+printf '  sl  local_address rem_address   st\n   0: 0100007F:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1 1\n' \
+    > "$r/proc/net/tcp"
+run "$r" migrate.sh
+check "exit status 1" "[ $? = 1 ]"
+check "reason logged" "grep -q 'dropbear is not listening' $r.migrate.sh.out"
+old_state "$r" "$dropbear"
+
 echo "usb0 never comes up: automatic rollback"
 r=$(device usb0)
 dropbear=$(cat "$r/var/run/aristotle-dropbear.pid")
