@@ -461,6 +461,37 @@ impl Framebuffer {
         }
     }
 
+    /// Copy an 8-bit image into the framebuffer at `rect`. `src` holds
+    /// `rect.height` rows of `src_stride` bytes; the first `rect.width` bytes
+    /// of each row are used. Clipped to the screen. One memcpy per row, so a
+    /// full page takes well under a millisecond.
+    pub fn blit(&mut self, src: &[u8], src_stride: usize, rect: Rect) {
+        let Some(clipped) = self.clip(rect) else {
+            return;
+        };
+        let g = self.geometry;
+        let width = clipped.width as usize;
+        for row in 0..clipped.height as usize {
+            let src_off = (clipped.top - rect.top) as usize * src_stride
+                + row * src_stride
+                + (clipped.left - rect.left) as usize;
+            let dst_off = ((clipped.top as usize + row + g.y_offset as usize) * g.stride as usize)
+                + clipped.left as usize
+                + g.x_offset as usize;
+            if src_off + width > src.len() || dst_off + width > self.map_len {
+                break;
+            }
+            // SAFETY: both ranges were bounds-checked just above.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    src.as_ptr().add(src_off),
+                    self.map.as_ptr().add(dst_off),
+                    width,
+                )
+            };
+        }
+    }
+
     /// Clip `rect` to the visible screen. The driver rejects regions that
     /// extend past the panel with EINVAL.
     pub fn clip(&self, rect: Rect) -> Option<Rect> {

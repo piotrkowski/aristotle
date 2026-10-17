@@ -49,12 +49,31 @@ Other stock observations:
 - **Typesetting.** The stock reader does not hyphenate Polish, which leaves very wide word gaps in justified text and some lines visibly unjustified. It shows no header or progress on the page itself.
 - **Clutter.** Home shows a store button, a "Find your next great read" store card and a reading-list promotion.
 
+## Page-turn strategy experiment
+
+`aristotle-bench --bin pageturn` alternates two full-screen pages of real text: a dump of the stock reader's own page of "Pan Tadeusz", and the same page shifted by 37 rows so every glyph changes. It runs with the stock GUI stopped and reports the median of 6 turns (two runs agreed within 5 ms):
+
+| Strategy | Visible | Settled |
+| --- | --- | --- |
+| Stock reader (for reference) | 565 ms | 830 ms |
+| GL16, one update | 479 ms | 479 ms |
+| GLR16 (REAGL), one update | 495 ms | 495 ms |
+| DU, black and white text only | 291 ms | 291 ms |
+| DU, then GL16 | 291 ms | 771 ms |
+| **A2, then GL16** | **150 ms** | **630 ms** |
+
+"Visible" means the first update showing the new page has finished. In the two-step strategies the page is first thresholded to pure black and white, then upgraded to the anti-aliased page. Blitting a page into the framebuffer takes well under a millisecond (`Framebuffer::blit`).
+
+In a slow demo of all five (`devloop/kindle/pageturn-demo.sh`), the owner judged them all fast and saw no objectionable ghosting or flicker.
+
+**Decision:** the default page turn is A2, then GL16, so the page is readable about 3.8 times sooner than on stock. GL16 alone and REAGL stay available as settings. A full GC16 refresh every N pages is a setting too; N will be tuned by watching ghost build-up over long reading sessions.
+
 ## Targets for Aristotle
 
 | Interaction | Stock | Target | How |
 | --- | --- | --- | --- |
-| Page turn, visible | 565 ms | **≤ 350 ms** | Show the new page as crisp black and white text with DU (309 ms), then upgrade anti-aliasing with GL16 in the background. The user perceives the turn at the first update |
-| Page turn, settled | 830 ms | ≤ 900 ms | One GL16 upgrade; no separate footer update, because the footer is drawn in the same frame |
+| Page turn, visible | 565 ms | **≤ 200 ms** (150 ms measured on real text) | A2 black and white page first, then a GL16 anti-aliasing upgrade |
+| Page turn, settled | 830 ms | ≤ 700 ms (630 ms measured) | One GL16 upgrade; no separate footer update, because the footer is drawn in the same frame |
 | Touch feedback | none before the result | ≤ 150 ms | A2 highlight on touch-down (`aristotle-ui`) |
 | Open a book | 0.8 s settled | ≤ 0.6 s | Layout cached per book; first page rendered from cache |
 | Menu or toolbar | 0.75–1.4 s settled | ≤ 0.5 s | DU-only UI chrome, no gray gradients |
