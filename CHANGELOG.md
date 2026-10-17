@@ -26,6 +26,8 @@ It is alpha software, tested on one device.
   reader.
 - Text is set in Literata with Knuth-Plass justification, with hyphenation
   for English, Polish, Ancient Greek and Latin.
+- Your own reading fonts: TTF or OTF files in `fonts/` on the USB drive show
+  up in the reader's menu.
 - Hold a word to look it up in offline StarDict dictionaries, inflected forms
   included. Footnotes open in a popup.
 - Highlights and bookmarks. Highlights are added to `My Clippings.txt` in the
@@ -33,10 +35,17 @@ It is alpha software, tested on one device.
 - *Settings* for the frontlight, night mode, covers, the screensaver delay, the
   USB mode and the language (English or Polish), and an *About* section with
   the version.
+- *Start Aristotle* and *Return to the Kindle interface* in KUAL, and,
+  with the agent, *Start Aristotle at boot*, which starts it instead of the
+  stock interface and falls back to stock after three failed launches.
+- Reading-position sync with KOReader through a KOSync server, and downloads
+  from OPDS catalogs such as calibre's content server. Passwords stay in a
+  root-only folder on the device.
 - A KUAL extension with an optional agent that keeps a USB network and SSH
   up for development, switches the USB drive mode on request, and restarts
   the stock interface if it stays down. A file named `aristotle-disable` at
-  the root of the USB drive keeps the agent from starting.
+  the root of the USB drive keeps the agent from starting. While installed,
+  the agent keeps Amazon's update daemons from running.
 - An optional Wi-Fi policy that lets the device reach only the hosts you
   list.
 - The scripts that change the device refuse to run on anything but a
