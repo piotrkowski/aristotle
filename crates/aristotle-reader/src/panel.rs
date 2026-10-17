@@ -4,7 +4,7 @@
 //! - **Book pages** go out as ONE full-mode update of the WHOLE screen with
 //!   the stock reader's waveform, mode 9 (or mode 7, DU4, if chosen). That
 //!   is exactly what the stock reader does. Two-step A2 previews and
-//!   partial GL16 updates left ghosting the owner rejected. A page is
+//!   partial GL16 updates left visible ghosting in real reading. A page is
 //!   submitted directly (about 1 ms when the panel is idle) so the caller
 //!   can prerender the next page while the panel works.
 //! - **UI chrome** (library, menu) goes through the HAL display thread,

@@ -1,5 +1,5 @@
 //! Dictionary tests on small StarDict dictionaries generated here, in the
-//! shape of the owner's Wiktionary ones (HTML entries, inflected forms as
+//! shape of the Wiktionary exports (HTML entries, inflected forms as
 //! synonyms, dictzip). The real dictionaries are not committed; an ignored
 //! test measures lookups on them when they are present.
 
@@ -359,8 +359,8 @@ fn indexes_are_built_on_demand() {
     assert_eq!(headwords(&l), ["ψυχή"]);
 }
 
-/// Lookups on the owner's real dictionaries, with timings:
-/// `ARISTOTLE_DICTS=~/.cache/aristotle/dicts cargo test ... real_dictionaries -- --ignored --nocapture`
+/// Lookups on real dictionaries, with timings:
+/// `ARISTOTLE_DICTS=path/to/stardict/folders cargo test ... real_dictionaries -- --ignored --nocapture`
 #[test]
 #[ignore]
 fn real_dictionaries() {

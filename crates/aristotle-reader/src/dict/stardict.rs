@@ -1,8 +1,8 @@
 //! Reading StarDict dictionaries: `.ifo`, `.idx`, `.syn` and `.dict(.dz)`.
 //!
 //! Plato's own dictionary code reads the dictd format, not StarDict, so this
-//! is ours. Everything is read with positioned reads on demand: the owner's
-//! Polish dictionary has a 27 MB synonym file and the Greek-English one 48
+//! is ours. Everything is read with positioned reads on demand: the Polish
+//! Wiktionary dictionary has a 27 MB synonym file and the Greek-English one 48
 //! MB, far too much to hold in memory on the PW4. Lookups go through the
 //! fold index ([`super::fold`]), which points into these files.
 //!

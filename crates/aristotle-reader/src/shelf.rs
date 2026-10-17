@@ -1,12 +1,12 @@
 //! The library screens fed from the real library index.
 //!
-//! [`Nav`] is where the owner is: a view of the home screen (books with a
+//! [`Nav`] is where the reader is: a view of the home screen (books with a
 //! shelf filter, folders, series), or inside a folder or a series.
 //! [`ShelfModel`] turns the index into the rows of that place and remembers
 //! what each row opens.
 //!
 //! Folders mirror `documents/` exactly: a book's folder is the directory of
-//! its path in the index, so "Mickiewicz, Adam/Pan Tadeusz.epub" is in the folder
+//! its path in the index, so "Mickiewicz, Adam/Dziady.epub" is in the folder
 //! "Mickiewicz, Adam", and nested folders nest. Inside a folder its
 //! subfolders come first, then its own books.
 //!
@@ -31,7 +31,7 @@ pub const SORTS: [(SortKey, &str); 3] = [
     (SortKey::Author, "Autor"),
 ];
 
-/// Where the owner is in the library.
+/// Where the reader is in the library.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Nav {
     pub view: View,

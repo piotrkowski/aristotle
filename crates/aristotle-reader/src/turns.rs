@@ -7,8 +7,8 @@
 //! next page is prerendered, so the submit follows the release at once.
 //! Turning on touch-down instead saved the tap's own duration (80 to 150
 //! ms), but then a long press on a word had always turned the page first,
-//! and taking that turn back flashed the next page before the definition;
-//! the owner chose release turns.
+//! and taking that turn back flashed the next page before the definition,
+//! so turns fire on release.
 //!
 //! Horizontal swipes turn one page in their direction (left forward); a
 //! swipe down from the top strip opens the menu.

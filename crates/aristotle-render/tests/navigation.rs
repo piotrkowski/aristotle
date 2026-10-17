@@ -155,7 +155,7 @@ fn mobi_file(title: &str, text: &str) -> Vec<u8> {
 
 /// A converted MOBI saves stock Kindle positions through its position map.
 /// Every page must come back to itself, or each reopen would land a page
-/// early (seen on the device with "Pan Tadeusz").
+/// early (seen on the device with a long MOBI novel).
 #[test]
 fn kindle_positions_reopen_on_the_same_page() {
     let Some(data) = data_dir() else {
@@ -184,8 +184,8 @@ fn kindle_positions_reopen_on_the_same_page() {
             .subsec_nanos()
     ));
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("pan-tadeusz.mobi");
-    std::fs::write(&path, mobi_file("Pan Tadeusz", &html)).unwrap();
+    let path = dir.join("lalka.mobi");
+    std::fs::write(&path, mobi_file("Lalka", &html)).unwrap();
     aristotle_render::use_data_dir(&data).unwrap();
     let style = Style::pw4();
     let cache = dir.join("cache");

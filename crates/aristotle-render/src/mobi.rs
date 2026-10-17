@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn header_only_read_matches_the_whole_file() {
-        let data = mobi_file("Pan Tadeusz", b"<p>Tekst.</p>");
+        let data = mobi_file("Lalka", b"<p>Tekst.</p>");
         let path = testdir("head").join("book.mobi");
         fs::write(&path, &data).unwrap();
         let head = read_head(&path).unwrap();
@@ -1035,14 +1035,14 @@ mod tests {
             parse_with(&data, false).unwrap().info,
         );
         assert_eq!(format!("{a:?}"), format!("{b:?}"));
-        assert_eq!(a.title.as_deref(), Some("Pan Tadeusz"));
+        assert_eq!(a.title.as_deref(), Some("Lalka"));
         // And the cache path is the same with or without the conversion.
         let cache = testdir("head-cache");
         let (epub, _, now) = cached_epub(&path, &cache).unwrap();
         assert!(now);
         let (again, info, now) = cached_epub(&path, &cache).unwrap();
         assert_eq!((again, now), (epub, false));
-        assert_eq!(info.title.as_deref(), Some("Pan Tadeusz"));
+        assert_eq!(info.title.as_deref(), Some("Lalka"));
     }
 
     /// Stock Kindle positions (bytes of MOBI text) must land on the same

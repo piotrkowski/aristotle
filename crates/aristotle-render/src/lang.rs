@@ -1,8 +1,8 @@
 //! Choosing the language a book is hyphenated in.
 //!
 //! Plato hyphenates EPUB text in the book's first `dc:language`. Most books
-//! declare exactly one, but some declare several in arbitrary order: in the
-//! owner's library a Polish translation lists `de-DE`, `en-US`, `pl-PL`, and
+//! declare exactly one, but some declare several in arbitrary order: in a
+//! test library a Polish translation lists `de-DE`, `en-US`, `pl-PL`, and
 //! got German patterns, which break Polish words in wrong places
 //! ("zobac-zymy" instead of "zo-ba-czy-my"). When a book declares more than
 //! one language, we look at its text and pick the one whose characteristic

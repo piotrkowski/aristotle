@@ -1,6 +1,6 @@
 //! Cheap guesses at the dictionary form of an inflected word.
 //!
-//! The owner's Wiktionary dictionaries already list most inflected forms as
+//! The Wiktionary StarDict exports already list most inflected forms as
 //! synonyms (1.4 million for Polish, 1.8 million for Ancient Greek), so a
 //! fold-index hit is the rule. These suffix rules are the fallback for words
 //! the tables miss: rare forms, the small Greek-Polish dictionary, which has

@@ -12,8 +12,8 @@
 //!
 //! Dictionaries are found as `*.ifo` files (one folder level deep) under
 //! the search folders, by default `/mnt/us/dictionaries` and KOReader's
-//! `/mnt/us/koreader/data/dict`, where the owner's dictionaries already
-//! are. The language pair comes from the file name: `grc-pl.ifo` is
+//! `/mnt/us/koreader/data/dict`, so dictionaries installed for KOReader
+//! work as they are. The language pair comes from the file name: `grc-pl.ifo` is
 //! Ancient Greek to Polish.
 
 pub mod fold;
@@ -333,7 +333,7 @@ fn grave_to_acute(s: &str) -> String {
 }
 
 /// The language a word's script implies: Greek letters mean Ancient Greek
-/// (the owner reads no modern Greek), Cyrillic Russian.
+/// (modern Greek is not handled yet), Cyrillic Russian.
 pub fn script_lang(word: &str) -> Option<&'static str> {
     for c in word.chars() {
         match c as u32 {
