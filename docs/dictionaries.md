@@ -34,22 +34,28 @@ Names such as `grc-pl` identify source and target languages. If you change the n
 
 The first start builds lookup indexes in `.aristotle/dict-index/`. Lookups may be incomplete while indexing runs. The selected dictionary is remembered for the word's language.
 
-Greek text selects Ancient Greek dictionaries. Other text uses the book's language. Inflected forms can match listed forms or suffix rules. Guessed matches are labeled.
+Greek text selects Ancient Greek dictionaries, and Cyrillic text selects Russian. Other text uses the book's language. Inflected forms can match listed forms or suffix rules. Guessed matches are labeled.
 
 If no dictionary appears, check the complete file set, folder depth, and language names. For parse errors, collect the [app log](troubleshooting.md#find-the-right-log).
 
 ## Build large indexes on the host
 
-Dictionary indexing reached 66 MB on the device [dev]. To build indexes on a Linux computer instead, first [build the host app](../.github/CONTRIBUTING.md#building). Then run from the repository:
+Dictionary indexing reached 66 MB on the device [dev]. To build indexes on a Linux computer instead, first [build the host app](../.github/CONTRIBUTING.md#building). From the repository, prepare a dictionary folder:
 
 ```sh
 . tools/env.sh
+mkdir -p "$ARISTOTLE_CACHE/dictionaries"
+```
+
+Copy the complete dictionary sets into `$ARISTOTLE_CACHE/dictionaries`. Then build the indexes:
+
+```sh
 "$ARISTOTLE_CACHE/render/host/aristotle" \
 	--index-dicts \
 	--dict "$ARISTOTLE_CACHE/dictionaries" \
 	--library "$ARISTOTLE_CACHE/dictionary-state"
 ```
 
-Put the dictionary sets in `$ARISTOTLE_CACHE/dictionaries` before running the command. After it finishes, quit the device app and copy the contents of `$ARISTOTLE_CACHE/dictionary-state/dict-index/` into `.aristotle/dict-index/` on the Kindle drive. Keep the dictionary names unchanged between host and device.
+After the command finishes, check its output for `aristotle: indexing` errors. A successful process exit alone does not mean every dictionary was indexed. Quit the device app and copy the contents of `$ARISTOTLE_CACHE/dictionary-state/dict-index/` into `.aristotle/dict-index/` on the Kindle drive. Keep the dictionary names and contents unchanged between host and device.
 
 See the [dictionary implementation](reader.md#dictionary) for lookup and indexing details.

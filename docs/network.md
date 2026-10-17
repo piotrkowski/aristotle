@@ -29,11 +29,12 @@ You need the address of a KOSync-compatible server and an account on it. Use the
 4. Open **Settings > Network > Progress sync**.
 5. Check that the server and username appear, then tap **Log in**. Use **Register** only if the server permits registration and you need a new account.
 6. Wait for a successful login message.
-7. Open a book, turn a page, and return to the library. Open the same book in KOReader to check the saved position.
+7. Open an EPUB or PDF, turn a page, and return to the library.
+8. Check **Progress sync** for a connection error. Open the identical book file in KOReader with progress sync enabled to check the saved position.
 
-Use identical book files on both devices. Reconverted or edited files can have different document IDs. Automatic sync fetches progress on open and sends changed progress on close. A newer remote position on another page asks for confirmation before a jump. Failed sends are not queued.
+Use identical book files on both devices. Reconverted or edited files can have different document IDs. Automatic sync fetches progress on open and sends changed progress on close for supported formats. A different remote position on another page asks for confirmation before a jump. Failed sends are not queued.
 
-EPUB sync is chapter-based, refined by percentage where possible. It does not reproduce KOReader's exact element position. MOBI, AZW3, and TXT use percentage. See [format support](formats.md#progress-sync).
+EPUB sync is chapter-based, refined by percentage where possible. It does not reproduce KOReader's exact element position. MOBI, AZW3, and TXT can receive a remote percentage, but Aristotle sends no progress for these formats. See [format support](formats.md#progress-sync).
 
 ## Add a calibre catalog
 
@@ -64,28 +65,32 @@ With [USB SSH configured](../device/README.md#host-setup), inspect the policy fr
 
 ```sh
 . tools/env.sh
-ssh -F tools/host/ssh_config kindle 'aristotlectl net status'
+ssh -F tools/host/ssh_config kindle 'sh /var/local/aristotle/aristotlectl net status'
 ```
 
 To enable the existing allowlist, run:
 
 ```sh
-ssh -F tools/host/ssh_config kindle 'aristotlectl net scoped'
+ssh -F tools/host/ssh_config kindle 'sh /var/local/aristotle/aristotlectl net scoped'
 ```
 
 Redirects and download links can use a different host or port. If a request reports a blocked destination, allow that specific destination only if you trust it:
 
 ```sh
 ssh -F tools/host/ssh_config kindle \
-	'aristotlectl net allow add books.example.org:443 opds'
+	'sh /var/local/aristotle/aristotlectl net allow add books.example.org:443 opds'
 ```
 
 Filtering is by IP address, not by process or TLS hostname. DNS remains allowed, and stock rules apply until the agent starts. Read the [network policy and limits](../device/README.md#network) before treating `scoped` as an isolation boundary.
 
 ## Change or remove an account
 
-Edit the import file with the new values and use its load action, or restart the manual KUAL app. Imports remove plaintext password fields from the USB files after reading them. Credentials are saved privately in `/var/local/aristotle/accounts.json`, not in `.aristotle/`. Catalogs are matched by name and retain a stored password if no replacement is supplied.
+Edit the import file with the new values and use its load action, or restart the manual KUAL app. Imports remove plaintext password fields from successfully read USB files. Credentials are saved privately in `/var/local/aristotle/accounts.json`, not in `.aristotle/`.
 
-Use **Forget this server** on the sync screen or the remove button beside a catalog to remove saved accounts and their tagged allowlist entries. Removing the agent deletes the private credentials. Re-enter credentials after a reinstall rather than restoring the whole agent directory.
+Keep the sync server and username unchanged to reuse the saved sync key. If either changes, include the password again.
+
+Catalog imports merge entries by name, ignoring case. Leaving an entry out of `catalogs.json` does not delete the saved catalog. A catalog keeps its stored password only when its URL and username also match. Supply the password again when changing either.
+
+Use **Forget this server** on the sync screen or the remove button beside a catalog to remove saved accounts and their tagged allowlist entries. After forgetting a sync server, delete its `sync.json` import file. After removing a catalog, remove its entry from `catalogs.json` too. This prevents a later manual import from recreating the account. Removing the agent deletes the private credentials. Re-enter credentials after a reinstall rather than restoring the whole agent directory.
 
 For connection errors, see [Troubleshooting](troubleshooting.md#network-features).

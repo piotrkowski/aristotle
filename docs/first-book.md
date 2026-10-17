@@ -4,13 +4,16 @@ We will copy a DRM-free EPUB to the Kindle, read a page, and export a highlight.
 
 Use an EPUB you may legally copy, such as a public-domain book. EPUB provides selectable text and the reader's full typography controls.
 
+The steps use English interface labels. In a Polish interface, **Library** is **Biblioteka** and **Settings** is **Ustawienia**. The [screenshots](screenshots.md) show the controls.
+
 ## Copy the book
 
-1. Return to the stock Kindle interface if Aristotle is running. In Aristotle's library, hold **Library** for one second.
-2. Connect the Kindle to the computer with a USB cable.
-3. If the optional agent keeps USB in network mode, choose **KUAL > Aristotle > USB drive mode for 10 minutes**.
-4. Open the Kindle drive on the computer. Copy the EPUB into `documents/`.
-5. Eject the drive before you disconnect the cable.
+1. If a book is open in Aristotle, tap the top of the page and then **Library** to return to the library.
+2. Hold **Library** for one second to return to the stock Kindle interface. Skip this step if Aristotle is not running.
+3. Connect the Kindle to the computer with a USB cable.
+4. If the optional agent keeps USB in network mode, choose **KUAL > Aristotle > USB drive mode for 10 minutes**.
+5. Open the Kindle drive on the computer. Copy the EPUB into `documents/`.
+6. Eject the drive before you disconnect the cable.
 
 The book is now on the Kindle. Subfolders under `documents/` are allowed.
 
@@ -18,16 +21,16 @@ The book is now on the Kindle. Subfolders under `documents/` are allowed.
 
 1. Choose **KUAL > Aristotle > Start Aristotle**.
 2. Open **Books > All** and tap the book. The library scans for files at startup.
-3. Tap the right side of the page to move forward.
-4. Tap the left side to return to the previous page.
+3. Tap the right side in the lower half of the page to move forward. A new page appears.
+4. Tap the left edge in the lower half to return to the previous page.
 
 The top 12% opens the menu instead of turning a page. Below that area, the left 30% goes back and the rest goes forward. Horizontal swipes also turn pages.
 
 ## Change the text size
 
 1. Tap the top of the page to open the reader menu.
-2. Change **Size**.
-3. Close the menu to continue reading.
+2. Tap the larger **A** beside **Size** once. The text becomes larger.
+3. Tap the book page between the top bar and bottom controls to close the menu. This tap does not turn the page.
 
 The text is laid out again at your current position. Page numbers can take longer to appear because pagination runs in the background.
 
@@ -43,7 +46,7 @@ By default, the highlight also appends to `documents/My Clippings.txt`. A Markdo
 
 ## Finish and check the export
 
-1. Return to the library using the reader menu's library button.
+1. Tap the top of the page, then tap **Library** in the reader menu.
 2. Hold **Library** for one second to quit Aristotle.
 3. Wait for the stock interface to return. The boot splash can last 30 to 60 seconds [dev].
 4. Connect the Kindle in USB drive mode and open `aristotle-notes/` on the computer.

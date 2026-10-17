@@ -50,6 +50,11 @@ No internet connection is needed for the USB link.
    `$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub` to
    `extensions/aristotle/authorized_keys` on the drive. Copy only the public
    key, not `kindle_ed25519`.
+
+   The manual USB-network option replaces KOReader's
+   `settings/SSH/authorized_keys` with this file. Save the existing file on
+   the computer first if it contains other keys you need.
+
 3. Eject the drive and choose **KUAL > Aristotle > Install agent** for
    persistent access, or **Start USB network once (manual)** for this boot.
 4. Keep the cable connected. Configure the host profile:
@@ -409,12 +414,13 @@ Put both sides in the same subnet, then apply the change:
 ### Modes
 
 The policy is kept in `/var/local/aristotle/net-mode` and applied by
-`agent/net.sh`. Change it over SSH:
+`agent/net.sh`. Run these commands in a device SSH session. The installed
+control script is not added to the shell's `PATH`:
 
 ```sh
-aristotlectl net status          # mode, allowed addresses, rule counters
-aristotlectl net scoped          # apply the allowlist now
-aristotlectl net off             # back to the stock firewall
+sh /var/local/aristotle/aristotlectl net status   # mode, allowed addresses, counters
+sh /var/local/aristotle/aristotlectl net scoped   # apply the allowlist
+sh /var/local/aristotle/aristotlectl net off      # restore the stock firewall
 ```
 
 In `off` mode, the default, Aristotle adds no rules. The stock firewall drops

@@ -10,6 +10,7 @@ Start with the symptom below. Keep reading data intact while diagnosing problems
 | KUAL reports no app | Check that `aristotle/aristotle` and `aristotle/run-aristotle.sh` exist on the drive. |
 | The guard refuses the device | Only PW4 on firmware 5.13.x is supported. Do not use `ARISTOTLE_FORCE=1` as a routine workaround. |
 | The stock interface returns immediately | Read the app log. Keep a copy before another launch rotates it. |
+| The log reports a newer index version or invalid index JSON | Preserve `.aristotle/` and the log. Use a compatible app version or [restore a matching backup](maintenance.md#restore-a-backup). Do not delete the index to make the error disappear. |
 | Autostart runs an older version | Quit to stock, then select **Start Aristotle at boot: on** again to refresh the internal copy. |
 | Autostart no longer runs | Check for `aristotle-disable` on the drive. Three failed launches also cause fallback. Inspect boot logs before enabling autostart again. |
 
@@ -27,7 +28,9 @@ For a boot problem without SSH, use the [kill switch](../device/README.md#kill-s
 | Text size or custom fonts do not affect a page | PDF uses fixed pages. MuPDF reflow, used by TXT and some MOBI files, does not use the chosen custom font. |
 | Page numbers are missing | Wait for background pagination. The current position can be saved before page counts are ready. |
 | A highlight is absent from clippings | Check **Save highlights to My Clippings.txt** in settings. Bookmarks are not exported there. |
+| Stock highlights are absent from the page or Highlights list | Imported annotations can be stored in the index, but the reader currently displays only annotations created in Aristotle. Stock annotation parsing also lacks device-data verification. |
 | A deleted highlight remains in clippings | Expected. New entries append to the file, but deletion does not rewrite it. |
+| A Markdown export still shows the last deleted highlight | Expected with the current exporter. Removing the last Aristotle highlight leaves the existing Markdown file unchanged. |
 | A dictionary is missing or returns nothing | Check the [complete StarDict file set](dictionaries.md#copy-a-complete-dictionary), folder depth, source language, and indexing status. |
 
 ## Power and display
@@ -55,11 +58,12 @@ For ghosting or flicker, report the transition that causes it, whether night mod
 | --- | --- |
 | No server or catalog after copying JSON | Imports belong next to the running executable, not the library index. Follow [Choose the correct import location](network.md#choose-the-correct-import-location). |
 | Can't read the import file | Check the path shown on screen and JSON syntax. Use double quotes and no trailing commas. |
-| Can't reach the server or timeout | Enable Wi-Fi in stock, check the server's LAN address and port, and inspect `aristotlectl net status`. USB networking has no internet gateway. |
+| Can't reach the server or timeout | Enable Wi-Fi in stock, check the server's LAN address and port, and [inspect the network policy](network.md#check-the-network-policy). USB networking has no internet gateway. |
 | Destination not allowed | Check the requested host and port, including redirected downloads. Add a trusted destination as described in [network setup](network.md#check-the-network-policy). |
 | Certificate does not fit the device's time | Check the Kindle clock. In `scoped` mode, the stock Amazon NTP destination is blocked. Allowing another NTP server does not reconfigure the stock client. |
 | User name or password refused | Verify the account on the same KOSync or catalog server. Re-import credentials if needed. |
 | Progress does not match KOReader exactly | EPUB uses chapters and percentage, not exact element paths. Check that both readers use identical book files and the same server account. |
+| MOBI, AZW3, or TXT progress never reaches KOReader | These formats receive remote progress by percentage, but Aristotle does not send progress for them. Test sending with an EPUB or PDF. |
 | Search asks for a settings file | Typed search is unavailable without the on-screen keyboard. Browse the catalog instead. |
 
 ## Find the right log

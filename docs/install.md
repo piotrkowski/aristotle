@@ -7,7 +7,7 @@ The default screensaver does not suspend the CPU, and the power button has no ef
 ## What you need
 
 - A jailbroken Kindle Paperwhite 4, 2018 model PQ94WIF, on firmware 5.13.x. Other models and firmware are unsupported.
-- KUAL and MRPI. [kindlemodding.org](https://kindlemodding.org) explains their setup.
+- KUAL installed and working. [kindlemodding.org](https://kindlemodding.org) explains the setup.
 - A computer and USB cable.
 - For the optional agent, KOReader and your SSH public key.
 
@@ -15,17 +15,27 @@ Aristotle contains no exploit or DRM-removal code. It opens only DRM-free books.
 
 ## Install
 
-1. Download `aristotle-X.Y.Z.zip` from [Releases](https://github.com/piotrkowski/aristotle/releases).
-2. Connect the Kindle over USB.
-3. Unzip the archive to the drive root, next to `documents/`.
-4. Eject the Kindle.
-5. Open **KUAL > Aristotle > Start Aristotle**.
+1. Download `aristotle-X.Y.Z.zip` and `SHA256SUMS` from the same [release](https://github.com/piotrkowski/aristotle/releases).
+2. Verify the zip before extracting or running it. On Linux, run this in the download folder:
 
-The zip contains `aristotle/`, the app and licenses, and `extensions/aristotle/`, the menu. `SOURCE.txt` identifies the source build. Verify the download with `SHA256SUMS` or:
+   ```sh
+   sha256sum --check --ignore-missing SHA256SUMS
+   ```
 
-```sh
-gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle
-```
+   The zip's line must report `OK`. On other systems, calculate the zip's SHA-256 with a local checksum tool and compare it with the entry in `SHA256SUMS`. Stop if the values differ.
+
+   For releases with build attestations, you can also verify provenance with the GitHub CLI. Replace `X.Y.Z` with the release version:
+
+   ```sh
+   gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle
+   ```
+
+3. Connect the Kindle over USB and open its drive on the computer.
+4. Unzip the archive to the drive root, next to `documents/`.
+5. Eject the Kindle.
+6. Open **KUAL > Aristotle > Start Aristotle**.
+
+The zip contains `aristotle/`, the app and licenses, and `extensions/aristotle/`, the menu. `aristotle/SOURCE.txt` identifies the source build.
 
 In Aristotle's library, hold **Library** for one second to quit. The stock interface returns after 30 to 60 seconds of boot splash [dev]. A reboot restores stock unless you have enabled Aristotle at boot.
 
@@ -50,15 +60,24 @@ The stock interface starts instead if `aristotle-disable` exists on the drive or
 
 ## Your own fonts
 
-Copy TTF or OTF files into a folder named `fonts` at the root of the Kindle's drive, the folder the stock reader uses for its custom fonts, so fonts you added there already work. In a book, open the menu and tap Font: the list shows Literata and each family found in the folder, and a tap lays the book out in it. Put the regular, italic, bold and bold italic files of a family side by side. A family needs a regular face, and files over 20 MB are skipped. Letters a font lacks, such as Polish or Greek ones, are drawn in Literata.
+1. Quit Aristotle and connect the Kindle in USB drive mode.
+2. Copy TTF or OTF files directly into `fonts/` at the drive root. Put a family's regular, italic, bold, and bold italic faces together.
+3. Eject the drive and start Aristotle.
+4. Open an EPUB, or a MOBI book read through EPUB conversion, and tap the top of the page.
+5. Tap **Font**, then the family name. The current page is laid out in that font.
+
+Aristotle uses the stock reader's custom-font folder, so fonts already there can be reused. Files over 20 MiB are skipped. A multi-file family needs a regular face. A single file can be used on its own. Missing Latin and Greek glyphs fall back to Literata. PDF and MuPDF reflow do not use the selected custom font ([Format support](formats.md)).
 
 ## Uninstall
 
 If you want to preserve progress, annotations, preferences, or network credentials, [back up first](maintenance.md#back-up-reading-data). Deleting `.aristotle/` removes reading state, not just caches. Agent removal deletes saved network credentials.
 
-1. Select **KUAL > Aristotle > Remove agent completely**. This removes its jobs, internal app copy, update block, and SSH key. It saves `aristotle-agent.log` to the drive.
-2. Delete `aristotle/`, `.aristotle/`, and `extensions/aristotle/` from the drive.
-3. If present, delete `extensions/aristotle-probe/` or the older `extensions/aristotle-usbnet/`.
+1. Quit Aristotle to return to the stock interface.
+2. If the agent is installed, select **KUAL > Aristotle > Remove agent completely**. This removes its jobs, internal app copy, update block, and SSH key. It saves `aristotle-agent.log` to the drive.
+3. Connect the Kindle in USB drive mode.
+4. Delete `aristotle/`, `.aristotle/`, and `extensions/aristotle/` from the drive.
+5. If present, delete `extensions/aristotle-probe/` or the older `extensions/aristotle-usbnet/`.
+6. Eject the drive.
 
 Books, `My Clippings.txt`, and exported notes remain.
 

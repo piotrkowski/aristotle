@@ -20,6 +20,7 @@ The default screensaver does not suspend the CPU, and the power button has no ef
 
 | Topic | Reference |
 | --- | --- |
+| Reading state, rebuildable caches, and network import paths | [Data and file locations](data.md) |
 | Crates, processes, and extension points | [Architecture](architecture.md) |
 | Rendering, reading interactions, threads, and preferences | [Reader](reader.md) |
 | Index, metadata, import, export, and network protocols | [Library](library.md) |

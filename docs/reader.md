@@ -152,7 +152,7 @@ For books declaring several languages, `lang.rs` samples 192 KiB of text and com
 
 ## Formats and positions
 
-`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles PalmDOC, UTF-8, CP1252, images, page breaks, and `filepos` links. HUFF/CDIC and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. Encrypted books are not readable.
+`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles PalmDOC compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but HUFF/CDIC is unsupported by both engines and KF8-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for extension-dependent routing.
 
 Plato locations are byte offsets in book text. MuPDF locations are page indices. Saved EPUB positions use a spine item and offset. Converted MOBI uses Kindle byte positions and a `.posmap` beside the cached EPUB. Save page starts with `PosMap::position_at_or_after` to avoid rounding back a page.
 
@@ -250,7 +250,7 @@ StarDict dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/m
 
 See [Install offline dictionaries](dictionaries.md) for the required file set, folder layout, and a first lookup.
 
-`dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries; other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
+`dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries, Cyrillic text selects Russian, and other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
 
 Lookups try listed forms, related headwords, guessed suffix rules, and nearby entries. Guesses are labeled. **Translate** looks up each selected word. Popups show senses first and expand with **More**.
 
@@ -274,7 +274,7 @@ Device index builds reached 66 MB [dev]. Build large indexes on the host with `a
 
 Annotations in `library.json` have source `aristotle`. They store positions that survive font-size changes, plus chapter and time.
 
-New highlights append to `/mnt/us/documents/My Clippings.txt` in the stock en_GB format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. Deleting a highlight does not remove its clippings entry.
+New highlights append to `/mnt/us/documents/My Clippings.txt` in the stock en_GB format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` export Aristotle highlights and attached notes, not bookmarks or imported highlights. Deleting a highlight does not remove its clippings entry. Removing the last Aristotle highlight leaves an existing Markdown file unchanged.
 
 Tests and scenarios must use `--test-clippings PATH`, never the user's clippings file. The app has no keyboard for adding annotation notes.
 

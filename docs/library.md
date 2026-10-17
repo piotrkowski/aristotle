@@ -71,7 +71,9 @@ Lists use pages, not scrolling. Sort order is recent, title, or author. Search i
 
 ## Stock files: sidecars and My Clippings.txt
 
-Aristotle reads the Kindle's reading-position sidecars (KRDS), so positions and highlights from the stock reader carry over to Aristotle. Highlights made in Aristotle go to `My Clippings.txt` in the stock format. The format is described here in our own words, from public documentation (jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), `kindle_formats`) and from files on the device, for interoperability. No Amazon code is included.
+The library imports reading positions and annotation records from supported Kindle sidecars (KRDS). Stock annotation parsing is not verified on device data. Imported annotations are stored in the index, but the reader's page highlights and Highlights list show only annotations created in Aristotle. New highlights made in Aristotle go to `My Clippings.txt` in the stock format.
+
+The format is described here in our own words, from public documentation (jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), `kindle_formats`) and from files on the device, for interoperability. No Amazon code is included.
 
 ### Sidecar folders [fw]
 
@@ -126,7 +128,7 @@ The stock format is UTF-8 with CRLF lines and a BOM on creation:
 
 New highlights append to `My Clippings.txt` with stock en_GB labels, regardless of UI language. Existing entries are skipped. Notes use a preceding **Your Note** entry. Bookmarks are not exported, and deleted highlights remain in the file. The `clippings` preference controls this output.
 
-Markdown notes in `/mnt/us/aristotle-notes/` are rewritten per book. They contain Obsidian front matter, quotes, chapters, locations, dates, and notes. Labels follow the UI language.
+Markdown notes in `/mnt/us/aristotle-notes/` contain Aristotle highlights and attached notes, not bookmarks or imported highlights. Files contain Obsidian front matter, quotes, chapters, locations, dates, and notes. Labels follow the UI language. A book with no remaining Aristotle highlights does not write or delete a Markdown file, so removing its last highlight leaves an existing export unchanged.
 
 ## CLI
 
@@ -170,7 +172,7 @@ There is no on-screen keyboard. The app imports `sync.json` and `catalogs.json` 
 
 On import, the app removes password fields from these userstore files. Credentials go to `/var/local/aristotle/accounts.json`, mode 0600, in a root-owned directory with mode 000. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device [dev]. `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
 
-Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for Basic and Digest authentication. Catalog imports match by name and keep a stored password when no replacement is supplied.
+Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for Basic and Digest authentication. Catalog imports merge by name, ignoring case. They retain an omitted password only when the URL and username are unchanged. Omitting a catalog from the import file does not delete it.
 
 ### Progress sync (KOSync)
 
@@ -180,11 +182,11 @@ Aristotle uses KOReader's protocol with compatible servers [KOReader]. The docum
 | --- | --- | --- |
 | EPUB | Chapter start, `/body/DocFragment[N]/body` | Chapter, refined by percentage when possible |
 | PDF, CBZ | 1-based page | Page |
-| MOBI, AZW3, TXT | No position | Percentage |
+| MOBI, AZW3, TXT | Not sent | Percentage |
 
 `Fragments` maps EPUB chapter numbers between Plato and KOReader. Element paths after `DocFragment[N]` are not resolved.
 
-Automatic sync fetches progress on open with a 5-second timeout. A newer position on another page needs confirmation before a jump. Closing a book sends changed progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
+Automatic sync fetches progress on open with a 5-second timeout. A different remote position on another page needs confirmation before a jump. Timestamps are not compared. Closing a book sends changed progress only when a usable EPUB or page locator is available. MOBI, AZW3, and TXT do not send progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
 
 ### Catalogs (OPDS 1.2)
 
