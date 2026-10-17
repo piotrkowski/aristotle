@@ -25,6 +25,8 @@ aristotle-render (CLI: info, render, show, bench, turn)
 | `page.rs` | Page buffers, the black and white frame, header and footer |
 | `screen.rs` | The page turn on the panel |
 | `position.rs` | Saved positions: EPUB spine coordinates, MOBI position maps |
+| `notes.rs` | Footnotes: whether a link is a note, and its text ([Footnotes](#footnotes)) |
+| `richtext.rs` | Small HTML fragments (definitions, notes) as styled paragraphs for popups |
 
 ## How Plato is consumed
 
@@ -126,6 +128,13 @@ Saved positions (`position.rs`) outlive a layout:
 | `snapshot.rs` | Page snapshots: the page a book was left at, on disk (host-tested) |
 | `open.rs` | Opening from a snapshot with the layout on a worker thread, `--bench-open` (host-tested) |
 | `prefs.rs` | Font size, spacing, margins and turn waveform, `reader.json` (host-tested) |
+| `reading.rs` | The reading interactions: holds, drags, popups, footnotes, highlights, bookmarks, lists, and how each reaches the panel |
+| `overlay.rs` | The trees drawn over the page: selection, popups, lists, "go to", the menu's reading row |
+| `selection.rs` | Word hit-testing and selections (host-tested) |
+| `dict/` | StarDict reading, the fold index, base-form rules, the lookup thread (host-tested on generated dictionaries) |
+| `marks.rs` | Highlights and bookmarks in the index, export (host-tested against the owner's parser) |
+| `speed.rs` | Reading speed and the footer's progress line (host-tested) |
+| `preview.rs` | `--preview`: the app on an in-memory panel with synthetic touches |
 
 ### Behaviour
 
@@ -136,7 +145,7 @@ Saved positions (`position.rs`) outlive a layout:
 - **Progress.** Every turn updates the record in memory (a spine or Kindle locator plus the fraction; the last page marks the book finished). The index goes to disk 3 s after the last turn, or at the latest 20 s after the first unsaved one, on a writer thread; also when going back to the library and on exit (SIGTERM and SIGINT included).
 - **Page numbers.** `x / y` is cached per book and style in `/mnt/us/.aristotle/pages/`. On a miss a thread opens its own copy of the book and paginates it at `SCHED_IDLE` (musl stubs `sched_setscheduler`, so the system call is made directly), so on the single-core PW4 it only runs while the reader waits for input. When it finishes, the numbers appear from the next page on.
 
-Files in the library data directory besides the index and covers: `reader.json` (preferences), `pages/<book id>-<key>.txt` (page starts, one per line; the key hashes the style, the file's size and mtime and a layout version), `snapshots/<book id>.snap` (page snapshots, below), `epub-cache/` (converted MOBI books and their position maps).
+Files in the library data directory besides the index and covers: `reader.json` (preferences), `reading.json` (reading speed), `dictionaries.json` (the dictionary last chosen per language), `dict-index/` (dictionary fold indexes), `pages/<book id>-<key>.txt` (page starts, one per line; the key hashes the style, the file's size and mtime and a layout version), `snapshots/<book id>.snap` (page snapshots, below), `epub-cache/` (converted MOBI books and their position maps).
 
 ### Opening a book
 
@@ -170,7 +179,7 @@ ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh     
 ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh --turn-mode 7
 ```
 
-The app bundle (`aristotle/` with the binary, `data/`, `run-aristotle.sh` and `takeover.sh`) goes to the userstore: the binary is 29.5 MB, and with the renderer CLI's bundle in `/var/tmp` the 64 MB tmpfs would overflow. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `pause`/`resume` (SIGSTOP) is not used: on our firmware the frozen framework was killed by Amazon's watchdog and the GUI did not come back without a reboot. The script ignores hangups, logs stderr to `/var/tmp/aristotle.log` and prints it on exit. Other options: `--library DIR`, `--root DIR`, `--data DIR`, `--no-scan`.
+The app bundle (`aristotle/` with the binary, `data/`, `run-aristotle.sh` and `takeover.sh`) goes to the userstore: the binary is 29.5 MB, and with the renderer CLI's bundle in `/var/tmp` the 64 MB tmpfs would overflow. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `pause`/`resume` (SIGSTOP) is not used: on our firmware the frozen framework was killed by Amazon's watchdog and the GUI did not come back without a reboot. The script ignores hangups, logs stderr to `/var/tmp/aristotle.log` and prints it on exit. Other options: `--library DIR`, `--root DIR`, `--data DIR`, `--no-scan`, `--open TITLE` (open a book at start, for scenarios), `--dict DIR` (dictionary folders), `--index-dicts` (build dictionary indexes and exit), `--preview OUT BOOK` (host).
 
 ### Timing log
 
@@ -190,10 +199,113 @@ Every step that matters for speed writes a `[perf <ms since start>]` line to std
 | `panel: <what> on the panel N ms after submit` | When the driver reported the update complete |
 | `paginate: N pages in T ms` | The background pagination |
 | `index: saved` | Index writes (on the writer thread) |
+| `startup: N dictionaries (...)` | Dictionaries found at start |
+| `dict: indexed <dictionary> (...) in N ms` | A fold index built (at idle priority) |
+| `hold: "<word>" looked up in N ms`, `hold: shown N ms after the long press` | A hold: the lookup, and the popup handed to the panel |
+| `link "<href>" ("<marker>"): footnote\|a jump in N ms` | A tapped link resolved |
+| `highlight: ...`, `export: N clippings appended`, `bookmark added\|removed` | Annotations and their export |
+| `gloss: N words in N ms` | A word-by-word gloss |
 
 ### Smoke test in the emulator
 
 In the PW4 emulator, with the stock GUI left running, three test books (two EPUBs and a MOBI) went through: scan and covers, opening the MOBI and an EPUB, touch-down turns, background pagination (297 and 187 pages, adopted while reading), the menu with a size change at the same place, back to the library, "Czytaj dalej" reopening at the saved page with page numbers from the cache, and quitting by holding the title. Emulator times are not device times and are not reported.
+
+## Reading interactions
+
+Selecting words, the dictionary, footnotes, highlights and bookmarks, the progress line, the contents and "go to". All of it is wired into the app (`reading.rs`); the host preview drives the same code (see [Preview and device scenario](#preview-and-device-scenario)). The labels are Polish.
+
+### Gestures
+
+| Gesture | Result |
+| --- | --- |
+| Hold a word (500 ms) | The word is selected and its definition pops up (one update) |
+| Hold, then drag | The selection grows from the held word, both ways, with handles (A2 while the finger moves); on release: Zakreśl, Słownik, Tłumacz, Anuluj |
+| Hold a highlighted word | The definition, with "Usuń zakreślenie" |
+| Tap a footnote marker | The note in a popup; "Przejdź do przypisu" jumps (secondary); a plain link jumps |
+| Tap the top right corner (10 mm) | Bookmark on or off: a black ribbon, DU |
+| Tap outside a popup, "Zamknij", "Anuluj" | The page again, one full mode-9 update |
+| Swipe left or right on a popup or list | Its next or previous page |
+| Menu → Spis treści, Zakreślenia, Przejdź do… | A row under the menu's top bar |
+
+Turns stay on touch-down. A hold therefore starts with the page already turned; when it fires, the turn is undone and the original page comes back together with the selection and the popup, in one full mode-9 update. Footnote markers and other links (enlarged to 6 mm) and the bookmark corner are "quiet": a touch there does not turn, and the tap is resolved on release. While a book opens from its snapshot ([Opening a book](#opening-a-book)), holds and link taps wait for the book; turns between the snapshot's pages, the menu and "Biblioteka" do not.
+
+Words come from Plato's display list (`Book::words`: one box per word or hyphenated piece, in screen pixels). The finger picks the nearest word within 3 mm (`selection::hit`); a piece ending in a soft hyphen is joined with the next one, so "nieśmier-telna" is one word. Selection boxes are drawn per line (`selection::line_boxes`), inset vertically because Plato's boxes span the font's whole ascender and descender, which reach into the neighbouring lines at 1.3 em.
+
+### Updates on the panel
+
+Per the AGENTS.md rule that anything leaving content behind is cleaned with a full update:
+
+- **Appearing:** a popup, the action sheet, the contents, the highlights list and the "go to" sheet are built completely (the definition already looked up) and sent as one update; any grays make it one full-screen mode-9 update (`App::present_full`).
+- **Feedback:** a selection growing under the finger is A2 on its boxes. If the dictionary takes over 150 ms, the held word is shown first (A2) and the popup follows when the answer comes; a lookup is normally 0.1 to 13 ms on the host.
+- **Disappearing:** closing anything that covered the page shows the page again with the page-turn update (`App::close_overlay`). A drag that starts while a popup is open takes the popup away with one full update before the A2 drag feedback.
+- **Inside a popup:** switching dictionaries, turning the popup's pages and the "go to" steps are partial GL16 updates of the popup; the full update when it closes cleans what they leave.
+- **Bookmark ribbon:** black on white, DU.
+
+Popups sit at the bottom, or at the top when the word is in the lower half, at most 700 px high, and their edge is moved to fall between two lines of the page rather than through one. The host preview's update log (`updates.txt`) lists every update with its mode and rectangle.
+
+### Dictionary
+
+StarDict dictionaries (`dict/stardict.rs`, ours: Plato's dictionary code reads dictd files) are found as `*.ifo` one folder deep under `/mnt/us/dictionaries` and `/mnt/us/koreader/data/dict` (where the owner's KOReader dictionaries are), or `--dict DIR`. The language pair comes from the file name (`grc-pl.ifo`). The owner's dictionaries are Wiktionary exports (xxyzz/wiktionary_stardict): HTML entries, dictzip, and inflected forms as synonyms (1.4 million for Polish, 1.8 million for Ancient Greek); their files are sorted by Python's `str.lower()`, not by StarDict's ASCII-folding order [host].
+
+**Fold index.** Lookups go through an index built once per dictionary (`dict/fold.rs`): every headword and synonym under a folded key (NFD, combining marks removed, lower case, final sigma as sigma; `ł` stays a letter), sorted, on disk in `dict-index/<name>-<idx size>-<syn size>.fold`, with every 32nd key in memory. Synonyms that are Wiktionary link targets (`aegroto#la`, `dzień_świąteczny#pl`) are skipped. This makes Greek lookups accent- and breathing-insensitive (ψυχὴ, ΨΥΧΗ and ψυχη find ψυχή; the Greek-English headwords carry vowel length marks, ψῡχή) and Polish ones insensitive to missing kreski. Among matches, a spelling as the book writes it (grave as acute, length marks ignored) beats words that only fold to the same letters, so ψυχή is the noun, not a form of ψύχω. Missing indexes are built at start on a thread at idle priority; `aristotle --index-dicts --dict DIR --library OUT` builds them on the host to copy to `/mnt/us/.aristotle/dict-index/`.
+
+| Dictionary | Words | Forms | Keys | Index | Build (host) |
+| --- | --- | --- | --- | --- | --- |
+| grc-pl | 2,108 | 5,472 | 3,327 | 81 KB | 13 ms |
+| la-pl | 15,814 | 83,969 | 60,316 | 0.9 MB | 44 ms |
+| en-pl | 92,605 | 222,731 | 113,786 | 2.0 MB | 88 ms |
+| pl-pl | 123,535 | 1,369,720 | 1,173,786 | 21 MB | 846 ms |
+| grc-en | 21,819 | 1,789,814 | 917,050 | 23.6 MB | 1462 ms |
+
+Building grc-en peaks at about 30 MB (12 bytes per record plus the keys); on the device it should take 10 to 20 times the host time [inference].
+
+**Which dictionary.** Greek script means Ancient Greek; otherwise the book's language (`dc:language`). For a language the order is its own dictionaries with Polish targets first (grc-pl, then grc-en), then, for Latin-script words, the other Latin-script dictionaries (Polish, Latin, English: Latin phrases turn up in Polish books). The dictionary chosen in the switcher is remembered per language (`dictionaries.json`) and tried first next time.
+
+**Lookup** (`Dictionaries::lookup`): (1) the word and its listed forms, in order; (2) if a later dictionary of the same language knows the form, its headword is looked up in the earlier ones, so "λόγου", which grc-pl does not list, shows grc-pl's λόγος (the Greek-English tables act as a lemmatiser for the Greek-Polish dictionary); (3) suffix rules (`dict/lemma.rs`) for Polish, Greek (nominative, first person, -ομαι) and Latin, every guess checked against the dictionary and marked "≈ forma podstawowa (zgadnięta)"; (4) otherwise the closest headwords as tappable suggestions. Measured on the owner's dictionaries on the host, warm: 0.03 to 1.3 ms per lookup (`real_dictionaries` test, ignored by default); the first lookup after start 9 to 13 ms.
+
+**Popup.** The dictionary form as the title (the tapped form under it when different), the switcher (one tap per dictionary), the definition paged by height, "Zakreśl" (or "Usuń zakreślenie") and "Zamknij". Pronunciation (IPA) lines are dropped: Literata has no IPA glyphs, and they are noise while reading.
+
+**Translate a selection** ("Tłumacz"): a word-by-word gloss from the dictionaries, offline: each word's first sense, "headword — sense".
+
+### Footnotes
+
+`Book::footnote` (`aristotle-render/src/notes.rs`) finds a link's target in the book's source with Plato's XML parser and decides whether it is a note:
+
+- EPUB 3 and DPUB-ARIA semantics on the link (`epub:type="noteref"`, `role="doc-noteref"`) or the target and its ancestors (`footnote`, `endnote`, `rearnote`, `doc-footnote`, ...);
+- classes and ids that publishers and converters use: `footnote`, `fn3`, `note-3`, `przypis3`, calibre's `filepos12345`, Wolne Lektury's `annotation-3`;
+- a marker as link text: `1`, `[12]`, `iv`, `*`, `†`.
+
+The note text is the target block (`<aside>`, `<p id>`, `<li id>`, Wolne Lektury's `<div class="annotation">`), or for an empty anchor (calibre: `<a id="filepos…"/>` at the start of a paragraph) its paragraph, or, when one block holds many notes, the text from the anchor to the next anchor. Back links (↩) are dropped and notes over 2,400 characters are cut. Anything else is a plain link the reader follows.
+
+### Highlights, bookmarks and export
+
+Highlights and bookmarks are annotations in the library index (`library.json`, source `aristotle`): the text, the chapter, the start and end as renderer positions that survive a new font size (`epub:<spine item>:<offset>`, `kindle:<position>`, `page:<i>`), Kindle locations (150 bytes each) and the local time. Pages draw highlights as a light gray marker behind the words and bookmarks as a ribbon in the corner, also on the first page the open worker renders. The highlights list ("Zakreślenia") shows highlights and bookmarks in reading order with chapter, location and date; a tap jumps there.
+
+Every new highlight is exported at once (`aristotle-library` `export`):
+
+- `/mnt/us/documents/My Clippings.txt`, appended in the stock reader's en_GB template (CRLF, a BOM only on creation), only what the file does not already hold, so the owner's notes pipeline (`clippings-to-notes`, which reads that file over USB) keeps working unchanged. Deleting a highlight does not remove it from the file, as on the stock Kindle;
+- `/mnt/us/aristotle-notes/<Title — Author>.md`, rewritten with the book's highlights in the shape of the owner's Obsidian notes (front matter `tytuł`, `autor`, `źródło`, `tags`; one quote per highlight with chapter, location and date).
+
+Tests write the export and parse it with a line-by-line port of the owner's parser (title and author, `lok.`, the date, notes attached to highlights); an ignored test runs the owner's script itself on it.
+
+**Notes are deferred.** A note needs text input, which means an on-screen keyboard: a Polish layout with diacritics (long-press or a second layer for ą ć ę ł ń ó ś ź ż), a text field with a cursor, and an e-ink-friendly key feedback path (A2 per key, the field redrawn in DU). That is a component as large as everything above, and the owner already writes notes in Obsidian from the exported highlights. The data model and the export already carry a highlight's note (`Annotation::note`, written as a "Your Note" entry the owner's parser attaches to its highlight), so a keyboard can be added without changing the formats.
+
+### Progress line and navigation
+
+The footer's left side shows the chapter and the minutes left in it: "Rozdz. 3/12 · 7 min". Chapters are the table of contents entries at the first level with more than one entry; their starts are found from the spine and the target files' ids without laying anything out (`Book::chapter_info`). Pages left come from the page numbers when known, else from the chapter's bytes over this page's. Reading speed is an average of seconds per page over forward turns between 5 s and 10 min (`speed.rs`, kept in `reading.json`; 75 s until measured).
+
+"Spis treści" lists the flattened contents with the current chapter in bold, opened at its page. "Przejdź do…" offers a slider and −10/−1/+1/+10 % steps, with the page number when known.
+
+### Preview and device scenario
+
+```sh
+devloop/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
+~/.cache/aristotle/render/host/aristotle --data .../data --library LIB \
+    --dict ~/.cache/aristotle/dicts \
+    --preview ~/.cache/aristotle/ui-preview/reading BOOKS/Aristotle/proba-czytania.epub
+```
+
+The preview runs the app on an in-memory panel (`panel::Memory`) with synthetic touches through the same entry points as the touchscreen, and writes a PNG per step (contents, Polish and Greek popups, the switcher, a Greek form, selection while dragging and after, the highlighted page, a Latin gloss, a footnote, the bookmark, the highlights list, "go to"), `updates.txt` (every update with waveform and rectangle), the exported `My Clippings.txt`, and `reading.txt`: the same taps as an `aristotle-observe` scenario. `devloop/kindle/scenarios/reading.txt` is that scenario for the device, where the layout is the same with the default typography; `aristotle-observe` gained a `drag X1 Y1 X2 Y2 HOLD MS` line for holds that extend a selection. The test book is a short Polish text written for it, with Greek and Latin words, an EPUB 3 footnote and a Wolne Lektury style note.
 
 ## Measurements
 
@@ -218,3 +330,8 @@ Device numbers: pending the first `bench` and `turn` runs [dev].
 - **MOBI.** No table of contents yet (NCX index records), so the header shows the book title; `filepos` links are dropped; HUFF/CDIC books are not converted.
 - **Binary size.** 25 MB for ARM, mostly MuPDF's embedded fonts. MuPDF build flags (`TOFU_*`, no CJK) can cut it.
 - **Images.** Book CSS decides placement; `margin: auto` centring is not honoured by Plato's engine.
+- **Holds and touch-down turns.** A hold costs a turn and its undo (two full updates before the popup). Turning on release instead would avoid it at the price of the touch-down speed the owner chose; not decided.
+- **Reading interactions on the device.** Built and previewed on the host, not yet run on the panel: hold-to-popup time, lookup and index-build times on the Cortex-A9, A2 legibility of inverted selections, and whether the partial GL16 updates inside popups ghost.
+- **Footnotes in MOBI books** read through the converter: `filepos` links are dropped, so they have no footnote links (EPUBs, calibre conversions included, do).
+- **Notes** need an on-screen keyboard; deferred (see [Highlights, bookmarks and export](#highlights-bookmarks-and-export)).
+- **Highlights across a page break** end at the page's last word; the selection does not continue onto the next page.

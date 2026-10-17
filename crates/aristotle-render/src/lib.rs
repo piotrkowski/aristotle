@@ -12,6 +12,8 @@
 //!   the header and footer ([`page::Chrome`]) and the black and white
 //!   version used for fast page turns;
 //! - [`screen::Screen`]: the measured page-turn strategy (A2, then GL16).
+//! - [`notes`], [`richtext`]: footnotes behind links, and small HTML
+//!   fragments as styled paragraphs for popups.
 //!
 //! # Runtime data
 //!
