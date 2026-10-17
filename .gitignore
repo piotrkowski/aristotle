@@ -2,4 +2,5 @@
 *.pyc
 __pycache__/
 device/extension/authorized_keys
-/.claude/
+/.claude/*
+!/.claude/CLAUDE.md

@@ -89,7 +89,8 @@ cargo fmt --check        # every member, native ones included; not --all, which
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all-features --locked
 cargo build --release --locked --target armv7-unknown-linux-musleabihf
-cargo deny check         # deny.toml: licences, advisories, bans, sources
+cargo deny check         # .cargo/deny.toml: licences, advisories, bans, sources
+gitleaks git --gitleaks-ignore-path .github/.gitleaksignore .   # secrets in the history
 # The native members (clippy with --all-targets and -D warnings):
 CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host

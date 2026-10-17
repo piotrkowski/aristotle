@@ -142,7 +142,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # deny.toml: licences, bans and sources of every crate in Cargo.lock, and the
+  # .cargo/deny.toml: licences, bans and sources of every crate in Cargo.lock, and the
   # RustSec advisories. A new advisory can appear without any change here, so
   # that check is reported but does not fail the run.
   deny:
