@@ -1,5 +1,7 @@
 # Third-party software
 
+Copyright (C) 2026 Aristotle contributors.
+
 Aristotle is licensed under the GNU AGPL 3.0 or later ([LICENSE](LICENSE)). It
 includes or links the following work by others.
 
