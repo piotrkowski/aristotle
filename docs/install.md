@@ -38,6 +38,10 @@ With the agent installed, KUAL › Aristotle › Start Aristotle at boot: on mak
 
 The Kindle starts the stock interface instead when `aristotle-disable` exists on the drive, after three failed launches in a row (until you turn it on again), and for the rest of the boot after you quit Aristotle.
 
+## Your own fonts
+
+Copy TTF or OTF files into a folder named `fonts` at the root of the Kindle's drive, the folder the stock reader uses for its custom fonts, so fonts you added there already work. In a book, open the menu and tap Font: the list shows Literata and each family found in the folder, and a tap lays the book out in it. Put the regular, italic, bold and bold italic files of a family side by side. A family needs a regular face, and files over 20 MB are skipped. Letters a font lacks, such as Polish or Greek ones, are drawn in Literata.
+
 ## Uninstall
 
 1. On the Kindle, open KUAL › Aristotle › Remove agent completely. This removes the three jobs, Aristotle at boot with its copy of the app, the update block and the SSH key. The agent's log is saved to the drive as `aristotle-agent.log`.

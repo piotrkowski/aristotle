@@ -92,6 +92,7 @@ The two crates are members of the root workspace but not of its `default-members
 | `core: zip 9` | `zip` 9, still deflate only |
 | `core: no blank page before a forced break` | A forced page break on a page that draws nothing yet starts no new page, see [Formats and positions](#formats-and-positions) |
 | `core: hyphenation by element language` | `lang` and `xml:lang` of elements choose the patterns, see [Hyphenation](#hyphenation) |
+| `core: tofu fallback to Literata for Latin and Greek` | Letters a chosen body font lacks come from Literata, see [Your own fonts](#your-own-fonts) |
 
 To change Plato, commit inside `third_party/plato` on the `aristotle` branch, push to the fork, and commit the submodule bump here. Cargo builds the submodule's working tree, so the next `tools/build-render.sh` run picks up the change. Rerun `tools/build-plato.sh` with a fresh `PLATO_BUILD` only for changes to `thirdparty/` or `mupdf_wrapper/`. A fix to an earlier change is squashed into that change's commit.
 
@@ -117,7 +118,7 @@ Plato opens fonts, stylesheets and hyphenation patterns by relative paths, so bo
 | Path | Contents |
 | --- | --- |
 | `fonts/` | The 12 fonts Plato loads unconditionally, some cut down or stubbed; DejaVu Sans symbols and Noto Sans Coptic as glyph fallback |
-| `serif/` | Literata, the body and UI font, from `crates/aristotle-render/assets/fonts/` |
+| `serif/` | Literata, the default body font and the UI font, from `crates/aristotle-render/assets/fonts/`; also the fallback for Latin and Greek letters a chosen font lacks |
 
 Literata and Noto Sans draw the Greek koronis (U+1FBD) with their apostrophe (U+2019) glyph (`tools/font-koronis.py`). Greek texts, Bywater's Aristotle among them, write the elision mark with U+1FBD (πάντ᾽ ἐφίεται), and Literata draws that character as a spacing breathing half an em wide, 509 units against 328 for U+2019, which left a gap after every elision. The koronis proper sits over a vowel in crasis and is encoded with the vowel.
 | `css/` | Plato's `epub.css` and `html.css` |
@@ -180,6 +181,19 @@ The CLI's `show` and `turn` refuse to run while the stock framework (`cvm`) is u
 Literata was designed for e-reading. Its sturdy serifs and large x-height hold up in 16 grays, and it has all Polish letters and quotes. At 10 pt a line holds 42 to 45 characters, so some justified lines stay loose. Plato's 1.2 em leading felt cramped with Literata. Header gray 0x40 is below the black and white threshold (160), so the header survives in the A2 frame. Plato's margins are uniform, so `Book` shifts the layout area to place the text block and draws the chrome over the white margins. Plato's paragraph defaults apply: Knuth–Plass `total_fit`, hyphen penalty 50, stretch tolerance 1.26. The book's CSS is honoured.
 
 The menu offers 8 to 15 pt in seven steps, line heights of 1.2, 1.3 and 1.5 em, and margins of 3, 5 and 8 mm (`FONT_PT`, `LINE_HEIGHT`, `MARGIN_MM` in `prefs.rs`).
+
+### Your own fonts
+
+The menu's Font row opens a list of Literata and the families in `/mnt/us/fonts` (`--fonts DIR`), the folder the stock reader takes custom fonts from. Each name is set in its own regular face when that file is up to 2 MB, else in the UI font. Picking one lays the book out again at the same place and shows it under the menu; "Back" returns to the menu. Each is one full mode-9 update after the A2 outline of the tapped row. `fonts.rs` does the rest:
+
+- **Families.** FreeType reads each TTF and OTF file's family and style names, the same names Plato matches, so what the list shows is what Plato loads. Styles go to regular, italic, bold and bold italic by Plato's names (Regular, Roman, Book; Italic; Bold, Semibold, Medium; Bold Italic), then by common variants (Normal, Oblique), then by the file name (`Family-BoldItalic.ttf`). Of two files for one slot, the one earlier in Plato's list wins. Files FreeType cannot open, files over 20 MB, hidden files and families without a regular face are left out; a family of one file of any style uses it as regular. A family named Literata is hidden behind the built-in one.
+- **Cache.** The folder is read when the list opens, not at start: 3 ms for three files on the host. `fonts.json` keeps the list with a hash of the folder's mtime and its font files' names, sizes and mtimes, and is read again only when that changes (FAT keeps mtimes to 2 s, and replacing a file need not touch the folder).
+- **A folder per family.** Plato's `FontFamily::from_name` opens every font file in a directory to find a family name, and each layout thread does it per book. Pointed at the user's folder, every open would pay for every font there. So the chosen family's faces, four at most, are copied to `reading-fonts/<name>-<stamp>/` in the library data directory, and `Style::font_dir` points there. FAT has no links, so a copy it is: about 1.8 MB for Charis' two faces. The stamp hashes the sources' paths, sizes and mtimes, and the copy is made in a `.part` folder and renamed, so an interrupted copy is never used. Older copies of the family are deleted. A regular face whose style name Plato does not know (Normal) is copied alone, because Plato then uses the single file for every style instead of failing.
+- **Invalidation.** The font's name and folder are part of the `Style`, so page numbers on disk (`pagecache::style_key`) and snapshots (`snapshot::look`) of another font, or of an older copy of the same one, are not used.
+- **At start** the preferences name the family; the app finds its copy again (a stat per file when the folder is unchanged) and reads in Literata if the family is gone, until it comes back.
+- **Missing letters.** Plato replaces a glyph its font lacks with one from a fallback font chosen by script. Without MuPDF's Noto fonts (`MUPDF_FONTS`), the fork takes Latin and Greek from `serif/Literata-Regular.ttf` (`core: tofu fallback to Literata for Latin and Greek`); before, they fell to the symbol font and showed boxes. Checked on the host with a copy of Gentium Book cut to ASCII: the test book's Polish letters and ψυχή came out in Literata.
+
+The header and footer stay in Literata (`style::CHROME_FAMILY`). MuPDF's reflow (TXT, and MOBI the converter can't take) does not take the font. `aristotle --preview` with `--fonts DIR` opens the list, picks the first family and goes back to Literata (`03a` to `03d`).
 
 ### Hyphenation
 
@@ -343,10 +357,11 @@ The footer's left side shows the chapter and the minutes left in it: "Ch. 3/12 �
 | `library_view`, `sort` | 0, 0 | Books, folders or series; recent, title or author |
 | `language` | `en` | UI language (`--lang`) |
 | `clippings` | true | Append highlights to `My Clippings.txt` |
+| `font` | `Literata` | Reading font: Literata or a family name from the fonts folder ([Your own fonts](#your-own-fonts)) |
 
 The frontlight level is not stored; the app reads it back from the LM3695.
 
-The library data directory is `/mnt/us/.aristotle` (`--library DIR` or `$ARISTOTLE_DATA`). Besides `library.json` and the covers it holds `reader.json`, `reading.json`, `dictionaries.json`, `dict-index/`, `pages/<book id>-<key>.txt` (page starts keyed by style, file size and mtime, and `LAYOUT_VERSION`), `snapshots/` and `epub-cache/` (converted MOBI books and position maps). `aristotle --help` lists all options.
+The library data directory is `/mnt/us/.aristotle` (`--library DIR` or `$ARISTOTLE_DATA`). Besides `library.json` and the covers it holds `reader.json`, `reading.json`, `dictionaries.json`, `dict-index/`, `pages/<book id>-<key>.txt` (page starts keyed by style, file size and mtime, and `LAYOUT_VERSION`), `snapshots/`, `epub-cache/` (converted MOBI books and position maps), `fonts.json` (the families in the fonts folder) and `reading-fonts/` (the copy of the chosen family). `aristotle --help` lists all options.
 
 ## Timing log
 
