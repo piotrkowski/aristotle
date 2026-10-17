@@ -23,8 +23,10 @@
 pub mod book;
 pub mod lang;
 pub mod mobi;
+pub mod notes;
 pub mod page;
 pub mod position;
+pub mod richtext;
 pub mod screen;
 pub mod style;
 
