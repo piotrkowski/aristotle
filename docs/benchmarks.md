@@ -16,17 +16,17 @@ Full flashes use [GC16](glossary.md#gc16) or [GCK16](glossary.md#gck16) waveform
 
 | Metric | Meaning |
 | --- | --- |
-| first✓ | release to the first update *finished*: the earliest moment the user sees the result |
-| settled | release to the last update finished: the screen is calm again |
-| upd | number of panel updates the interaction caused |
-| flash | full GC16/GCK16 updates (visible black flash) |
-| area% | total updated area relative to the screen |
+| `first✓` | release to the first update finished: the earliest moment the user sees the result |
+| `settled` | release to the last update finished: the screen is calm again |
+| `upd` | number of panel updates the interaction caused |
+| `flash` | full GC16/GCK16 updates (visible black flash) |
+| `area%` | total updated area relative to the screen |
 
 The Goodix touchscreen accepts multi-touch axes only. Inject a slot, tracking ID from 0 to 255, position, pressure, and touch or width major. Do not send `BTN_TOUCH`, `ABS_X`, or `ABS_Y`. Stock ignores IDs above 255. `aristotle-observe caps` lists supported axes.
 
 ## Stock baseline (2026-10-17)
 
-| Interaction | first✓ | settled | Updates | Notes |
+| Interaction | `first✓` | `settled` | Updates | Notes |
 | --- | --- | --- | --- | --- |
 | Home: open the ⋮ menu | 425 ms | 1433 ms | 3 | `auto` then `gck16` |
 | Home: close the menu | 522 ms | 785 ms | 2 | |
@@ -61,7 +61,7 @@ The alternatives were [GL16](glossary.md#gl16), [REAGL](glossary.md#reagl), [DU]
 
 A2 then GL16 left heavy [ghosting](glossary.md#ghosting) over a whole novel because partial updates skipped pixels already white after A2. Full GL16 did not clear all A2 residue either.
 
-The driver log showed that the stock reader turns a page with one full-mode update of the whole screen in mode 9 (`glkw16`), and flashes with mode 8 (`gck16`). [FBInk](glossary.md#fbink) calls mode 9 (GLKW16) a night-mode waveform, though stock uses it in day mode. Both modes trigger the driver's "Algorithm processing" and "ACD data" steps, [Lab126](glossary.md#lab126)'s ghost reduction. Our code now sends the identical request, which removed ghosting in this experiment. The next page renders while the panel refreshes (`Screen::submit`/`finish`). The comparison also includes the four-gray-level [DU4](glossary.md#du4) mode. Same novel, median of 6 turns:
+The driver log showed that the stock reader turns a page with one full-mode update of the whole screen in mode 9 (`glkw16`), and flashes with mode 8 (`gck16`). [FBInk](glossary.md#fbink) calls mode 9 (GLKW16) a night-mode waveform, though stock uses it in day mode. Both modes trigger the driver's "Algorithm processing" and "ACD data" steps, [Lab126](glossary.md#lab126)'s ghost reduction. Our code now sends the identical request, which removed ghosting in this experiment. The next page renders while the panel refreshes (`Screen::submit`/`Screen::finish`). The comparison also includes the four-gray-level [DU4](glossary.md#du4) mode. Same novel, median of 6 turns:
 
 | Single-step turn | Tap to page shown | Settled |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ Rendering the next page takes about 106 ms on the device, inside the panel time.
 
 Page turns use the mode-9 update with a prerendered page. That is 11 % faster than stock to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 remains a setting, about 1.8 times faster than stock but with fewer gray levels. A2 previews are off.
 
-A long [MOBI](glossary.md#mobi) took 2.9 s to open before [snapshots](glossary.md#snapshot) [dev]. A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
+A long [MOBI](glossary.md#mobi) took 2.9 s to open before [snapshots](glossary.md#snapshot).[^1] A snapshot reduced host tap-to-submit from 278 ms to 1 ms. With the 480 ms flash, that is about 0.5 s. Device results were 557 to 570 ms.
 
 ## Transitions in the Aristotle app
 
@@ -81,14 +81,14 @@ Device, 2026-10-17, `tools/scenarios/aristotle-transitions.txt`. The app grabs t
 
 | Interaction | Acknowledged | Settled | Updates | Flash | Waveforms |
 | --- | --- | --- | --- | --- | --- |
-| Page turn (forward or back) | 440 ms (the page) | 440 ms | 1 | no | glkw16 full |
-| Reader menu open | 513 to 577 ms (the menu) | 513 to 577 ms | 1 | no | gl16, 95 % of the screen |
-| Reader menu close | 497 ms | 497 ms | 1 | no | glkw16 full |
-| Book → library | 52 ms | 765 ms | 2 | yes | a2 tap mark, gck16 full |
-| Library filter tab | 60 to 64 ms | 552 to 741 ms | 2 | no | a2, gl16 |
-| Shelf page | 51 to 53 ms | 516 to 535 ms | 2 | every 5th | a2, gl16 (gck16 when flashing) |
-| Sort | 59 to 61 ms | 743 to 749 ms | 2 | no | a2, gl16 |
-| Open the "Continue reading" book | 67 ms | 1282 ms | 2 | yes | a2, gck16 full |
+| Page turn (forward or back) | 440 ms (the page) | 440 ms | 1 | no | `glkw16` full |
+| Reader menu open | 513 to 577 ms (the menu) | 513 to 577 ms | 1 | no | `gl16`, 95 % of the screen |
+| Reader menu close | 497 ms | 497 ms | 1 | no | `glkw16` full |
+| Book → library | 52 ms | 765 ms | 2 | yes | `a2` tap mark, `gck16` full |
+| Library filter tab | 60 to 64 ms | 552 to 741 ms | 2 | no | `a2`, `gl16` |
+| Shelf page | 51 to 53 ms | 516 to 535 ms | 2 | every 5th | `a2`, `gl16` (`gck16` when flashing) |
+| Sort | 59 to 61 ms | 743 to 749 ms | 2 | no | `a2`, `gl16` |
+| Open the *Continue reading* book | 67 ms | 1282 ms | 2 | yes | `a2`, `gck16` full |
 
 This historical run turned on touch-down, with 0 ms to update start and 440 ms panel time. Current code turns on release so holds can select words. This run does not measure the current release-to-panel path.
 
@@ -108,15 +108,15 @@ Device, 2026-10-17, from the app's `[perf]` lines in `/var/tmp/aristotle.log` an
 | Open a book from its snapshot, tap to settled | 557 to 570 ms | 0.8 s |
 | Back to the library, settled | 552 ms | not measured |
 | Wake from the screensaver, settled | 441 ms | not measured |
-| Dictionary lookup, Polish (pl-pl, 1.37 million forms) | 89 ms; popup 239 ms after the long press | not measured |
-| Dictionary lookup, Ancient Greek (grc-pl) | 10.5 ms; popup 71 ms after the long press | not measured |
+| Dictionary lookup, Polish (`pl-pl`, 1.37 million forms) | 89 ms; popup 239 ms after the long press | not measured |
+| Dictionary lookup, Ancient Greek (`grc-pl`) | 10.5 ms; popup 71 ms after the long press | not measured |
 | Footnote popup | 2 ms to resolve the link | not measured |
 | Memory while reading (`VmRSS`) | 14.5 MB | about 200 MB for the stock GUI stack |
 | Free RAM while reading (`MemFree` + `Buffers` + `Cached`, of 490 MB) | 379 to 382 MB | 236 to 240 MB with the stock GUI running |
 | Peak memory (`VmHWM`) | 66 MB, during the one-time indexing of five dictionaries | |
-| One-time dictionary indexing | pl-pl 22.9 s, grc-en 37.2 s, the others under 3.1 s each | |
+| One-time dictionary indexing | `pl-pl` 22.9 s, `grc-en` 37.2 s, the others under 3.1 s each | |
 
-[`takeover.sh start`](glossary.md#takeover) alone, before the app starts, takes available RAM from 236 MB to 392 MB [dev] (`docs/pw4-reference.md`, "Taking over the screen").
+[`takeover.sh start`](glossary.md#takeover) alone, before the app starts, takes available RAM from 236 MB to 392 MB.[^2]
 
 ## Binary size
 
@@ -131,7 +131,7 @@ Stripped ARM binaries in MB (10⁶ bytes), built with `tools/build-plato.sh` and
 
 ## Host measurements
 
-On a PC (x86_64, release build) with the same code and library versions as the device build [host]. Layout on the device is about 8 times slower.
+On a PC (`x86_64`, release build) with the same code and library versions as the device build.[^3] Layout on the device is about 8 times slower.
 
 ### Opening a book from a snapshot
 
@@ -147,10 +147,8 @@ On a PC (x86_64, release build) with the same code and library versions as the d
 
 `aristotle-render bench` with [Plato](glossary.md#plato) rendering [EPUB](glossary.md#epub) books in Literata at 10 pt.
 
-| Book | Open | First page | Render per page, median / p90 | Paginate all | Max RSS |
-| --- | --- | --- | --- | --- | --- |
-| Plato, *Phaedo*, EPUB, 341 pages | 1.1 ms | 0.6 ms | 2.1 / 2.4 ms | 211 ms | 32 MiB |
-| Polish non-fiction, EPUB, 269 pages | 10 ms | 1.9 ms | 4.6 / 5.2 ms | 241 ms | 26 MiB |
+- Plato, *Phaedo*, EPUB, 341 pages: open 1.1 ms, first page 0.6 ms, render per page 2.1 / 2.4 ms (median / p90), paginate all 211 ms, max RSS 32 MiB.
+- Polish non-fiction, EPUB, 269 pages: open 10 ms, first page 1.9 ms, render per page 4.6 / 5.2 ms (median / p90), paginate all 241 ms, max RSS 26 MiB.
 
 ### Dictionary indexes
 
@@ -158,8 +156,12 @@ The [fold index](reader.md#dictionary) is built once per dictionary. Warm lookup
 
 | Dictionary | Words | Forms | Index | Build |
 | --- | --- | --- | --- | --- |
-| grc-pl | 2,108 | 5,472 | 81 KB | 13 ms |
-| la-pl | 15,814 | 83,969 | 0.9 MB | 44 ms |
-| en-pl | 92,605 | 222,731 | 2.0 MB | 88 ms |
-| pl-pl | 123,535 | 1,369,720 | 21 MB | 846 ms |
-| grc-en | 21,819 | 1,789,814 | 23.6 MB | 1462 ms |
+| `grc-pl` | 2,108 | 5,472 | 81 KB | 13 ms |
+| `la-pl` | 15,814 | 83,969 | 0.9 MB | 44 ms |
+| `en-pl` | 92,605 | 222,731 | 2.0 MB | 88 ms |
+| `pl-pl` | 123,535 | 1,369,720 | 21 MB | 846 ms |
+| `grc-en` | 21,819 | 1,789,814 | 23.6 MB | 1462 ms |
+
+[^1]: Measured on the device.
+[^2]: Measured on the device (`docs/pw4-reference.md`, "Taking over the screen").
+[^3]: Host measurement.

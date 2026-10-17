@@ -40,7 +40,7 @@ If no dictionary appears, check the complete file set, folder depth, and languag
 
 ## Build large indexes on the host
 
-Dictionary indexing reached 66 MB on the device [dev]. To build indexes on a Linux computer instead, first [build the host app](../.github/CONTRIBUTING.md#building). From the repository, prepare a dictionary folder:
+To build large indexes on a Linux computer instead of the Kindle, first [build the host app](../.github/CONTRIBUTING.md#building). From the repository, prepare a dictionary folder:
 
 ```sh
 . tools/env.sh

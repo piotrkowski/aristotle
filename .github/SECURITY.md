@@ -1,10 +1,13 @@
 # Security policy
 
-Report security issues privately with **Report a vulnerability** under
-[Advisories](https://github.com/piotrkowski/aristotle/security/advisories/new)
-([how it works](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability)).
-Do not open a public issue. Include the steps to reproduce, the commit you
-built, and the device and firmware.
+Report security issues privately with *Report a vulnerability* under
+[Advisories](https://github.com/piotrkowski/aristotle/security/advisories/new).[^1]
+
+Do not open a public issue. Include:
+
+- The steps to reproduce.
+- The commit you built.
+- The device and firmware.
 
 ## What runs on the device
 
@@ -44,7 +47,7 @@ connect to configured sync servers and catalogs. The optional device agent
   `/var/local/aristotle/net-allow`. It filters by IP address, so anything else
   hosted on an allowed address is reachable too. It does not inspect TLS SNI
   or filter DNS queries, and it applies from the agent's first tick after boot.
-  [device/README.md](../device/README.md#network) describes these limits and how to check
+  [`device/README.md`](../device/README.md#network) describes these limits and how to check
   the rules on a device. A way past `scoped` that those limits do not cover is
   a security issue.
 
@@ -55,3 +58,5 @@ public issue, and never share the e-ink waveforms it can copy.
 
 Books are parsed by Plato's engine (Rust) and MuPDF (C) from untrusted files.
 A malformed book that crashes the reader, or worse, is a security issue.
+
+[^1]: [How private vulnerability reporting works](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability).

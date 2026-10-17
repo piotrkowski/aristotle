@@ -18,25 +18,34 @@ It is alpha software, tested on one device.
 - A library and reader that run in place of the stock interface. While it
   runs, the stock interface, the store and the cloud and telemetry services
   are stopped; quitting or a reboot brings them back.
-- The library lists `documents/` with Books, Folders and Series views,
-  shelves and a "Continue reading" card. It reads the reading position the
+- The library lists `documents/` with *Books*, *Folders* and *Series* views,
+  shelves and a *Continue reading* card. It reads the reading position the
   stock reader saved for each book.
 - The reader opens EPUB, DRM-free MOBI and AZW3, PDF and TXT, using Plato's
   document engine. Pages turn with one full-screen update, as in the stock
   reader.
-- Text is set in Literata with Knuth–Plass justification, with hyphenation
+- Text is set in Literata with Knuth-Plass justification, with hyphenation
   for English, Polish, Ancient Greek and Latin.
+- Your own reading fonts: TTF or OTF files in `fonts/` on the USB drive show
+  up in the reader's menu.
 - Hold a word to look it up in offline StarDict dictionaries, inflected forms
   included. Footnotes open in a popup.
 - Highlights and bookmarks. Highlights are added to `My Clippings.txt` in the
   stock format and written as one Markdown note per book.
-- Settings for the frontlight, night mode, covers, the screensaver delay, the
-  USB mode and the language (English or Polish), and an About section with
+- *Settings* for the frontlight, night mode, covers, the screensaver delay, the
+  USB mode and the language (English or Polish), and an *About* section with
   the version.
+- *Start Aristotle* and *Return to the Kindle interface* in KUAL, and,
+  with the agent, *Start Aristotle at boot*, which starts it instead of the
+  stock interface and falls back to stock after three failed launches.
+- Reading-position sync with KOReader through a KOSync server, and downloads
+  from OPDS catalogs such as calibre's content server. Passwords stay in a
+  root-only folder on the device.
 - A KUAL extension with an optional agent that keeps a USB network and SSH
   up for development, switches the USB drive mode on request, and restarts
   the stock interface if it stays down. A file named `aristotle-disable` at
-  the root of the USB drive keeps the agent from starting.
+  the root of the USB drive keeps the agent from starting. While installed,
+  the agent keeps Amazon's update daemons from running.
 - An optional Wi-Fi policy that lets the device reach only the hosts you
   list.
 - The scripts that change the device refuse to run on anything but a

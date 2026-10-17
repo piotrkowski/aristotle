@@ -8,7 +8,7 @@ A fast black-and-white [waveform](#waveform) used for press feedback, PW4 mode 6
 
 ## ABI
 
-An application binary interface defines how compiled code calls functions and exchanges data. Aristotle must match the kernel's device-control layouts, even though its static binaries use a different C library from the firmware ([ABI overview](https://en.wikipedia.org/wiki/Application_binary_interface)).
+An *application binary interface* defines how compiled code calls functions and exchanges data. Aristotle must match the kernel's device-control layouts, even though its static binaries use a different C library from the firmware ([ABI overview](https://en.wikipedia.org/wiki/Application_binary_interface)).
 
 ## Atom
 
@@ -28,7 +28,7 @@ A second filesystem path to an existing file or directory. The agent uses read-o
 
 ## BOM
 
-A byte-order mark, a Unicode signature at the start of a text file. A newly created `My Clippings.txt` starts with a UTF-8 BOM ([Unicode FAQ](https://www.unicode.org/faq/utf_bom.html)).
+A *byte-order mark*, a Unicode signature at the start of a text file. A newly created `My Clippings.txt` starts with a UTF-8 BOM ([Unicode FAQ](https://www.unicode.org/faq/utf_bom.html)).
 
 ## CBZ
 
@@ -116,7 +116,7 @@ The Linux USB Ethernet gadget module, which makes the Kindle appear as a network
 
 ## Ghosting
 
-Visible traces of an earlier screen after an e-ink update ([electronic paper limitations](https://en.wikipedia.org/wiki/Electronic_paper)). Aristotle's page-turn experiments found that full-mode, full-screen mode-9 updates avoided the residue seen with partial updates ([page-turn experiment](benchmarks.md#page-turn-strategy-experiment)).
+Visible traces of an earlier screen after an e-ink update.[^1] Aristotle's page-turn experiments found that full-mode, full-screen mode-9 updates avoided the residue seen with partial updates ([page-turn experiment](benchmarks.md#page-turn-strategy-experiment)).
 
 ## GL16
 
@@ -192,7 +192,7 @@ The typed binary format in Kindle reading-state sidecars. Aristotle reads it to 
 
 ## KUAL
 
-Kindle Unified Application Launcher, the menu that launches Aristotle and its device scripts. It is installed separately ([KUAL repository](https://github.com/coplate/KUAL_Booklet)).
+*Kindle Unified Application Launcher*, the menu that launches Aristotle and its device scripts. It is installed separately ([KUAL repository](https://github.com/coplate/KUAL_Booklet)).
 
 ## Lab126
 
@@ -208,11 +208,11 @@ Lab126's property and event service, built on D-Bus. Aristotle uses its command-
 
 ## LTO
 
-Link-time optimization lets the compiler optimize across compiled units. Aristotle enables it in release builds to reduce binary size ([Cargo profile reference](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)).
+*Link-time optimization* lets the compiler optimize across compiled units. Aristotle enables it in release builds to reduce binary size ([Cargo profile reference](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)).
 
 ## LUT
 
-A lookup table, here the waveform data selected for the panel's temperature. The stock EPDC driver chooses it when updating the screen ([EPDC waveform documentation](https://docs.nxp.com/bundle/RM00293/page/topics/software_operation_005.html)).
+A *lookup table*, here the waveform data selected for the panel's temperature. The stock EPDC driver chooses it when updating the screen ([EPDC waveform documentation](https://docs.nxp.com/bundle/RM00293/page/topics/software_operation_005.html)).
 
 ## mntroot
 
@@ -224,7 +224,7 @@ The Mobipocket book-format family. Aristotle converts DRM-free MOBI 7 to cached 
 
 ## MRPI
 
-MobileRead Package Installer, a separately installed tool used to install Kindle homebrew packages such as KUAL. Aristotle's release itself is unpacked onto the USB drive ([MRPI repository](https://wiki.mobileread.com/wiki/MRPI)).
+*MobileRead Package Installer*, a separately installed tool used to install Kindle homebrew packages such as KUAL. Aristotle's release itself is unpacked onto the USB drive ([MRPI repository](https://wiki.mobileread.com/wiki/MRPI)).
 
 ## MuPDF
 
@@ -240,7 +240,7 @@ The stock Kindle's text export of highlights and notes. Aristotle appends new hi
 
 ## OPDS
 
-Open Publication Distribution System, a catalog format for finding and downloading books. Aristotle supports OPDS 1.2 feeds, not the newer OPDS 2 format ([OPDS 1.2 specification](https://specs.opds.io/opds-1.2)).
+*Open Publication Distribution System*, a catalog format for finding and downloading books. Aristotle supports OPDS 1.2 feeds, not the newer OPDS 2 format ([OPDS 1.2 specification](https://specs.opds.io/opds-1.2)).
 
 ## OpenSearch
 
@@ -324,7 +324,7 @@ A dictionary format with separate metadata, word-index, and definition files. Ar
 
 ## Static binary
 
-A program with its library code linked into the executable, rather than loaded from system libraries. Aristotle ships static ARM binaries to avoid the stock firmware's C-library calling convention ([Rust linkage reference](https://doc.rust-lang.org/reference/linkage.html)).
+A program with its library code linked into the executable, rather than loaded from system libraries. Aristotle ships static ARM binaries to avoid the stock firmware's C-library calling convention.[^2]
 
 ## Stride
 
@@ -344,7 +344,7 @@ Stopping the stock GUI and selected background services so Aristotle can use the
 
 ## TLS
 
-Transport Layer Security encrypts connections and authenticates servers through certificates. Aristotle's release bundles enable it for HTTPS catalogs and sync servers ([RFC 8446](https://www.rfc-editor.org/rfc/rfc8446)).
+*Transport Layer Security* encrypts connections and authenticates servers through certificates. Aristotle's release bundles enable it for HTTPS catalogs and sync servers ([RFC 8446](https://www.rfc-editor.org/rfc/rfc8446)).
 
 ## tmpfs
 
@@ -385,3 +385,6 @@ A programming language and toolchain whose C compiler Aristotle uses for cross-c
 ## zstd
 
 The Zstandard compression format used for saved page snapshots. Compression and writes happen on a worker thread ([Zstandard project](https://facebook.github.io/zstd/)).
+
+[^1]: [Electronic paper limitations](https://en.wikipedia.org/wiki/Electronic_paper).
+[^2]: [Rust linkage reference](https://doc.rust-lang.org/reference/linkage.html).

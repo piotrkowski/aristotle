@@ -48,7 +48,7 @@ By default, the highlight also appends to `documents/My Clippings.txt`. A Markdo
 
 1. Tap the top of the page, then tap **Library** in the reader menu.
 2. Hold **Library** for one second to quit Aristotle.
-3. Wait for the stock interface to return. The boot splash can last 30 to 60 seconds [dev].
+3. Wait for the stock interface to return. The boot splash lasted 30 to 60 seconds on the tested PW4.
 4. Connect the Kindle in USB drive mode and open `aristotle-notes/` on the computer.
 
 The book's Markdown file contains the highlighted phrase. Next time, Aristotle resumes from its saved position.

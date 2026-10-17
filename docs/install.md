@@ -37,9 +37,14 @@ Aristotle contains no exploit or DRM-removal code. It opens only DRM-free books.
 5. Eject the Kindle.
 6. Open **KUAL > Aristotle > Start Aristotle**.
 
-The zip contains `aristotle/`, the app and licenses, and `extensions/aristotle/`, the menu. `aristotle/SOURCE.txt` identifies the source build.
+The zip contains:
 
-In Aristotle's library, hold **Library** for one second to quit. The stock interface returns after 30 to 60 seconds of boot splash [dev]. A reboot restores stock unless you have enabled Aristotle at boot.
+- `aristotle/`: the app and licenses.
+- `extensions/aristotle/`: the KUAL menu.
+
+`aristotle/SOURCE.txt` identifies the source build.
+
+In Aristotle's library, hold **Library** for one second to quit. The boot splash before the stock interface returns lasted 30 to 60 seconds on the tested PW4. A reboot restores stock unless you have enabled Aristotle at boot.
 
 Continue with [Your first book](first-book.md). For later releases, follow [Back up and update](maintenance.md#update-the-app), including the separate internal copy used by autostart.
 
@@ -48,15 +53,21 @@ Continue with [Your first book](first-book.md). For later releases, follow [Back
 The agent provides SSH over USB at `192.168.15.244` without an internet connection. It also provides [drive-mode](glossary.md#drive-mode) switching from settings and an update block. The USB link provides no gateway. See [Host setup](../device/README.md#host-setup) for a dedicated SSH key and host network configuration.
 
 1. Copy your SSH public key to `extensions/aristotle/authorized_keys` on the Kindle drive.
-2. Open **KUAL > Aristotle > Install agent**.
+2. Open *KUAL > Aristotle > Install agent*.
 
-The agent adds three [Upstart](glossary.md#upstart) service jobs on the [root filesystem](glossary.md#rootfs): `/etc/upstart/aristotle-agent.conf`, `/etc/upstart/aristotle-ui.conf`, and `/etc/upstart/aristotle-ota.conf`. It changes no stock file. Other files go to the drive and `/var/local`.
+The agent adds three [Upstart](glossary.md#upstart) service jobs on the [root filesystem](glossary.md#rootfs):
+
+- `/etc/upstart/aristotle-agent.conf`
+- `/etc/upstart/aristotle-ui.conf`
+- `/etc/upstart/aristotle-ota.conf`
+
+It changes no stock file. Other files go to the drive and `/var/local`.
 
 Before a deliberate firmware update, remove the agent. Keep the `update.bin.tmp.partial` folder on the drive.
 
 ## Start Aristotle at boot
 
-With the agent installed, select **Start Aristotle at boot: on**. This copies the app to internal storage and starts it about 41 seconds after power-on [dev]. Select it again after updating the app. **Start Aristotle at boot: off** disables it.
+With the agent installed, select *Start Aristotle at boot: on*. This copies the app to internal storage and starts it about 41 seconds after power-on.[^1] Select it again after updating the app. *Start Aristotle at boot: off* disables it.
 
 The stock interface starts instead if the [`aristotle-disable` kill switch](glossary.md#kill-switch) exists on the drive or after three failed launches. Quitting Aristotle keeps the stock interface for the rest of that boot.
 
@@ -85,14 +96,21 @@ Books, [`My Clippings.txt`](glossary.md#my-clippingstxt), and exported notes rem
 
 ## If something goes wrong
 
-Without SSH, select **KUAL > Aristotle > USB drive mode for 10 minutes**. Connect the Kindle, create an empty `aristotle-disable` file at the drive root, and restart. The stock system starts without the agent or Aristotle at boot.
-
 If Aristotle starts at boot, quit it first so the stock interface can offer drive mode.
 
-Without KUAL or the agent, the community hotfix can run `emergency.sh` from the drive root after the stock interface starts [dev]. Follow [Recovery without SSH](../device/README.md#recovery-without-ssh), then delete the script.
+Without SSH:
+
+1. Select *KUAL > Aristotle > USB drive mode for 10 minutes*.
+2. Connect the Kindle.
+3. Create an empty `aristotle-disable` file at the drive root.
+4. Restart. The stock system starts without the agent or Aristotle at boot.
+
+Without KUAL or the agent, the community hotfix can run `emergency.sh` from the drive root after the stock interface starts.[^1] Follow [Recovery without SSH](../device/README.md#recovery-without-ssh), then delete the script.
 
 For startup, USB, book, and network symptoms, see [Troubleshooting](troubleshooting.md).
 
 ## Build it yourself
 
 See [Building](../.github/CONTRIBUTING.md#building) for Linux tools and commands.
+
+[^1]: Observed on the device.

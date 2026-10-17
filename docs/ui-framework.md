@@ -53,7 +53,7 @@ Parents pass size limits to their children, then place them at the sizes the chi
 
 `Pages` shows the children that fit on one page, and `set_page` changes the visible page. There is no scrolling container.
 
-Tree setters such as `set_text`, `set_hidden`, and `set_progress` record damage, the changed rectangles, with a `Refresh` class. After `widget_mut`, call `invalidate`, because direct field changes record no damage.
+Tree setters such as `set_text`, `set_hidden`, and `set_progress` record *damage*, the changed rectangles, with a `Refresh` class. After `widget_mut`, call `invalidate`, because direct field changes record no damage.
 
 ### Damage and waveforms
 
@@ -67,11 +67,17 @@ A2 is only an acknowledgement. `Ui` remembers what A2 showed. The next render wi
 
 The app maps GC16 to a full-screen mode-8 flash. GLKW16 becomes mode 9 in full mode, the stock page-turn update, for the rectangle or for the whole screen when it covers half of it. GL16 over book content, including completed gray popups, becomes a full-screen page refresh. Other partial hints go to `Display::damage`, which queues work without waiting for the panel. See [E-ink rendering](#e-ink-rendering).
 
-`panel::GhostBudget` counts partial updates since the last full-screen update. After 6 DU or GL16 updates (KOReader's default full-refresh interval), or partial and cleaning updates adding up to 3 screens (an inference), the next settled update is a mode-8 flash. A2 never becomes a flash.
+`panel::GhostBudget` counts partial updates since the last full-screen update. After 6 DU or GL16 updates,[^1] or partial and cleaning updates adding up to 3 screens,[^2] the next settled update is a mode-8 flash. A2 never becomes a flash.
 
 ## Input
 
-`GestureRecognizer` accepts `(phase, id, x, y, time_us)`. Defaults in `GestureConfig` are 4 mm tap slop, a 500 ms hold, and an 8 mm swipe. A swipe axis must dominate the other by 1.5 times. A second finger cancels a press.
+`GestureRecognizer` accepts `(phase, id, x, y, time_us)`. Defaults in `GestureConfig` are:
+
+- 4 mm tap slop.
+- A 500 ms hold.
+- An 8 mm swipe.
+
+A swipe axis must dominate the other by 1.5 times. A second finger cancels a press.
 
 A2 feedback starts on touch-down and stops if the finger moves. Hit tests expand small targets to `MIN_TARGET`, 9 mm or 106 px.
 
@@ -169,7 +175,7 @@ Add it with `tree.custom(w)`. Change it through `tree.widget_mut::<T>(id)`, then
 
 English is the default. `crates/aristotle-i18n/locales/en.json` defines the message keys. The build checks each locale's keys, placeholders, and plural forms. Debug builds also check arguments to `tf!`.
 
-`set_language` changes the process-wide language. `with_language` overrides it on one thread for tests. Book text and metadata are not translated. [`My Clippings.txt`](glossary.md#my-clippingstxt) keeps en_GB labels in every language.
+`set_language` changes the process-wide language. `with_language` overrides it on one thread for tests. Book text and metadata are not translated. [`My Clippings.txt`](glossary.md#my-clippingstxt) keeps `en_GB` labels in every language.
 
 ### Adding a language
 
@@ -198,7 +204,7 @@ The EPDC reads pixels from the framebuffer only when asked to update. `MXCFB_SEN
 
 ### Waveforms
 
-The PW4 uses Zelda mode numbers from [FBInk](glossary.md#fbink)'s `mxcfb-kindle.h`, not PW2 numbers. The [device reference](pw4-reference.md#waveform-modes-and-timings) lists every measured mode. These timings come from `aristotle-observe bench latency` on our device [dev]:
+The PW4 uses Zelda mode numbers from [FBInk](glossary.md#fbink)'s `mxcfb-kindle.h`, not PW2 numbers. The [device reference](pw4-reference.md#waveform-modes-and-timings) lists every measured mode. These timings come from `aristotle-observe bench latency` on our device:[^3]
 
 | Waveform | Mode | Time for a 120 × 120 region |
 | --- | --- | --- |
@@ -208,11 +214,11 @@ The PW4 uses Zelda mode numbers from [FBInk](glossary.md#fbink)'s `mxcfb-kindle.
 | GC16 | 2 | 544 ms |
 | GLKW16 | 9 | 544 ms |
 
-A2 is fast but leaves residue, while DU handles black and white. Gray updates take longer, and book pages use full mode 9 to avoid [ghosting](glossary.md#ghosting) ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)). The stock UI sends its controls as mode 257 (AUTO) and flashes with mode 8 [dev]. Aristotle cleans with mode 9 in full mode; that this clears A2 residue on a region is an inference from the page-turn results.
+A2 is fast but leaves residue, while DU handles black and white. Gray updates take longer, and book pages use full mode 9 to avoid [ghosting](glossary.md#ghosting) ([Page-turn experiment](benchmarks.md#page-turn-strategy-experiment)). The stock UI sends its controls as mode 257 (AUTO) and flashes with mode 8.[^3] Aristotle cleans with mode 9 in full mode; that this clears A2 residue on a region is an inference from the page-turn results.
 
 ### Display thread
 
-Measurements on our PW4 show that the driver processes one update at a time [dev]. A submit blocks behind an earlier update even when regions do not overlap. Deeper queues and smaller tiles did not help.
+Measurements on our PW4 show that the driver processes one update at a time.[^3] A submit blocks behind an earlier update even when regions do not overlap. Deeper queues and smaller tiles did not help.
 
 `Display::damage` merges pending rectangles and keeps the most faithful requested waveform. Only `epdc-display` waits in the submit call. Pixels drawn while the panel is busy go out in the next update.
 
@@ -238,3 +244,7 @@ Measurements on our PW4 show that the driver processes one update at a time [dev
 - `set_tree` flashes. Use `set_tree_with(tree, Refresh::Auto)` to rebuild the current screen.
 - Use `Feedback::Outline` for covers and other large targets.
 - Change night mode through `App::set_night`.
+
+[^1]: KOReader's default full-refresh interval.
+[^2]: An inference.
+[^3]: Measured on the device.

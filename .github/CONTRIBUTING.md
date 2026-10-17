@@ -3,7 +3,7 @@
 Small fixes can go straight to a pull request. For anything larger, open an
 [issue](https://github.com/piotrkowski/aristotle/issues) first to agree on the
 approach. Before you touch the display or input code, read
-[AGENTS.md](../AGENTS.md).
+[`AGENTS.md`](../AGENTS.md).
 
 The [documentation index](../docs/README.md) separates user guides from
 implementation references. Keep behavior and limitations consistent across
@@ -33,11 +33,22 @@ followed by a submodule bump here.
 
 You need Rust from [rustup](https://rustup.rs) with the
 `armv7-unknown-linux-musleabihf` and `x86_64-unknown-linux-musl` targets. The
-C libraries also need curl, tar, xz, openssl, xxd, make, cmake, bash and a host
-C compiler. `tools/build-plato.sh` downloads a pinned [Zig](../docs/glossary.md#zig) toolchain.
+C libraries also need:
+
+- `curl`
+- `tar`
+- `xz`
+- `openssl`
+- `xxd`
+- `make`
+- `cmake`
+- `bash`
+- A host C compiler.
+
+`tools/build-plato.sh` downloads a pinned [Zig](../docs/glossary.md#zig) toolchain.
 
 Builds go to `$ARISTOTLE_CACHE` (default `~/.cache/aristotle`), since `/tmp`
-is a small RAM disk on many hosts. Do the same for your own cargo runs:
+is a small RAM disk on many hosts. Do the same for your own `cargo` runs:
 
 ```sh
 git clone --recurse-submodules https://github.com/piotrkowski/aristotle
@@ -87,8 +98,8 @@ then ejects the Kindle.
 If your change affects what reaches the panel, run the device scenarios in
 `tools/scenarios/` with `aristotle-observe run SCRIPT`. Unless the
 change is meant to alter them, the updates and waveforms should stay the same
-and latency should stay within 10 %. Numbers in the docs are tagged `[dev]` for
-the device and `[host]` for the PC.
+and latency should stay within 10 %. Footnotes mark results from the device
+or the PC.
 
 ## Checks
 
@@ -117,7 +128,7 @@ and the site from the device captures in its manifest
 ## Releases
 
 Aristotle has one version, `workspace.package.version` in `Cargo.toml`. The
-app shows it with the short commit in Settings › About, and `SOURCE.txt`
+app shows it with the short commit in *Settings › About*, and `SOURCE.txt`
 names the version, commit and tag. To release:
 
 1. Set the version in `Cargo.toml` and move the "Unreleased" entries of
@@ -126,10 +137,17 @@ names the version, commit and tag. To release:
 
 The release workflow (`.github/workflows/release.yml`) builds everything from
 source without caches, checks that the tag matches the version, and creates a
-draft release with the zip, a source tarball (`tools/package.sh source`:
-Aristotle and Plato at the tagged commits, with the URLs and SHA-256 sums of
-the C library sources), `SHA256SUMS`, build provenance attestations and the
-changelog section as notes. Read the draft, then publish it.
+draft release with:
+
+- The zip.
+- A source tarball from `tools/package.sh source`.[^1]
+- `SHA256SUMS`.
+- Build provenance attestations.
+- The changelog section as notes.
+
+Read the draft, then publish it.
+
+[^1]: Aristotle and Plato at the tagged commits, with the URLs and SHA-256 sums of the C library sources.
 
 ## Text and test data
 
