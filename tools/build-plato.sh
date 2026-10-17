@@ -305,6 +305,12 @@ fi
 
 if ! done_ freetype2; then
     log freetype2
+    # Only the font formats PDFs and books embed (TrueType, CFF, Type 1,
+    # CID, OpenType): no PFR, Type 42, Windows FNT, PCF, BDF, the LZW and
+    # bzip2 readers for compressed PCF, OT-SVG or SDF rendering. gzip stays:
+    # sfnt needs it for WOFF.
+    sed -i -E 's/^((FONT|RASTER|AUX)_MODULES \+= (pfr|type42|winfonts|pcf|bdf|svg|sdf|lzw|bzip2))$/# \1/' \
+        "$T/freetype2/modules.cfg"
     (cd "$T/freetype2" && ZLIB_CFLAGS="-I$T/zlib" ZLIB_LIBS="-L$T/zlib -lz" \
             BZIP2_CFLAGS="-I$T/bzip2" BZIP2_LIBS="-L$T/bzip2 -lbz2" \
             LIBPNG_CFLAGS="-I$T/libpng" LIBPNG_LIBS="-L$T/libpng/.libs -lpng16" \
