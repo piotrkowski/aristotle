@@ -12,6 +12,9 @@ ZIG_DIR     the Zig installation whose libc++ was linked
 HYPH_DIR    directory with the hyph-utf8 master files (hyph-<lang>.tex)
 DJVU        1 if DjVuLibre was linked
 
+$APP_FEATURES names the reader app's features the build enabled (tls), so
+the crates they pull in (rustls, ring, webpki-roots) get their notices too.
+
 Everything the binaries link or the data directory ships gets its notice:
 Aristotle and Plato (AGPL-3.0), the C libraries, the Rust crates (from
 `cargo metadata`), the fonts (their copyright and licence name records) and
@@ -20,6 +23,7 @@ the hyphenation patterns. SOURCE.txt says where the corresponding source is
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -98,10 +102,12 @@ def revision() -> dict[str, str]:
 def rust_crates() -> list[dict]:
     """Packages the two binaries depend on for TARGET (normal and build)."""
     manifest = REPO / "Cargo.toml"
+    features = [f"aristotle/{f}" for f in os.environ.get("APP_FEATURES", "").split(",") if f]
     meta = json.loads(
         subprocess.run(
             ["cargo", "metadata", "--format-version", "1", "--locked",
-             "--filter-platform", TARGET, "--manifest-path", str(manifest)],
+             "--filter-platform", TARGET, "--manifest-path", str(manifest)]
+            + (["--features", ",".join(features)] if features else []),
             check=True, capture_output=True, text=True,
         ).stdout
     )

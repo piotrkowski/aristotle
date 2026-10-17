@@ -83,6 +83,14 @@ export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar"
 CARGO_CMD=${CARGO_CMD:-build}
 set -- --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
     --manifest-path "$REPO/Cargo.toml" -p aristotle-render -p aristotle
+# APP_FEATURES: the reader app's optional features, comma-separated. The
+# default, tls, gives progress sync and catalogs HTTPS (rustls and ring,
+# whose C goes through the same Zig wrapper); APP_FEATURES= builds plain
+# HTTP only, about 0.6 MB smaller (docs/library.md, "Network").
+APP_FEATURES=${APP_FEATURES-tls}
+if [ -n "$APP_FEATURES" ]; then
+    set -- "$@" --features "$(printf %s "$APP_FEATURES" | sed 's/[^,][^,]*/aristotle\/&/g')"
+fi
 # shellcheck disable=SC2086 # CARGO_FLAGS is a list of options
 if [ "$CARGO_CMD" = clippy ]; then
     cargo clippy "$@" --all-targets ${CARGO_FLAGS:-} -- -D warnings
@@ -218,8 +226,8 @@ done
 rm -rf "$OUT/licenses" "$OUT/SOURCE.txt"
 DJVU_LINKED=0
 [ ! -f "$B/plato/libs/libdjvulibre.a" ] || DJVU_LINKED=1
-PYTHONPATH="$DL/$FONTTOOLS" python3 "$REPO/tools/bundle-licenses.py" "$OUT" "$REPO" \
-    "$B/plato" "$TARGET" "$TOOLS/zig" "$DL/$HYPH_DL" "$DJVU_LINKED"
+PYTHONPATH="$DL/$FONTTOOLS" APP_FEATURES="$APP_FEATURES" python3 "$REPO/tools/bundle-licenses.py" \
+    "$OUT" "$REPO" "$B/plato" "$TARGET" "$TOOLS/zig" "$DL/$HYPH_DL" "$DJVU_LINKED"
 
 file "$OUT/aristotle-render" "$OUT/aristotle"
 ls -l "$OUT/aristotle-render" "$OUT/aristotle"
