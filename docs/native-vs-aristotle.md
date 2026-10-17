@@ -122,5 +122,6 @@ Device, 2026-10-17, from the app's `[perf]` lines in `/var/tmp/aristotle.log` an
 | Dictionary lookup, Ancient Greek (grc-pl) | 10.5 ms; popup 71 ms after the long press | not measured |
 | Footnote popup | 2 ms to resolve the link | not measured |
 | Memory while reading (`VmRSS`) | 14.5 MB | about 200 MB for the stock GUI stack |
+| Free RAM while reading (`MemFree` + `Buffers` + `Cached`, of 490 MB) | 379–382 MB | 236–240 MB with the stock GUI running |
 | Peak memory (`VmHWM`) | 66 MB, during the one-time indexing of five dictionaries | |
 | One-time dictionary indexing | pl-pl 22.9 s, grc-en 37.2 s, the others under 3.1 s each | |

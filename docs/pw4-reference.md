@@ -171,7 +171,7 @@ KOReader's `koreader.sh` either runs `stop lab126_gui` and restarts it on exit, 
 
 The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `devloop/kindle/takeover.sh start|stop|status` takes the screen for Aristotle [dev]:
 
-- `stop lab126_gui` takes down the framework (`cvm`), Pillow and the keyboard. The script also stops 13 cloud and telemetry jobs (`stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd`). Available RAM goes from 236 MB to 392 MB.
+- `stop lab126_gui` takes down the framework (`cvm`), Pillow and the keyboard. The script also stops 12 cloud and telemetry jobs (`stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd`). Available RAM goes from 236 MB to 392 MB.
 - `x` (Xorg, awesome, `lxinit`, `blanket`, about 22 MB) keeps running, because its job stops only on `stopping dbus or stop_x`. Judging by its command line, `blanket` draws the screensaver when `powerd` suspends, so `x` stays until we own power management. This is not tested.
 - `powerd`, `volumd`, `wifid`, `lipcd`, `dbus`, the USB network and SSH keep running.
 - `start lab126_gui` brings the stock UI back through the boot splash.

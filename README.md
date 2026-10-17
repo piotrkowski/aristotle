@@ -22,7 +22,15 @@
   <img src="assets/screenshots/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
-Aristotle runs in place of the stock interface. It makes no network connections and has no store or account. Books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
+Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped, and a reboot brings them back. Aristotle makes no network connections, and books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
+
+The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
+
+| Size and memory | Stock | Aristotle |
+|---|--:|--:|
+| Interface | Java framework and WebKit | one Rust binary, 9.6 MB |
+| RAM used by the interface | about 200 MB | **14.5 MB** |
+| RAM free while reading | about 240 MB | **about 380 MB** |
 
 ## Features
 
@@ -33,11 +41,10 @@ Aristotle runs in place of the stock interface. It makes no network connections 
 - Highlights go to `My Clippings.txt` in the stock format and to Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
 
-| Measured on a Paperwhite 4 | Stock | Aristotle |
+| Speed | Stock | Aristotle |
 |---|--:|--:|
 | Page turn, from release | 0.57 s | 0.44 s |
 | Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
-| Memory used by the interface | about 200 MB | 14.5 MB |
 
 See [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html) and [docs/native-vs-aristotle.md](docs/native-vs-aristotle.md) for the method.
 
