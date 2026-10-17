@@ -38,6 +38,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - Pages turn with one full-screen update and the stock reader's waveform, so they don't ghost.
 - The library shows `documents/` with shelves, folders, series and the current book. It opens EPUB, DRM-free MOBI, PDF and TXT.
 - Text is set in Literata with Knuth–Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
+- Add your own fonts: copy TTF or OTF files into `fonts/` on the Kindle and pick one in the reader's menu ([how](docs/install.md#your-own-fonts)).
 - Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
 - It continues where the stock reader left off ([without changing its files](docs/library.md#stock-files-sidecars-and-my-clippingstxt)) and adds highlights to `My Clippings.txt` and Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
