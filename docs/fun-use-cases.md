@@ -12,7 +12,7 @@ Turn Hacker News and your RSS feeds into one EPUB a day and copy it into `docume
 
 ```sh
 percollate epub https://example.com/long-read -o long-read.epub
-scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/
+scp -F tools/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/
 ```
 
 ## Highlights in your notes

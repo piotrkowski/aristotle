@@ -23,14 +23,14 @@
 # target: PLATO_BUILD (default $ARISTOTLE_CACHE/plato-build/main for device,
 # .../host-x86_64 for host; the host one only needs PLATO_LIBS_ONLY=1).
 # OUT defaults to $ARISTOTLE_CACHE/render/<device|host> (ARISTOTLE_CACHE comes
-# from devloop/env.sh); the device tarball goes to BUNDLE (default
+# from tools/env.sh); the device tarball goes to BUNDLE (default
 # $ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz)
 # and the reader app's to APP_BUNDLE (.../aristotle-app-device.tar.gz).
 # CARGO_CMD=clippy|test runs that cargo command instead of building.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-. "$REPO/devloop/env.sh"
+. "$REPO/tools/env.sh"
 WHAT=${1:-device}
 case $WHAT in
     device) TARGET=armv7-unknown-linux-musleabihf PFX=arm DEFAULT_BUILD=main ;;

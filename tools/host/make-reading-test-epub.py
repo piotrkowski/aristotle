@@ -8,7 +8,7 @@ A short Polish text (written for this test) with Greek and Latin words, an
 EPUB 3 footnote (noteref to an aside in a notes file), a Wolne Lektury style
 annotation link, and three chapters in the table of contents. The reader's
 preview (`aristotle --preview`) and the device scenario
-(`devloop/kindle/scenarios/reading.txt`) use it, so word positions are known.
+(`tools/scenarios/reading.txt`) use it, so word positions are known.
 """
 import sys
 import zipfile

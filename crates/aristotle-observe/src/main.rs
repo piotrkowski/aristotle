@@ -445,7 +445,7 @@ const SNAP_DIR: &str = "/mnt/us/aristotle-snaps";
 
 /// Save the visible framebuffer (1088-byte stride × 1448 rows) to
 /// `SNAP_DIR/NAME.raw`, so each scenario step can be checked by eye with
-/// `devloop/host/fb2png.py`.
+/// `tools/host/fb2png.py`.
 fn snap(name: &str) -> io::Result<()> {
     let mut fb = File::open("/dev/fb0")?;
     let mut buf = vec![0u8; 1088 * 1448];

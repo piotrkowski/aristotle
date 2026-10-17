@@ -7,10 +7,10 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
-. "$REPO/devloop/env.sh"
+. "$REPO/tools/env.sh"
 KINDLE=${KINDLE_MOUNT:-/run/media/$USER/Kindle}
 # The device accepts exactly one key: the dedicated dev-loop key that
-# devloop/host/ssh_config uses. Create it once with
+# tools/host/ssh_config uses. Create it once with
 #   mkdir -p "$ARISTOTLE_CACHE/ssh" && ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
 # or point ARISTOTLE_PUBKEY at another public key.
 PUBKEY=${ARISTOTLE_PUBKEY:-$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub}

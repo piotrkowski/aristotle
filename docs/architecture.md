@@ -16,9 +16,11 @@ Aristotle is one Rust workspace that builds static binaries for the PW4, plus sh
 Cargo.toml          the workspace; default-members leave out the two crates that link C
 .cargo/config.toml  static musl targets: armv7 for the device, x86_64 for host previews
 crates/             the Rust crates, flat; the directory name is the package name
-devloop/            env.sh, host scripts, device scripts and the agent, the emulator setup, scenarios
-probe/              the read-only device probe (a KUAL extension) and firmware unpackers
-tools/              the C cross-build, MuPDF patches, licence bundling, screenshots, RE tools
+device/             what runs on the Kindle: the KUAL extension and agent, the app's launch
+                    scripts, the read-only probe, and host-side tests of the scripts
+tools/              what runs on the host: env.sh, the C cross-build, the dev loop (host/),
+                    the emulator setup, device scenarios, firmware unpackers (probe/),
+                    licence bundling, screenshots, RE tools
 third_party/plato   our Plato fork (git submodule, branch aristotle)
 docs/, site/        developer documents and the project site
 ```
@@ -91,9 +93,9 @@ Leptos and Topcoat render HTML for a browser. On the device that means a browser
 
 None of this is in the code yet. Each step should land on its own and pass the same checks. The previews stay identical unless the step changes visuals on purpose. The device scenarios keep the same updates, modes and flashes, with latency within 10 %. The binary grows by at most 50 KB per step, and peak RAM is checked.
 
-### Workspace and xtask
+### xtask
 
-Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts that run on the Kindle's busybox. `devloop/` and `probe/` split into `device/` and `tools/`.
+Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts in `device/` that run on the Kindle's busybox.
 
 ### Structure
 
@@ -112,7 +114,7 @@ Shortcuts to remove along the way:
 - Typography steps are defined twice, in points and in pixels.
 - Screens use integer action ranges.
 - Rejected page-turn strategies (`render::screen`, `ARISTOTLE_TURN`) are still code. They belong in the devtools as benchmarks.
-- Test books come from Python scripts in `devloop/host`.
+- Test books come from Python scripts in `tools/host`.
 - Quitting needs a one-second hold on the library title.
 
 ### Dashboards and the SDK

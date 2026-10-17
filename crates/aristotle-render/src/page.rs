@@ -76,7 +76,7 @@ impl Page {
     }
 
     /// Write the raw buffer (stride included), readable by
-    /// `devloop/host/fb2png.py` like a framebuffer dump.
+    /// `tools/host/fb2png.py` like a framebuffer dump.
     pub fn write_raw(&self, path: &Path) -> io::Result<()> {
         File::create(path)?.write_all(&self.data)
     }

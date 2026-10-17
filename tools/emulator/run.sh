@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Build a crate for the Kindle, copy it into the running PW4 emulator, run it
 # over SSH and save a screenshot of the e-ink scanout.
-#   devloop/emulator/run.sh PACKAGE [ARGS...]
+#   tools/emulator/run.sh PACKAGE [ARGS...]
 # Start the emulator first with the run command that setup.sh prints; the
 # screenshot needs its --qmp-socket.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
-. "$REPO/devloop/env.sh"
+. "$REPO/tools/env.sh"
 EMU=${ARISTOTLE_EMU:-$ARISTOTLE_CACHE/emulator}/eink-emulator
 MACHINE=${ARISTOTLE_EMU_MACHINE:-pw4}
 [ $# -gt 0 ] || { echo "usage: $0 PACKAGE [ARGS...]" >&2; exit 2; }

@@ -93,7 +93,7 @@ Nothing may look broken. Each user action becomes one coherent update of its fin
 4. Overlays open and close in one step each. `screens::reader::mask_extents` places the edges of the menu's two bars in the white between lines of text. Opening sends one partial A2 update over both bars, which shows the menu in about 150 ms. Then `Panel::present_overlay` sends one full-mode gray update per bar on the `panel-sequence` thread. One update over the bounding box of both bars would redraw almost the whole page. Closing restores the page with one full mode-9 update.
 5. The night switch is one flash into the inverted state.
 
-`crates/aristotle-ui/tests/transitions.rs` checks rules 1, 2, 3 and 5 on the host from what `Ui::render` returns. The tests in `panel.rs` check how each hint becomes an EPDC request. On the device, `devloop/kindle/scenarios/aristotle-ui.txt` walks the screens with `aristotle-observe`, which counts updates and flashes per interaction from the driver's log.
+`crates/aristotle-ui/tests/transitions.rs` checks rules 1, 2, 3 and 5 on the host from what `Ui::render` returns. The tests in `panel.rs` check how each hint becomes an EPDC request. On the device, `tools/scenarios/aristotle-ui.txt` walks the screens with `aristotle-observe`, which counts updates and flashes per interaction from the driver's log.
 
 | Action | Updates | Panel time |
 | --- | --- | --- |
@@ -213,7 +213,7 @@ The language then appears in the settings.
 ## Previews and tests
 
 ```sh
-. devloop/env.sh                                     # ARISTOTLE_CACHE and TMPDIR
+. tools/env.sh                                       # ARISTOTLE_CACHE and TMPDIR
 export CARGO_TARGET_DIR=$ARISTOTLE_CACHE/target-ui
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview                      # $ARISTOTLE_CACHE/ui-preview/v2/
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang all OUT_DIR  # OUT_DIR/en, OUT_DIR/pl, ...

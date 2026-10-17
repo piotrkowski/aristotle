@@ -10,7 +10,7 @@ reach a short list of hosts, such as a dashboard server.
 The device agent (`agent/boot.sh`) and KUAL › Aristotle › Start USB network
 once (`bin/start.sh`) give `usb0` the address `192.168.15.244/24`, and
 `dropbear` listens there only. On the computer,
-`devloop/host/setup-host-net.sh` creates a NetworkManager profile for the
+`tools/host/setup-host-net.sh` creates a NetworkManager profile for the
 gadget's fixed MAC with `192.168.15.201/24` and no default route. There is no
 gateway or DHCP.
 
@@ -23,19 +23,19 @@ address appears in these files:
 |------|------|----------------|
 | `device/extension/agent/boot.sh` | device, agent | `DEV_IP`; the `netmask` in `net_up` if the prefix is not `/24` |
 | `device/extension/bin/start.sh` | device, KUAL | `DEV_IP`; the `netmask` of its `ifconfig` line likewise |
-| `devloop/host/setup-host-net.sh` | computer | the address in `ipv4.addresses` |
-| `devloop/host/ssh_config` | computer | `HostName` |
+| `tools/host/setup-host-net.sh` | computer | the address in `ipv4.addresses` |
+| `tools/host/ssh_config` | computer | `HostName` |
 
 Put both sides in the same subnet, then apply the change:
 
 1. With the device in drive mode (Settings › USB port › USB drive, or
    `aristotlectl mode storage 10` over SSH), run
-   `devloop/host/install-extensions.sh`.
+   `tools/host/install-extensions.sh`.
 2. If the agent is installed, run KUAL › Aristotle › Install agent again. The
    agent runs its own copy of `boot.sh` from `/var/local/aristotle`, and only
    the install replaces it. This writes to `/var/local`, so on someone else's
    device it needs their go-ahead.
-3. Run `devloop/host/setup-host-net.sh` again on the computer.
+3. Run `tools/host/setup-host-net.sh` again on the computer.
 4. Reconnect. SSH adds a new host key entry for the new address
    (`accept-new`).
 

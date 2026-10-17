@@ -37,7 +37,7 @@
     <h2 id="web">Send a web page to the Kindle</h2>
     <p><a href="https://github.com/danburzo/percollate">percollate</a> or pandoc can turn an article into an EPUB. Copy it to the library with <code>scp</code>:</p>
 <pre><code>percollate epub https://example.com/long-read -o long-read.epub
-scp -F devloop/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</code></pre>
+scp -F tools/host/ssh_config long-read.epub kindle:/mnt/us/documents/Inbox/</code></pre>
 
     <h2 id="notes">Highlights in your notes</h2>
     <p>Highlights are saved to <code>My Clippings.txt</code> in the stock Kindle format, which Obsidian plugins, Readwise importers and your own scripts already read. Aristotle also writes a Markdown file per book to <code>aristotle-notes/</code>.</p>

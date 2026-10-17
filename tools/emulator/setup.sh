@@ -11,7 +11,7 @@
 #   KINDLETOOL_DIR    directory with the kindletool binary, if it is not on PATH
 set -eu
 
-. "$(cd "$(dirname "$0")/../.." && pwd)/devloop/env.sh"
+. "$(cd "$(dirname "$0")/../.." && pwd)/tools/env.sh"
 EMU=${ARISTOTLE_EMU:-$ARISTOTLE_CACHE/emulator}
 FW=${ARISTOTLE_PW4_FW:-$ARISTOTLE_CACHE/firmware/pw4-5.13.6}
 INSTANCE=${1:-pw4}

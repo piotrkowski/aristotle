@@ -20,7 +20,7 @@ What the device bundle ships, with licences, is in
 - [eink-emulator](https://github.com/katadelos/eink-emulator) and its
   [QEMU fork](https://github.com/katadelos/qemu/tree/eink-emulator) emulate
   the PW4 (`imx6sll-rex`) well enough to boot the stock firmware.
-  `devloop/emulator/` sets them up for trying risky changes.
+  `tools/emulator/` sets them up for trying risky changes.
 
 ## Device knowledge
 

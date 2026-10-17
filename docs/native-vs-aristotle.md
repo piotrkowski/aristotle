@@ -10,7 +10,7 @@ This document records the stock UI's baseline, how both UIs are measured, Aristo
 - It reads `/dev/kmsg` and the touchscreen without grabbing it, and pairs each touch with the updates that follow until the screen settles (no update for 1.5 s).
 - It injects touches as evdev events into the real touchscreen node, so one script drives either UI.
 
-Scenarios live in `devloop/kindle/scenarios/` (`tap`, `hold`, `swipe`, `wait`, `label`, `go-home`, `snap`). A scenario starts from `go-home` and checks its steps with `snap` screenshots, because unchecked numbers were wrong more than once.
+Scenarios live in `tools/scenarios/` (`tap`, `hold`, `swipe`, `wait`, `label`, `go-home`, `snap`). A scenario starts from `go-home` and checks its steps with `snap` screenshots, because unchecked numbers were wrong more than once.
 
 | Metric | Meaning |
 | --- | --- |
@@ -89,7 +89,7 @@ A long MOBI novel took 2.9 s to open before snapshots [dev]. With a snapshot the
 
 ## Transitions in the Aristotle app
 
-Device, 2026-10-17, `devloop/kindle/scenarios/aristotle-transitions.txt`. The app grabs the touchscreen, so `aristotle-observe` counts its own injected taps. Times run from the release.
+Device, 2026-10-17, `tools/scenarios/aristotle-transitions.txt`. The app grabs the touchscreen, so `aristotle-observe` counts its own injected taps. Times run from the release.
 
 | Interaction | Acknowledged | Settled | Updates | Flash | Waveforms |
 | --- | --- | --- | --- | --- | --- |

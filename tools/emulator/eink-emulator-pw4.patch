@@ -1,5 +1,5 @@
 Local fixes that let stock PW4 5.13.6 reach Home in katadelos/eink-emulator 8e1e42e.
-devloop/emulator/setup.sh applies this with git apply.
+tools/emulator/setup.sh applies this with git apply.
 
 Upstream: https://github.com/katadelos/eink-emulator @8e1e42e, which carries
 no licence. This patch is ours; it is kept to the changed lines plus one line

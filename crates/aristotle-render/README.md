@@ -30,7 +30,7 @@ CARGO_CMD=test tools/build-render.sh host
 
 ```sh
 aristotle-render info   BOOK
-aristotle-render render BOOK PAGE OUT.raw     # 8-bit, stride 1088; devloop/host/fb2png.py makes a PNG
+aristotle-render render BOOK PAGE OUT.raw     # 8-bit, stride 1088; tools/host/fb2png.py makes a PNG
 aristotle-render show   BOOK PAGE             # device, stock GUI stopped
 aristotle-render bench  BOOK [PAGE] [COUNT]   # CPU only, no screen
 aristotle-render turn   BOOK START COUNT PAUSE_MS

@@ -9,7 +9,7 @@
 //!
 //! Usage: `aristotle-ui-preview [--lang CODE] [OUT_DIR]`, default
 //! `ui-preview/v2` in the cache directory, `$ARISTOTLE_CACHE` (as
-//! `devloop/env.sh` sets it). `--lang` picks the UI language (`en`, the
+//! `tools/env.sh` sets it). `--lang` picks the UI language (`en`, the
 //! default, or any embedded locale such as `pl`); `--lang all` renders every
 //! language, each into `OUT_DIR/<code>`.
 //! `ARISTOTLE_STOCK_HOME=PNG` adds `compare-library.png`, the stock home
@@ -784,7 +784,7 @@ fn targets(out: &Path) {
     println!("wrote {}", path.display());
 }
 
-/// `$ARISTOTLE_CACHE`, defaulting as `devloop/env.sh` does.
+/// `$ARISTOTLE_CACHE`, defaulting as `tools/env.sh` does.
 fn cache_dir() -> PathBuf {
     let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
     var("ARISTOTLE_CACHE")

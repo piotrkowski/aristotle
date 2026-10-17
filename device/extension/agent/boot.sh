@@ -44,7 +44,7 @@ TAKEOVER=$R/var/run/aristotle-takeover
 MOUNT_WAIT=${MOUNT_WAIT:-60}
 DEV_IP=192.168.15.244
 # Fixed MACs for both ends of the USB link, so the host's NetworkManager
-# profile (devloop/host/setup-host-net.sh) can match the interface: 02, the
+# profile (tools/host/setup-host-net.sh) can match the interface: 02, the
 # locally administered unicast prefix, then "aris" in ASCII and the end of
 # the link. Any locally administered unicast address would do. bin/start.sh
 # and setup-host-net.sh repeat them; change all three together.

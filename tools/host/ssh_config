@@ -1,6 +1,6 @@
-# Use with: ssh -F devloop/host/ssh_config kindle
-# ARISTOTLE_CACHE must be set: source devloop/env.sh first (the devloop
-# scripts do). Environment variables in IdentityFile need OpenSSH 8.4 or later.
+# Use with: ssh -F tools/host/ssh_config kindle
+# ARISTOTLE_CACHE must be set: source tools/env.sh first (the scripts in
+# tools/ do). Environment variables in IdentityFile need OpenSSH 8.4 or later.
 Host kindle
     HostName 192.168.15.244
     User root

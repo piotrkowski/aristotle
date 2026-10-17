@@ -125,12 +125,12 @@ Downloads are pinned by SHA-256. The CLI keeps converted MOBI books in `cache/` 
 The host build links the same library versions built for x86_64 musl, so host pages match the device's apart from floating-point rounding.
 
 ```sh
-. devloop/env.sh
+. tools/env.sh
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
 CARGO_CMD=test tools/build-render.sh host
 tools/build-render.sh host
 "$ARISTOTLE_CACHE/render/host/aristotle-render" render BOOK.epub 10 page.raw
-"$ARISTOTLE_CACHE/venv/bin/python" -I devloop/host/fb2png.py page.raw page.png
+"$ARISTOTLE_CACHE/venv/bin/python" -I tools/host/fb2png.py page.raw page.png
 ```
 
 `crates/aristotle-render/tests/navigation.rs` checks navigation, MOBI positions and lazy layout against a full pagination. `aristotle-render pages BOOK 20` prints all page starts plus 20 placements in fresh copies of the book, for diffing layout changes. `aristotle --library DIR --bench-open TITLE` times the open path without panel or touchscreen. Two tests are ignored by default: `real_dictionaries` needs real dictionaries, and `clippings_script` runs the script in `ARISTOTLE_CLIPPINGS_SCRIPT` on the export.
@@ -138,22 +138,22 @@ tools/build-render.sh host
 ### Preview and device scenario
 
 ```sh
-devloop/host/make-reading-test-epub.py BOOKS/proba-czytania.epub
+tools/host/make-reading-test-epub.py BOOKS/proba-czytania.epub
 "$ARISTOTLE_CACHE/render/host/aristotle" --data .../data --library LIB \
     --dict DICTIONARIES \
     --preview "$ARISTOTLE_CACHE/ui-preview/reading" BOOKS/proba-czytania.epub
 ```
 
-The test book is a short Polish text written for it, with Greek and Latin words and two kinds of footnote. The preview drives the app on an in-memory panel with synthetic touches. It writes a PNG per step, `updates.txt` with each update's waveform and rectangle, the exported `My Clippings.txt`, and `reading.txt` with the same taps as an `aristotle-observe` scenario. Copy that into `devloop/kindle/scenarios/reading.txt` after layout changes; coordinates depend on the typography and the UI language. `devloop/kindle/scenarios/aristotle-open.txt` covers opening, turning, the menu and going back while a book opens.
+The test book is a short Polish text written for it, with Greek and Latin words and two kinds of footnote. The preview drives the app on an in-memory panel with synthetic touches. It writes a PNG per step, `updates.txt` with each update's waveform and rectangle, the exported `My Clippings.txt`, and `reading.txt` with the same taps as an `aristotle-observe` scenario. Copy that into `tools/scenarios/reading.txt` after layout changes; coordinates depend on the typography and the UI language. `tools/scenarios/aristotle-open.txt` covers opening, turning, the menu and going back while a book opens.
 
 ### Running it on the device
 
 ```sh
-. devloop/env.sh
+. tools/env.sh
 PLATO_LIBS_ONLY=1 tools/build-plato.sh   # once
 tools/build-render.sh device
-ssh -F devloop/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
-ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh [--turn-mode 7]
+ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
+ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh [--turn-mode 7]
 ```
 
 The app bundle unpacks to `/mnt/us/aristotle/` with `data/`, `run-aristotle.sh`, `takeover.sh` and `guard.sh`. It lives on the userstore because `/var/tmp` is a 64 MB tmpfs. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `takeover.sh start` refuses anything but a PW4 on firmware 5.13.x unless `ARISTOTLE_FORCE=1`. Freezing the framework with SIGSTOP does not work: Amazon's watchdog killed it, and the GUI needed a reboot. The script ignores hangups and logs to `/var/tmp/aristotle.log`. Quit by holding the "Library" title for a second, or with `killall aristotle`.
@@ -188,7 +188,7 @@ A trap not yet traced in Plato's code: in a Polish book, paragraphs marked `<p l
 
 ## Formats and positions
 
-`mobi.rs` converts a DRM-free MOBI 7 book once to an uncompressed EPUB, because MuPDF's HTML layout has no Polish patterns and justifies poorly. It handles PalmDOC, UTF-8 and CP1252, images, `<mbp:pagebreak/>` chapter splits, and HTML that Plato's XML parser rejects. The language comes from EXTH 524 or the header's locale. `<a filepos=N>` links point to anchors `id="fileposN"`, as calibre writes them. DRM, HUFF/CDIC compression and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. With a cached conversion, opening reads only the PalmDB header and record 0. `devloop/host/make-test-mobi.py` makes a MOBI 7 test book from an EPUB.
+`mobi.rs` converts a DRM-free MOBI 7 book once to an uncompressed EPUB, because MuPDF's HTML layout has no Polish patterns and justifies poorly. It handles PalmDOC, UTF-8 and CP1252, images, `<mbp:pagebreak/>` chapter splits, and HTML that Plato's XML parser rejects. The language comes from EXTH 524 or the header's locale. `<a filepos=N>` links point to anchors `id="fileposN"`, as calibre writes them. DRM, HUFF/CDIC compression and KF8-only files fall back to MuPDF. `--no-convert` forces MuPDF. With a cached conversion, opening reads only the PalmDB header and record 0. `tools/host/make-test-mobi.py` makes a MOBI 7 test book from an EPUB.
 
 For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out a spine item as far as needed. For MuPDF documents, locations are page indices. `x / y` needs the whole book laid out, so `Book` also navigates by location (`page_start`, `next_page`, `previous_page`, `chapter_page`, `render_location`), and the footer leaves out the page number until `set_pagination` supplies the page starts.
 

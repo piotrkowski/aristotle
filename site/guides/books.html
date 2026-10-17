@@ -43,8 +43,8 @@
 
     <h2 id="scp">Over SSH</h2>
     <p>With the agent installed and the cable connected:</p>
-<pre><code>scp -F devloop/host/ssh_config book.epub kindle:/mnt/us/documents/
-scp -F devloop/host/ssh_config -r Platon kindle:/mnt/us/documents/</code></pre>
+<pre><code>scp -F tools/host/ssh_config book.epub kindle:/mnt/us/documents/
+scp -F tools/host/ssh_config -r Platon kindle:/mnt/us/documents/</code></pre>
     <p>Aristotle scans <code>documents/</code> when it starts, so new books appear after a restart. The saved index shows at once, and changes are added after. An unchanged library costs one <code>stat</code> per file.</p>
 
     <h2 id="organise">Folders, series and progress</h2>

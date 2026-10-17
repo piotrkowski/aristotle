@@ -15,18 +15,18 @@ Aristotle replaces the Kindle Paperwhite 4's interface. This file lists what you
 
 ## Host
 
-- Builds, downloads and probe output go under `$ARISTOTLE_CACHE`, never `/tmp`, which is a small RAM disk on many hosts. Source `devloop/env.sh` (it sets the variable and `TMPDIR`) before running cargo or `ssh -F devloop/host/ssh_config` by hand, and put `CARGO_TARGET_DIR` under the cache.
+- Builds, downloads and probe output go under `$ARISTOTLE_CACHE`, never `/tmp`, which is a small RAM disk on many hosts. Source `tools/env.sh` (it sets the variable and `TMPDIR`) before running cargo or `ssh -F tools/host/ssh_config` by hand, and put `CARGO_TARGET_DIR` under the cache.
 - Never write paths from your own machine into the repo. Name the variable.
 - Large artifacts stay out of git (`docs/pw4-reference.md`, "Host-side artifacts"). Read files from the stock rootfs image without root: `debugfs -R 'cat /etc/...' rootfs.img`.
-- `tools/fetch-tools.sh` installs pinned Ghidra, JDK 21 and JADX; then `. "$ARISTOTLE_CACHE/tools/env.sh"`. The Python helpers in `probe/host/` need a virtualenv at `$ARISTOTLE_CACHE/venv` with `python-lzo` and `fdt`.
+- `tools/fetch-tools.sh` installs pinned Ghidra, JDK 21 and JADX; then `. "$ARISTOTLE_CACHE/tools/env.sh"`. The Python helpers in `tools/probe/` need a virtualenv at `$ARISTOTLE_CACHE/venv` with `python-lzo` and `fdt`.
 - Some hosts block destructive commands (`rm -rf`, `mv` inside caches, truncating `>`). The scripts write fresh output directories and append to logs with `>>`. Keep it that way.
 - If the host mounts the Kindle read-only, remount it: `udisksctl unmount -b /dev/sdX && udisksctl mount -b /dev/sdX`.
 
 ## Running code on the device
 
-- Try anything that could hang boot, touch the stock framework or kexec in the emulator first. `devloop/emulator/setup.sh` builds katadelos' QEMU fork and a jailbroken stock PW4 5.13.6 instance under `$ARISTOTLE_CACHE/emulator`. Start it from `eink-emulator/` with `./eink run pw4 --headless --qmp-socket --serial-socket`. SSH (`ssh -i build/ssh/id_ed25519 -p 2222 root@127.0.0.1`) is up after about 30 s, Home after about 2.5 min. Under QEMU the on-screen keyboard has one language, because a second `kb` plugin crashes the guest.
-- Dev loop: run KUAL › Aristotle › Start USB network once (`device/extension`). It puts the Kindle at `192.168.15.244` on a USB network and starts KOReader's dropbear, key-only. Stop, or a reboot, undoes it. On the host, run `devloop/host/setup-host-net.sh` once. Then `devloop/host/run.sh [crate]` builds, copies to `/var/tmp`, runs and saves a framebuffer PNG, and `ssh -F devloop/host/ssh_config kindle` gives a shell. The key is `$ARISTOTLE_CACHE/ssh/kindle_ed25519`.
-- Run `devloop/host/install-extensions.sh` whenever the device is in drive mode.
+- Try anything that could hang boot, touch the stock framework or kexec in the emulator first. `tools/emulator/setup.sh` builds katadelos' QEMU fork and a jailbroken stock PW4 5.13.6 instance under `$ARISTOTLE_CACHE/emulator`. Start it from `eink-emulator/` with `./eink run pw4 --headless --qmp-socket --serial-socket`. SSH (`ssh -i build/ssh/id_ed25519 -p 2222 root@127.0.0.1`) is up after about 30 s, Home after about 2.5 min. Under QEMU the on-screen keyboard has one language, because a second `kb` plugin crashes the guest.
+- Dev loop: run KUAL › Aristotle › Start USB network once (`device/extension`). It puts the Kindle at `192.168.15.244` on a USB network and starts KOReader's dropbear, key-only. Stop, or a reboot, undoes it. On the host, run `tools/host/setup-host-net.sh` once. Then `tools/host/run.sh [crate]` builds, copies to `/var/tmp`, runs and saves a framebuffer PNG, and `ssh -F tools/host/ssh_config kindle` gives a shell. The key is `$ARISTOTLE_CACHE/ssh/kindle_ed25519`.
+- Run `tools/host/install-extensions.sh` whenever the device is in drive mode.
 - `agent/install.sh`, `bin/start.sh` and `takeover.sh start` refuse to run unless the device is a PW4 on 5.13.x (`device/extension/guard.sh`). `ARISTOTLE_FORCE=1` overrides this, which the emulator may need. After changing these scripts, run the tests in `device/tests/`.
 - `/mnt/us/aristotle-disable` keeps the agent from starting at boot. `agent/uninstall.sh` removes the agent and its SSH key.
 - Eject with `udisksctl unmount -b /dev/sda`. `udisksctl power-off` drops the device from the bus until a physical replug.

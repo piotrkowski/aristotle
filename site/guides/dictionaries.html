@@ -44,7 +44,7 @@
     <p>Aristotle indexes each dictionary the first time it sees it. The index reduces words to plain letters, so lookups ignore accents, Greek breathings and missing Polish diacritics. ψυχὴ, ΨΥΧΗ and ψυχη all find ψυχή.</p>
     <p>Missing indexes are built in the background at idle priority and stored in <code>.aristotle/dict-index/</code>. The Polish Wiktionary index is 21 MB. It took 846 ms to build on a PC and 22.9 s on the Kindle. To skip the wait, build the indexes on the computer and copy them over:</p>
 <pre><code>aristotle --index-dicts --dict DICTIONARIES --library OUT
-scp -F devloop/host/ssh_config -r OUT/dict-index kindle:/mnt/us/.aristotle/</code></pre>
+scp -F tools/host/ssh_config -r OUT/dict-index kindle:/mnt/us/.aristotle/</code></pre>
 
     <h2 id="choice">Which dictionary answers</h2>
     <p>Words in Greek script are looked up as Ancient Greek, other words in the book's language. Dictionaries into the interface language come first, so grc-en precedes grc-pl in English and follows it in Polish. Latin-script words also try the other Latin-script dictionaries, because Latin phrases turn up in Polish books.</p>

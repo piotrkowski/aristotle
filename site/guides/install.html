@@ -50,20 +50,20 @@ tools/build-render.sh device</code></pre>
 
     <h2 id="copy">Copy it over</h2>
     <p>Create the SSH key the Kindle will accept and add a NetworkManager profile for the USB network. Then connect the Kindle as a USB drive and install.</p>
-<pre><code>. devloop/env.sh        # sets ARISTOTLE_CACHE, the cache directory
+<pre><code>. tools/env.sh        # sets ARISTOTLE_CACHE, the cache directory
 mkdir -p "$ARISTOTLE_CACHE/ssh"
 ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
-devloop/host/setup-host-net.sh
-devloop/host/install-extensions.sh</code></pre>
+tools/host/setup-host-net.sh
+tools/host/install-extensions.sh</code></pre>
     <p>If the Kindle is not mounted at <code>/run/media/$USER/Kindle</code>, set <code>KINDLE_MOUNT</code>. The script copies the app to <code>aristotle/</code> on the Kindle with its licences and <code>SOURCE.txt</code>, adds two KUAL extensions and ejects the Kindle.</p>
 
     <h2 id="agent">Start the agent</h2>
     <p>On the Kindle, open <strong>KUAL › Aristotle › Install agent</strong>. After that you can reach the Kindle over SSH whenever the cable is connected:</p>
-<pre><code>ssh -F devloop/host/ssh_config kindle</code></pre>
+<pre><code>ssh -F tools/host/ssh_config kindle</code></pre>
     <p class="note">For SSH without installing the agent, use KUAL › Aristotle › Start USB network once. It lasts until the next reboot.</p>
 
     <h2 id="run">Run</h2>
-<pre><code>ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh</code></pre>
+<pre><code>ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh</code></pre>
     <p>Aristotle stops the stock interface while it runs. To quit, hold the "Library" title for a second. The stock interface returns after its boot splash, in 30 to 60 seconds. A reboot also brings it back.</p>
 
     <h2 id="uninstall">Uninstall</h2>

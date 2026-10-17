@@ -33,7 +33,7 @@ is a small RAM disk on many hosts. Do the same for your own cargo runs:
 ```sh
 git clone --recurse-submodules https://github.com/piotrkowski/aristotle
 cd aristotle
-. devloop/env.sh   # ARISTOTLE_CACHE, and TMPDIR inside it
+. tools/env.sh   # ARISTOTLE_CACHE, and TMPDIR inside it
 export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
 
 cargo test                                                   # default members
@@ -58,13 +58,13 @@ Everything that runs on the Kindle is a static
    each panel update with its waveform and rectangle. Compare the logs before
    and after your change.
 2. Test anything that could hang boot, touch the stock framework or load
-   kernel code in the emulator (`devloop/emulator/setup.sh`).
-3. On the device, use the dev loop in `devloop/`. No recovery path is verified
+   kernel code in the emulator (`tools/emulator/setup.sh`).
+3. On the device, use the dev loop in `tools/host/`. No recovery path is verified
    yet, so never write to the root filesystem, the boot partitions, `/mnt/wfm`
    or `/var/local` on someone's device without their consent.
 
 If your change affects what reaches the panel, run the device scenarios in
-`devloop/kindle/scenarios/` with `aristotle-observe run SCRIPT`. Unless the
+`tools/scenarios/` with `aristotle-observe run SCRIPT`. Unless the
 change is meant to alter them, the updates and waveforms should stay the same
 and latency should stay within 10 %. Numbers in the docs are tagged `[dev]` for
 the device and `[host]` for the PC.

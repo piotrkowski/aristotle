@@ -12,7 +12,7 @@
 # one, regenerate with `--lang CODE` and run the app with the same.
 #
 # Setup, once:
-#   devloop/host/make-reading-test-epub.py proba-czytania.epub
+#   tools/host/make-reading-test-epub.py proba-czytania.epub
 #   copy it to /mnt/us/documents/Aristotle/, and build the dictionary
 #   indexes on the host (aristotle --index-dicts) into
 #   /mnt/us/.aristotle/dict-index/ (else the device builds them at start;
@@ -26,7 +26,7 @@
 #   /var/tmp/aristotle-observe run /var/tmp/reading.txt
 #   ssh kindle md5sum "/mnt/us/documents/My Clippings.txt"   # unchanged
 #   ssh kindle cat "/var/tmp/reading-test/My Clippings.txt"  # the test highlight
-# Snapshots go to /mnt/us/aristotle-snaps/NAME.raw (devloop/host/fb2png.py).
+# Snapshots go to /mnt/us/aristotle-snaps/NAME.raw (tools/host/fb2png.py).
 wait 3000
 snap 00-open
 label menu

@@ -4,7 +4,7 @@ Facts about the device and its stock firmware. `AGENTS.md` has the short list of
 
 Each fact is marked by its source:
 
-- **[fw]** read from the stock firmware 5.13.6 update package on the host. `probe/host/` reproduces it.
+- **[fw]** read from the stock firmware 5.13.6 update package on the host. `tools/probe/` reproduces it.
 - **[dev]** observed on our device.
 - **[ko]** taken from KOReader's device support code and not yet confirmed by our own probe.
 
@@ -180,11 +180,11 @@ The stock GUI stack uses about 200 MB of 490 MB, `cvm` alone 125 MB RSS [dev]. `
 
 ## Host-side artifacts
 
-Large artifacts stay in the cache directory `$ARISTOTLE_CACHE` (`devloop/env.sh`) as local working copies. Firmware, decompiled code and probe dumps are never committed (`.github/CONTRIBUTING.md`, "What this project will never include").
+Large artifacts stay in the cache directory `$ARISTOTLE_CACHE` (`tools/env.sh`) as local working copies. Firmware, decompiled code and probe dumps are never committed (`.github/CONTRIBUTING.md`, "What this project will never include").
 
 | Path | What |
 | --- | --- |
 | `$ARISTOTLE_CACHE/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here |
 | `$ARISTOTLE_CACHE/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
-| `$ARISTOTLE_CACHE/probe/static/` | Output of `probe/host/`: kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs |
+| `$ARISTOTLE_CACHE/probe/static/` | Output of `tools/probe/`: kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs |
 | `$ARISTOTLE_CACHE/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |
