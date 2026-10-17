@@ -22,8 +22,8 @@ if [ -e /etc/upstart/aristotle.conf ]; then
 fi
 
 mkdir -p "$S"
-cp "$HERE/boot.sh" "$HERE/aristotlectl" "$S/"
-chmod 755 "$S/boot.sh" "$S/aristotlectl"
+cp "$HERE/boot.sh" "$HERE/aristotlectl" "$HERE/net.sh" "$S/"
+chmod 755 "$S/boot.sh" "$S/aristotlectl" "$S/net.sh"
 if [ -s "$EXT/authorized_keys" ]; then
     cp "$EXT/authorized_keys" "$S/authorized_keys"
 fi

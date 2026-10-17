@@ -49,7 +49,7 @@ CONF=$R/etc/upstart/aristotle-agent.conf
 PIDFILE=$R/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
 # FILES: what install.sh puts in $S. STATE: what the old agent kept there.
-FILES="boot.sh aristotlectl"
+FILES="boot.sh aristotlectl net.sh"
 STATE="authorized_keys usb-mode takeover last-reboot gui-restarted log log.1"
 VERIFY_SECS=${VERIFY_SECS:-30}
 POLL_SECS=${POLL_SECS:-3}

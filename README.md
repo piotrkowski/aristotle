@@ -152,6 +152,7 @@ the plan.
 - [The reader](docs/reader.md): how Plato's engine is built in, typesetting, opening books, dictionaries, highlights
 - [UI framework](docs/ui-framework.md): the toolkit, e-ink rules, night mode
 - [Library](docs/library.md): formats, metadata, covers, stock Kindle sidecars and clippings
+- [Network](docs/network.md): offline by default, and the scoped Wi-Fi policy
 - [E-ink rendering](docs/eink-rendering.md): how the panel driver behaves and how latency is measured
 - [Stock Kindle vs Aristotle](docs/native-vs-aristotle.md): the measurements
 - [Paperwhite 4 reference](docs/pw4-reference.md): hardware, kernel and stock userspace

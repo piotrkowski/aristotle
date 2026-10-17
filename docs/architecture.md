@@ -7,7 +7,7 @@ This is the target structure of Aristotle and the plan for getting there. Parts 
 - **One static binary per device.** Extensions are Rust traits with compile-time registries (`const` slices), selected by Cargo features. There is no runtime plugin system: static musl binaries can't `dlopen`, and Rust has no stable ABI. Code from outside the binary comes in as data (dashboard documents, books, dictionaries) or as a separate program (external apps).
 - **Pure-Rust crates build and test on any host.** Only `aristotle-render` (Plato's engine and its C libraries) and the app link C code.
 - **Device facts live in one place, the device profile.** Everything else speaks in semantic update kinds ("page turn", "flash", "gray chrome"), never in raw waveform numbers.
-- **Offline first.** Every network feature is optional, off by default, and switched on per use.
+- **Offline first.** Every network feature is optional, off by default, and switched on per use. Wi-Fi is either left to the stock system or scoped to an allowlist of hosts ([Network](network.md)).
 - **English is the source language.** Other languages are catalogs checked at compile time.
 
 ## Repository

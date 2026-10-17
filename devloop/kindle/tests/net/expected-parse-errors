@@ -1,0 +1,4 @@
+net-allow: bad host in 'bad_host.example.org'
+net-allow: bad host in '-x.example.org'
+net-allow: bad port in 'dash.example.org:http'
+net-allow: bad port in 'dash.example.org:70000'
