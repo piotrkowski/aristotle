@@ -11,4 +11,6 @@ rustflags = ["-C", "target-feature=+crt-static"]
 # the same way against the C libraries tools/build-plato.sh builds for the PC.
 [target.x86_64-unknown-linux-musl]
 linker = "rust-lld"
-rustflags = ["-C", "target-feature=+crt-static"]
+# Non-PIE: Rust defaults to static-pie on x86_64 musl, but the C archives are
+# built without -fPIC (as on the device, where static executables are not PIE).
+rustflags = ["-C", "target-feature=+crt-static", "-C", "relocation-model=static"]

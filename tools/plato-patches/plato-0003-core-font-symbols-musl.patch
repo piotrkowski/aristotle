@@ -1,0 +1,42 @@
+Use the C-array names for MuPDF's embedded fonts (_binary_<name>) on any
+musl target. Zig-built MuPDF uses them on x86_64 as on ARM; Plato assumes
+the ld -b binary names (_binary_resources_fonts_..._start) on x86 Linux.
+
+--- a/crates/core/src/font/mod.rs
++++ b/crates/core/src/font/mod.rs
+@@ -98,7 +98,7 @@
+     size: FONT_SIZES[0],
+ };
+ 
+-#[cfg(any(not(target_os = "linux"), target_arch = "arm"))]
++#[cfg(any(not(target_os = "linux"), target_arch = "arm", target_env = "musl"))]
+ #[link(name="mupdf")]
+ extern "C" {
+     // Based on the outputs of:
+@@ -265,7 +265,7 @@
+     pub static _binary_NotoSerifYezidi_Regular_otf: [libc::c_uchar; 8664];
+ }
+ 
+-#[cfg(all(target_os = "linux", not(target_arch = "arm")))]
++#[cfg(all(target_os = "linux", not(target_arch = "arm"), not(target_env = "musl")))]
+ #[link(name="mupdf")]
+ extern "C" {
+     pub static _binary_resources_fonts_droid_DroidSansFallback_ttf_start: [libc::c_uchar; 3556308];
+@@ -624,7 +624,7 @@
+ #[inline]
+ unsafe fn font_data_from_script(script: HbScript) -> &'static [libc::c_uchar] {
+     // Extracted from mupdf in source/fitz/noto.c
+-    #[cfg(any(not(target_os = "linux"), target_arch = "arm"))]
++    #[cfg(any(not(target_os = "linux"), target_arch = "arm", target_env = "musl"))]
+     match script {
+         HB_SCRIPT_HANGUL |
+         HB_SCRIPT_HIRAGANA |
+@@ -794,7 +794,7 @@
+         _ => &_binary_DroidSansFallback_ttf,
+     }
+ 
+-    #[cfg(all(target_os = "linux", not(target_arch = "arm")))]
++    #[cfg(all(target_os = "linux", not(target_arch = "arm"), not(target_env = "musl")))]
+     match script {
+         HB_SCRIPT_HANGUL |
+         HB_SCRIPT_HIRAGANA |
