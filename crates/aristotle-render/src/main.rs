@@ -50,6 +50,8 @@ struct Args {
     force: bool,
     /// Page turns show an A2 preview first (experimental, may ghost).
     a2_preview: bool,
+    /// Page turns use one full update with this waveform mode instead.
+    turn_mode: Option<u32>,
     style: Style,
 }
 
@@ -58,6 +60,7 @@ fn parse_args() -> Result<Args, Error> {
     let mut positional = Vec::new();
     let (mut data, mut percent, mut bw, mut force) = (None, false, false, false);
     let mut a2_preview = false;
+    let mut turn_mode = None;
     let (mut cache, mut no_convert) = (None, false);
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -74,6 +77,7 @@ fn parse_args() -> Result<Args, Error> {
             "--bw" => bw = true,
             "--force" => force = true,
             "--a2-preview" => a2_preview = true,
+            "--turn-mode" => turn_mode = Some(value("--turn-mode")?.parse()?),
             "-h" | "--help" => bail!("{}", usage()),
             s if s.starts_with("--") => bail!("unknown option {s}\n{}", usage()),
             _ => positional.push(arg),
@@ -93,6 +97,7 @@ fn parse_args() -> Result<Args, Error> {
         bw,
         force,
         a2_preview,
+        turn_mode,
         style,
     })
 }
@@ -100,6 +105,8 @@ fn parse_args() -> Result<Args, Error> {
 fn turn_strategy(args: &Args) -> TurnStrategy {
     if args.a2_preview {
         TurnStrategy::A2Preview
+    } else if let Some(mode) = args.turn_mode {
+        TurnStrategy::Single(mode)
     } else {
         TurnStrategy::Stock
     }
@@ -107,7 +114,7 @@ fn turn_strategy(args: &Args) -> TurnStrategy {
 
 fn usage() -> &'static str {
     "usage: aristotle-render [--data DIR] [--font-size PT] [--line-height EM] [--margin MM] [--lang TAG]\n\
-     \x20                       [--cache DIR] [--no-convert] [--percent] [--bw] [--force] [--a2-preview] COMMAND\n\
+     \x20                       [--cache DIR] [--no-convert] [--percent] [--bw] [--force] [--a2-preview] [--turn-mode N] COMMAND\n\
      commands:\n\
      \x20 info   BOOK\n\
      \x20 render BOOK PAGE OUT.raw\n\
@@ -417,6 +424,47 @@ fn bench(args: &Args, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// Page turns as a reader app should do them: the next page is rendered
+/// while the panel is busy with the current one, so a turn costs only the
+/// panel's time. Reports the time from the (simulated) tap to the page being
+/// on the panel, which is what the reader waits for.
+fn turn_pipelined(
+    book: &mut Book,
+    chrome: &mut Chrome,
+    screen: &mut Screen,
+    start: usize,
+    count: usize,
+    pause: Duration,
+    strategy: TurnStrategy,
+) -> Result<(), Error> {
+    println!(
+        "{:>6} {:>12} {:>12}   (ms; pipelined)",
+        "page", "tap->shown", "prerender"
+    );
+    let mut next = Some(book.render_page(start + 1, chrome)?);
+    let (mut shown, mut prerender) = (Vec::new(), Vec::new());
+    for index in start + 1..=start + count {
+        std::thread::sleep(pause);
+        let Some(page) = next.take() else { break };
+        let tap = Instant::now();
+        let marker = screen.submit(&page, strategy)?;
+        // The CPU is free while the panel refreshes: prepare the next page.
+        let t = Instant::now();
+        next = book.render_page(index + 1, chrome).ok();
+        let t_pre = t.elapsed();
+        screen.finish(marker)?;
+        let t_shown = tap.elapsed();
+        println!("{:>6} {:>12.1} {:>12.1}", index + 1, ms(t_shown), ms(t_pre));
+        shown.push(ms(t_shown));
+        prerender.push(ms(t_pre));
+    }
+    println!();
+    stats("tap->shown", shown);
+    stats("prerender", prerender);
+    println!("max RSS {:.1} MiB", max_rss_mib());
+    Ok(())
+}
+
 fn turn(args: &Args, path: &Path) -> Result<(), Error> {
     check_gui(args)?;
     let start = page_index(arg(args, 1, "START")?)?;
@@ -437,6 +485,18 @@ fn turn(args: &Args, path: &Path) -> Result<(), Error> {
         "page", "render", "visible", "settled", "vis_total", "set_total"
     );
 
+    let strategy = turn_strategy(args);
+    if strategy != TurnStrategy::A2Preview {
+        return turn_pipelined(
+            &mut book,
+            &mut chrome,
+            &mut screen,
+            start,
+            count,
+            pause,
+            strategy,
+        );
+    }
     let (mut vis, mut set, mut vis_t, mut ren) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for index in start + 1..=start + count {
         std::thread::sleep(pause);

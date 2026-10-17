@@ -19,6 +19,9 @@ use crate::page::Page;
 pub enum TurnStrategy {
     /// One full mode-9 update of the whole screen, like the stock reader.
     Stock,
+    /// One full update of the whole screen with another waveform mode, to
+    /// compare single-step turns (for example DU4, mode 7, about 344 ms).
+    Single(u32),
     /// A thresholded A2 preview first (legible after about 150 ms), then the
     /// full mode-9 update. Only for experiments: may ghost.
     A2Preview,
@@ -68,9 +71,32 @@ impl Screen {
         Ok(start.elapsed())
     }
 
+    /// Start a single-step turn to `page` and return at once (about 1 ms),
+    /// so the caller can render the next page while the panel works. Finish
+    /// with [`Screen::finish`]. Not for [`TurnStrategy::A2Preview`].
+    pub fn submit(&mut self, page: &Page, strategy: TurnStrategy) -> io::Result<Option<u32>> {
+        self.blit(page);
+        let waveform = match strategy {
+            TurnStrategy::Single(mode) => Waveform(mode),
+            _ => Waveform::GLKW16,
+        };
+        let all = self.fb.full_screen();
+        self.fb.update(all, waveform, true)
+    }
+
+    /// Wait until the update started by [`Screen::submit`] is on the panel.
+    pub fn finish(&mut self, marker: Option<u32>) -> io::Result<()> {
+        self.fb.wait(marker)
+    }
+
     /// Turn to `page`, whose black and white version `bw` is only used by
     /// [`TurnStrategy::A2Preview`].
-    pub fn turn(&mut self, page: &Page, bw: &Page, strategy: TurnStrategy) -> io::Result<TurnTimes> {
+    pub fn turn(
+        &mut self,
+        page: &Page,
+        bw: &Page,
+        strategy: TurnStrategy,
+    ) -> io::Result<TurnTimes> {
         let start = Instant::now();
         let mut visible = None;
         if strategy == TurnStrategy::A2Preview {
@@ -83,7 +109,11 @@ impl Screen {
         // Always the whole screen in full mode: a smaller or partial update
         // leaves the previous page's ghost in pixels that did not change.
         let all = self.fb.full_screen();
-        let marker = self.fb.update(all, Waveform::GLKW16, true)?;
+        let waveform = match strategy {
+            TurnStrategy::Single(mode) => Waveform(mode),
+            _ => Waveform::GLKW16,
+        };
+        let marker = self.fb.update(all, waveform, true)?;
         self.fb.wait(marker)?;
         let settled = start.elapsed();
         Ok(TurnTimes {

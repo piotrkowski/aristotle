@@ -97,3 +97,14 @@ done
 file "$OUT/aristotle-render"
 ls -l "$OUT/aristotle-render"
 du -sh "$OUT/data"
+
+# Device bundle: binary plus data, rebuilt from what was just built so an
+# upload can never carry a stale binary (it once did). Unpack streamed, since
+# /var on the device is a 64 MB tmpfs:
+#   ssh kindle 'tar -xzf - -C /var/tmp' < ~/.cache/aristotle/render/aristotle-render-device.tar.gz
+if [ "$WHAT" = device ]; then
+    BUNDLE="$HOME/.cache/aristotle/render/aristotle-render-device.tar.gz"
+    tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data
+    mv -f "$BUNDLE.part" "$BUNDLE"
+    ls -l "$BUNDLE"
+fi
