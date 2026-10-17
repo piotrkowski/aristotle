@@ -1,7 +1,8 @@
 #!/bin/sh
 # Host-side test of the device scripts other than the migration: the device
 # guard (aristotle-usbnet/guard.sh) in install.sh, bin/start.sh and
-# takeover.sh, uninstall.sh, and the kill switch in boot.sh.
+# takeover.sh, uninstall.sh, the kill switch in boot.sh, and the takeover
+# flag.
 #
 #   sh devloop/kindle/tests/agent.sh
 #
@@ -305,6 +306,47 @@ r=$(booted nomount)
 : > "$r/proc/mounts"
 boot "$r" 1
 check "gives up on the check and starts" "wait_for $r/calls '^dropbear ' && grep -q 'kill switch not checked' $r/var/local/aristotle/log"
+
+# persistent ROOT: the files outside the tmpfs (/var/local, /etc) with their
+# checksums.
+persistent() {
+    find "$1/var/local" "$1/etc" -type f | sort | while read -r f; do
+        cksum "$f"
+    done
+}
+
+echo "takeover: the flag is runtime state only"
+r=$(booted takeover)
+persistent "$r" > "$r.before"
+run "$r" takeover.sh start
+check "exit status 0" "[ $? = 0 ]"
+check "stock GUI stopped" "called $r 'stop lab126_gui'"
+check "flag on the tmpfs" "[ -e $r/var/run/aristotle-takeover ]"
+check "nothing persistent written, so a reboot is stock" "persistent $r | cmp -s - $r.before"
+check "aristotlectl sees it" "AGENT_TEST_ROOT=$r sh $r/var/local/aristotle/aristotlectl status 2> /dev/null | grep -q 'takeover: on'"
+run "$r" takeover.sh stop
+check "stop clears it and restarts the stock GUI" "[ ! -e $r/var/run/aristotle-takeover ] && called $r 'start lab126_gui'"
+AGENT_TEST_ROOT=$r sh "$r/var/local/aristotle/aristotlectl" takeover on
+check "aristotlectl takeover on: on the tmpfs" "[ -e $r/var/run/aristotle-takeover ] && persistent $r | cmp -s - $r.before"
+AGENT_TEST_ROOT=$r sh "$r/var/local/aristotle/aristotlectl" takeover off
+check "aristotlectl takeover off" "[ ! -e $r/var/run/aristotle-takeover ]"
+
+echo "takeover: a flag an earlier version left on persistent storage"
+r=$(booted oldflag)
+: > "$r/var/local/aristotle/takeover"
+boot "$r"
+check "boot removes it" "wait_for $r/var/local/aristotle/log 'removed a takeover flag' && [ ! -e $r/var/local/aristotle/takeover ]"
+
+echo "takeover: with the agent from before the rename"
+r=$(device legacy "$PW4_SN" 5.13.6)
+mkdir -p "$r/var/local/aristotle"
+printf 'old boot\n' > "$r/var/local/aristotle/boot.sh"
+chmod 755 "$r/var/local/aristotle/boot.sh"
+run "$r" takeover.sh start
+check "its flag is set too" "[ -e $r/var/local/aristotle/takeover ] && [ -e $r/var/run/aristotle-takeover ]"
+check "no new agent directory created" "[ ! -e $r/var/local/aristotle ]"
+run "$r" takeover.sh stop
+check "stop clears both" "[ ! -e $r/var/local/aristotle/takeover ] && [ ! -e $r/var/run/aristotle-takeover ]"
 
 if [ $failures = 0 ]; then
     echo "agent: all checks passed"

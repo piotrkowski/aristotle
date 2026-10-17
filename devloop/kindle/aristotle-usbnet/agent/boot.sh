@@ -16,7 +16,8 @@
 #   then back to net automatically;
 # - a watchdog that restarts the stock GUI if it stays dead for 5 minutes, and
 #   reboots at most once an hour if that does not help. It stays out of the
-#   way while Aristotle has taken over (/var/local/aristotle/takeover exists);
+#   way while Aristotle has taken over (/var/run/aristotle-takeover exists;
+#   /var is a tmpfs, so a reboot clears it and the watchdog is back);
 # - the Wi-Fi policy (net.sh, docs/network.md): nothing in "off", the default;
 #   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
 #   address, the resolvers or the list change.
@@ -34,6 +35,7 @@ LOG=$S/log
 KO=$R/mnt/us/koreader
 PIDFILE=$R/var/run/aristotle-dropbear.pid
 DISABLE=$R/mnt/us/aristotle-disable
+TAKEOVER=$R/var/run/aristotle-takeover
 # How long to wait for the userstore (/mnt/us) before giving up on the kill
 # switch check.
 MOUNT_WAIT=${MOUNT_WAIT:-60}
@@ -139,7 +141,7 @@ gui_alive() {
 gui_bad=0
 gui_good=0
 gui_check() {
-    if [ -e "$S/takeover" ]; then
+    if [ -e "$TAKEOVER" ]; then
         gui_bad=0
         return
     fi
@@ -191,6 +193,12 @@ if [ -e "$DISABLE" ]; then
     exec sleep 2147483647
 fi
 
+# Earlier versions kept the takeover flag here, on persistent storage, where a
+# reboot during a takeover left it behind and the watchdog off for good.
+if [ -e "$S/takeover" ]; then
+    rm -f "$S/takeover"
+    log "agent: removed a takeover flag left in $S"
+fi
 # iptables rules do not survive a reboot; make the first tick apply the
 # Wi-Fi policy again.
 rm -f "$S/net-sig"

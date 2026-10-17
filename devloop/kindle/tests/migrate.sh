@@ -143,7 +143,7 @@ check "new job file installed" "cmp -s $AGENT/aristotle-agent.conf $r/etc/upstar
 check "old job file removed" "[ ! -e $r/etc/upstart/aristotle.conf ]"
 check "one read-write window" "[ \"\$(cat $r/mntroot.log | tr '\n' ' ')\" = 'rw ro ' ]"
 check "agent scripts installed" "[ -x $r/var/local/aristotle/boot.sh ] && [ -x $r/var/local/aristotle/aristotlectl ]"
-check "state copied" "cmp -s $r/var/local/aristotle/authorized_keys $r/var/local/aristotle/authorized_keys && [ -e $r/var/local/aristotle/takeover ] && grep -q 'agent: boot' $r/var/local/aristotle/log"
+check "state copied" "cmp -s $r/var/local/aristotle/authorized_keys $r/var/local/aristotle/authorized_keys && [ -e $r/var/run/aristotle-takeover ] && [ ! -e $r/var/local/aristotle/takeover ] && grep -q 'agent: boot' $r/var/local/aristotle/log"
 check "old state kept" "[ -f $r/var/local/aristotle/aristotlectl ]"
 check "dropbear handed over, not restarted" "[ \"\$(cat $r/var/run/aristotle-dropbear.pid)\" = $dropbear ] && [ ! -e $r/var/run/aristotle-dropbear.pid ]"
 check "new job running, old one stopped" "running $r aristotle-agent && ! running $r aristotle"

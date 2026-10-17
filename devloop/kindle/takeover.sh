@@ -19,8 +19,10 @@
 # refuses unless the stock UI is fully up, and holds poll_daemons while frozen.
 # It is still unproven; don't build on it.
 #
-# Nothing is written to the root filesystem: everything here is runtime state,
-# so a reboot always returns the stock system. Kept running on purpose: powerd
+# Nothing is written to persistent storage: everything here is runtime state,
+# so a reboot in the middle of a takeover, or after it, always returns the
+# stock system. The flag that keeps the agent's watchdog from restarting the
+# stock GUI, /var/run/aristotle-takeover, is on the /var tmpfs too. Kept running on purpose: powerd
 # (power keys, battery, suspend), volumd (USB mass storage), wifid, lipcd and
 # dbus, plus our USB network and SSH.
 #
@@ -40,16 +42,12 @@ GUI=lab126_gui
 # Background services that only serve the stock UI or Amazon's cloud.
 # Same list KOReader stops to reclaim RAM, plus telemetry.
 EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
-# The agent's state directory, where its watchdog looks for the takeover flag.
-# Agents installed before the project's rename use /var/local/aristotle until
-# the device has run agent/migrate.sh; drop that fallback once none does.
-AGENT_DIRS="/var/local/aristotle /var/local/aristotle"
-agent_dir() {
-    for d in $AGENT_DIRS; do
-        [ -x "$d/boot.sh" ] && { echo "$d"; return; }
-    done
-    echo /var/local/aristotle
-}
+TAKEOVER=$R/var/run/aristotle-takeover
+# An agent installed before the project's rename (until the device has run
+# agent/migrate.sh) looks for the flag in its persistent state directory
+# instead, where a reboot does not clear it; its watchdog then stays off
+# until the next stop. Drop this once no device runs it.
+LEGACY=$R/var/local/aristotle
 # The device guard: beside this script in the app bundle and the KUAL
 # extension, one level down in the repository, or in the installed extension
 # when the script comes on stdin (sh -s).
@@ -87,8 +85,8 @@ start)
     guard || exit 1
     mem
     # Tell the agent's watchdog that the stock GUI is down on purpose.
-    dir=$(agent_dir)
-    mkdir -p "$dir" && touch "$dir/takeover"
+    touch "$TAKEOVER"
+    [ -x "$LEGACY/boot.sh" ] && touch "$LEGACY/takeover"
     stop "$GUI" > /dev/null 2>&1
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
@@ -106,9 +104,7 @@ start)
     mem
     ;;
 stop)
-    for d in $AGENT_DIRS; do
-        rm -f "$d/takeover"
-    done
+    rm -f "$TAKEOVER" "$LEGACY/takeover" "$R/var/local/aristotle/takeover"
     for job in $EXTRA; do
         start "$job" > /dev/null 2>&1
     done

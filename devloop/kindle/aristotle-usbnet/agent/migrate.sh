@@ -14,9 +14,10 @@
 #     script. Nothing has changed if one fails.
 #  2. Backup to /var/local/aristotle-migrate/<UTC stamp>/: the old job file
 #     and a copy of /var/local/aristotle.
-#  3. Copies the state (key, USB mode, takeover and watchdog flags, log) into
-#     /var/local/aristotle and installs the agent's scripts there. The old
-#     directory is left as it was.
+#  3. Copies the state (key, USB mode, watchdog flags, log) into
+#     /var/local/aristotle and installs the agent's scripts there; the old
+#     takeover flag becomes /var/run/aristotle-takeover, which a reboot
+#     clears. The old directory is left as it was.
 #  4. Stops the old job and hands its dropbear pid file to the new agent.
 #  5. In one `mntroot rw` window: installs /etc/upstart/aristotle-agent.conf
 #     and removes /etc/upstart/aristotle.conf.
@@ -51,7 +52,7 @@ PIDFILE=$R/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
 # FILES: what install.sh puts in $S. STATE: what the old agent kept there.
 FILES="boot.sh aristotlectl net.sh"
-STATE="authorized_keys usb-mode takeover last-reboot gui-restarted log log.1"
+STATE="authorized_keys usb-mode last-reboot gui-restarted log log.1"
 VERIFY_SECS=${VERIFY_SECS:-30}
 POLL_SECS=${POLL_SECS:-3}
 # The agent ticks every 15 s; dropbear and usb0 may need one tick.
@@ -156,6 +157,7 @@ done
 if [ ! -s "$S/authorized_keys" ]; then
     cp "$EXT/authorized_keys" "$S/authorized_keys" || fail "cannot copy authorized_keys"
 fi
+[ -e "$OLD_S/takeover" ] && touch "$R/var/run/aristotle-takeover"
 for f in $FILES; do
     cp "$HERE/$f" "$S/$f" && chmod 755 "$S/$f" || fail "cannot install $f"
 done

@@ -84,7 +84,7 @@ rm -rf "$S" "$BACKUPS"
 
 # Last, the network: an SSH session that started us ends here.
 [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2> /dev/null
-rm -f "$PIDFILE"
+rm -f "$PIDFILE" "$R/var/run/aristotle-takeover"
 iptables -D INPUT -i usb0 -j ACCEPT 2> /dev/null
 iptables -D OUTPUT -o usb0 -j ACCEPT 2> /dev/null
 ifconfig usb0 down 2> /dev/null
