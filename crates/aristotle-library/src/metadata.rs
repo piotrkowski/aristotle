@@ -117,8 +117,283 @@ pub fn extract(
         Format::Cbz => crate::epub::extract_cbz(path, want_cover)?,
         Format::Txt => Extracted::default(),
     };
+    // MOBI and PDF have no sort names, and their author fields are often
+    // inverted or several names run together; EPUB has file-as instead.
+    if matches!(format, Format::Mobi | Format::Azw3 | Format::Pdf) {
+        if let Some(fixed) = author_dir.and_then(|d| authors_from_folder(&ex.meta.authors, d)) {
+            ex.meta.authors = fixed;
+        }
+    }
     finish(&mut ex.meta, path, author_dir);
     Ok(ex)
+}
+
+/// Common given names (folded), used only to tell which end of a two-part
+/// name is the given name. Polish first, then frequent foreign ones in the
+/// owner's library. A name missing here only makes the heuristic abstain.
+const GIVEN_NAMES: &[&str] = &[
+    "adam",
+    "adrianna",
+    "agata",
+    "agnieszka",
+    "aleksander",
+    "aleksandra",
+    "alicja",
+    "andrzej",
+    "anna",
+    "antoni",
+    "artur",
+    "barbara",
+    "bartosz",
+    "beata",
+    "boleslaw",
+    "bozena",
+    "cezary",
+    "czeslaw",
+    "damian",
+    "danuta",
+    "dariusz",
+    "dawid",
+    "dorota",
+    "edward",
+    "edyta",
+    "elzbieta",
+    "emilia",
+    "ewa",
+    "ewelina",
+    "filip",
+    "gabriela",
+    "grazyna",
+    "grzegorz",
+    "halina",
+    "hanna",
+    "helena",
+    "henryk",
+    "ignacy",
+    "igor",
+    "ilona",
+    "irena",
+    "iwona",
+    "izabela",
+    "jacek",
+    "jadwiga",
+    "jakub",
+    "jan",
+    "janina",
+    "janusz",
+    "jaroslaw",
+    "jerzy",
+    "joanna",
+    "jolanta",
+    "jozef",
+    "julia",
+    "juliusz",
+    "justyna",
+    "kacper",
+    "kamil",
+    "kamila",
+    "karol",
+    "karolina",
+    "katarzyna",
+    "kazimierz",
+    "kinga",
+    "klaudia",
+    "konrad",
+    "krystyna",
+    "krzysztof",
+    "leszek",
+    "lucyna",
+    "lukasz",
+    "maciej",
+    "magdalena",
+    "maja",
+    "malgorzata",
+    "marcin",
+    "marek",
+    "maria",
+    "marian",
+    "marta",
+    "martyna",
+    "mateusz",
+    "michal",
+    "mieczyslaw",
+    "miroslaw",
+    "monika",
+    "natalia",
+    "olga",
+    "oliwia",
+    "patrycja",
+    "paulina",
+    "pawel",
+    "piotr",
+    "przemyslaw",
+    "rafal",
+    "renata",
+    "robert",
+    "roman",
+    "ryszard",
+    "sebastian",
+    "slawomir",
+    "stanislaw",
+    "stanislawa",
+    "sylwia",
+    "szymon",
+    "tadeusz",
+    "teresa",
+    "tomasz",
+    "urszula",
+    "waldemar",
+    "weronika",
+    "wieslaw",
+    "wiktoria",
+    "witold",
+    "wladyslaw",
+    "wojciech",
+    "zbigniew",
+    "zofia",
+    "zuzanna",
+    "zygmunt",
+    "albert",
+    "arthur",
+    "carl",
+    "charles",
+    "christopher",
+    "daniel",
+    "david",
+    "elizabeth",
+    "emily",
+    "ernest",
+    "franz",
+    "friedrich",
+    "fyodor",
+    "george",
+    "haruki",
+    "isaac",
+    "james",
+    "jane",
+    "john",
+    "joseph",
+    "karl",
+    "kenneth",
+    "klaus",
+    "leo",
+    "margaret",
+    "mark",
+    "mary",
+    "matthew",
+    "michael",
+    "milan",
+    "niccolo",
+    "noah",
+    "paul",
+    "peter",
+    "richard",
+    "sarah",
+    "simone",
+    "stephen",
+    "steven",
+    "susan",
+    "thomas",
+    "umberto",
+    "ursula",
+    "viktor",
+    "virginia",
+    "william",
+];
+
+fn is_given(word: &str) -> bool {
+    GIVEN_NAMES.contains(&text::fold(word).as_str())
+}
+
+/// Rebuilds the authors from the folder name when that is clearly better
+/// than the embedded field, else `None`.
+///
+/// Device folders such as "Lecki Tomasz, Zolkiewska Jadwiga" are sort
+/// names, ASCII-folded, comma-separated, while a MOBI may say "Żółkiewska Jadwiga
+/// Łęcki Tomasz" in one author field. The folder is used only if:
+///
+/// - its words are exactly the embedded words (ignoring case, diacritics and
+///   punctuation), so it describes the same people, and
+/// - it fixes something: it splits one field into several authors, or it
+///   reveals an inverted "Surname Given" field.
+///
+/// Which word is the given name is decided by [`GIVEN_NAMES`]. When neither
+/// end is a known given name, a comma-separated folder with several authors
+/// is taken as surname-first (a sort list); a single ambiguous name is left
+/// alone. Spelling with diacritics always comes from the embedded field.
+pub fn authors_from_folder(embedded: &[Author], folder: &str) -> Option<Vec<Author>> {
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let emb: Vec<String> = embedded.iter().flat_map(|a| words(&a.name)).collect();
+    let groups: Vec<Vec<String>> = folder
+        .split([',', '&', ';'])
+        .map(words)
+        .filter(|g| !g.is_empty())
+        .collect();
+    if emb.is_empty() || groups.is_empty() {
+        return None;
+    }
+    let mut a: Vec<String> = emb.iter().map(|w| text::fold(w)).collect();
+    let mut b: Vec<String> = groups.iter().flatten().map(|w| text::fold(w)).collect();
+    a.sort();
+    b.sort();
+    if a != b {
+        return None;
+    }
+    let several = groups.len() > 1;
+    let mut used = vec![false; emb.len()];
+    let mut out: Vec<(usize, Author)> = Vec::new();
+    for g in &groups {
+        // Restore the embedded spelling (diacritics) word by word.
+        let mut orig = Vec::new();
+        let mut first_at = usize::MAX;
+        for w in g {
+            let f = text::fold(w);
+            let i = (0..emb.len()).find(|&i| !used[i] && text::fold(&emb[i]) == f)?;
+            used[i] = true;
+            first_at = first_at.min(i);
+            orig.push(emb[i].clone());
+        }
+        let author = if orig.len() == 1 {
+            Author::new(&orig[0], None)
+        } else {
+            let (first, last) = (&orig[0], &orig[orig.len() - 1]);
+            let surname_first = match (is_given(first), is_given(last)) {
+                (false, true) => true,
+                (true, false) => false,
+                _ if several => true,
+                _ => return None,
+            };
+            if surname_first {
+                let given = orig[1..].join(" ");
+                Author::new(
+                    &format!("{given} {first}"),
+                    Some(&format!("{first}, {given}")),
+                )
+            } else {
+                let given = orig[..orig.len() - 1].join(" ");
+                Author::new(
+                    &format!("{given} {last}"),
+                    Some(&format!("{last}, {given}")),
+                )
+            }
+        };
+        out.push((first_at, author));
+    }
+    // Keep the order in which the book names its authors.
+    out.sort_by_key(|(i, _)| *i);
+    let fixed: Vec<Author> = out.into_iter().map(|(_, a)| a).collect();
+    let same =
+        fixed.len() == embedded.len() && fixed.iter().zip(embedded).all(|(x, y)| x.name == y.name);
+    if same {
+        None
+    } else {
+        Some(fixed)
+    }
 }
 
 fn finish(meta: &mut Metadata, path: &Path, author_dir: Option<&str>) {
@@ -177,6 +452,54 @@ pub fn title_from_filename(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn names(v: &[Author]) -> Vec<(&str, &str)> {
+        v.iter()
+            .map(|a| (a.name.as_str(), a.sort.as_str()))
+            .collect()
+    }
+
+    #[test]
+    fn folder_fixes_run_together_inverted_authors() {
+        let emb = [Author::new("Żółkiewska Jadwiga Łęcki Tomasz", None)];
+        let fixed = authors_from_folder(&emb, "Lecki Tomasz, Zolkiewska Jadwiga").unwrap();
+        assert_eq!(
+            names(&fixed),
+            [
+                ("Jadwiga Żółkiewska", "Żółkiewska, Jadwiga"),
+                ("Tomasz Łęcki", "Łęcki, Tomasz")
+            ]
+        );
+    }
+
+    #[test]
+    fn folder_fixes_single_inverted_author() {
+        let emb = [Author::new("Schopenhauer Arthur", None)];
+        let fixed = authors_from_folder(&emb, "Arthur Schopenhauer").unwrap();
+        assert_eq!(
+            names(&fixed),
+            [("Arthur Schopenhauer", "Schopenhauer, Arthur")]
+        );
+        // Folder in sort order works too.
+        assert_eq!(
+            names(&authors_from_folder(&emb, "Schopenhauer Arthur").unwrap()),
+            names(&fixed)
+        );
+    }
+
+    #[test]
+    fn folder_is_ignored_unless_clearly_better() {
+        // Already right.
+        assert!(
+            authors_from_folder(&[Author::new("Adam Mickiewicz", None)], "Mickiewicz Adam")
+                .is_none()
+        );
+        // Different people.
+        assert!(authors_from_folder(&[Author::new("Bolesław Prus", None)], "Różni").is_none());
+        // Ambiguous single name: neither word is a known given name.
+        assert!(authors_from_folder(&[Author::new("Xyz Qwe", None)], "Qwe Xyz").is_none());
+        assert!(authors_from_folder(&[Author::new("Platon", None)], "Platon").is_none());
+    }
 
     #[test]
     fn filename_titles() {

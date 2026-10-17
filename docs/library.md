@@ -2,7 +2,7 @@
 
 `crates/aristotle-library` finds, identifies and describes the books on the device, keeps their reading state, and imports what earlier readers left behind. It is pure Rust with no C dependencies and builds statically for `armv7-unknown-linux-musleabihf`. `aristotle-library-cli` drives it from a shell on the host or over SSH on the Kindle.
 
-Sources are marked as in the rest of the docs: **[fw]** read from firmware 5.13.6, **[host]** verified on the host with real files, **[KOReader]**, **[calibre]** borrowed from those projects, and **[inference]** for anything not yet confirmed.
+Sources are marked as in the rest of the docs: **[fw]** read from firmware 5.13.6, **[host]** verified on the host with real files, **[dev]** verified on files copied from our device, **[KOReader]**, **[calibre]** borrowed from those projects, and **[inference]** for anything not yet confirmed.
 
 ## Layout
 
@@ -43,6 +43,12 @@ Every book gets a title. Precedence, highest first:
 
 1. Metadata embedded in the file.
 2. The folder layout: on the device books sit in `documents/<Author>/`, so a book without an embedded author takes the name of the first folder below the root.
+
+   For MOBI, AZW3 and PDF, which have no sort names, the folder can also repair embedded authors. Device folders look like "Lecki Tomasz, Zolkiewska Jadwiga": ASCII-folded sort names separated by commas. The folder is used only when it is clearly better:
+   - its words are exactly the embedded words, ignoring case, diacritics and punctuation;
+   - it either splits one embedded field into several authors ("Żółkiewska Jadwiga Łęcki Tomasz" becomes "Jadwiga Żółkiewska" and "Tomasz Łęcki") or reveals an inverted name ("Schopenhauer Arthur" becomes "Arthur Schopenhauer", sort "Schopenhauer, Arthur").
+
+   A short list of common Polish and foreign given names decides which end of a name is the given name. When neither end is a known given name, a comma-separated list of several authors is read as surname-first; a single ambiguous name is left alone. Spelling with diacritics always comes from the book. EPUB is not touched, because its `file-as` is authoritative.
 3. The file name, for the title, with `_` turned into spaces and a trailing shop product code after `__` dropped (`Obrona_Sokratesa__p1234567890.epub` → "Obrona Sokratesa"). `title_source: "filename"` marks such guesses.
 
 Per format:
@@ -186,11 +192,11 @@ For `<dir>/<name>.<ext>` the stock reader uses `<dir>/<name>.sdr/<name><sidecar-
 
 The folder also holds the following:
 
-- **`.apnx`:** page numbers, user-supplied or from calibre.
+- **`.apnx`:** the page map (printed page starts), user-supplied or from calibre. Layout below, **[dev]**.
 - **`.han`/`.tan`:** legacy annotation and cache files.
 - **`.mbp`:** the old PalmDB format. Firmware 5.x only reads it once through `MobiLegacyProvider`, migrates it into the KRDS files and deletes it; no `.mbp` writer exists in 5.13.6. Older sidecars from KOReader (`metadata.<ext>.lua`) live in the same `.sdr` folders.
 
-Both KRDS files use the Kindle Reader Data Store serialisation (`ReaderContentSDK.jar`, `ObjectReader`/`ObjectWriter`/`State`). It is big-endian `DataOutputStream`:
+Both KRDS files use the Kindle Reader Data Store serialisation (`ReaderContentSDK.jar`, `ObjectReader`/`ObjectWriter`/`State`). It is big-endian `DataOutputStream`. The layout below is **[fw]**. It also matches, byte for byte, the four `.mbs`/`.mbp1` files copied from our device for two sideloaded MOBIs opened on 5.13.6 **[dev]**.
 
 ```text
 00 00 00 00 00 1A B1 26        magic (untagged)
@@ -207,28 +213,70 @@ Top-level objects:
 - **Rare file:** `annotation.cache.object`, `font.prefs`, `erl`, `sync_lpr`, `language.store`.
 - **Also seen:** `timer.model`, `book.info.store`, `apnx.key`, `next.in.series.info.data`, `reader.state.preferences` and others.
 
+What the device files actually contain **[dev]**:
+
+- **`.mbs` (freq, about 700 bytes),** six objects in this order:
+  - `timer.model`: longs, a double, and nested `timer.average.calculator…` objects (reading-speed statistics);
+  - `fpr`;
+  - `book.info.store`: a long and a double of unknown meaning (25226 and 0.53; 5077 and 0.022);
+  - `page.history.store`: int 0;
+  - `whisperstore.migration.status`: two bools;
+  - `lpr`.
+- **`.mbp1` (rare, 1.1 and 8.9 KB),** four objects:
+  - `next.in.series.info.data`: utf, `{"suppressed":false}` or empty;
+  - `annotation.cache.object`: int 0 in both samples (no annotations);
+  - `apnx.key`: a cached copy of the page map. It holds utf "1", utf "EBOK", a bool, an int n+1, then n+1 ints: a leading 0 followed by the n page starts of the `.apnx`. Then int 1, int n, int n and the utf page-map scheme `(1,a,1)`. The page starts are what makes the larger file 8.9 KB (1,732 pages);
+  - `ReaderMetrics`: int 1, then the utf strings `bookLaunchedBefore` and `true`.
+
+  The rare file has no `font.prefs`, `erl` or `sync_lpr` here; they are presumably written only when used **[inference]**.
+
 Object layouts:
 
-- **`lpr`:** byte 2, utf position, long epoch ms. An older form is a bare utf.
-- **`fpr`:** utf position, long ms, long local-time offset, utf country, utf source device.
-- **`annotation.cache.object`:** int n, then n times an int type (0 bookmark, 1 highlight, 2 note, 3 clip) followed by a `saved.avl.interval.tree` of `annotation.personal.*` objects. Each object holds utf start, utf end, long created ms, long modified ms, and a utf tags/flags list; notes add a utf with the note text. Highlighted text itself is not stored, only its positions.
+- **`lpr` [fw][dev]:** byte 2, utf position, long epoch ms. Seen on the device: `"7510:7510:11:REFUQQAA…"`.
+  - Two equal decimal positions come first. The third field (11 and 29 in the samples) is of unknown meaning.
+  - Then base64 of 132 bytes of reader render state: `DATA` (length 0x7c) holding `EBAR` and `EBVS` chunks, with the position and a nearby earlier position (7433) inside.
+  - The timestamp was the time the book was last closed. The firmware also accepts a bare utf, and `pos:n:n:base64` for positions migrated from `.mbp` **[fw]**.
+- **`fpr` [fw][dev]:** utf position, long ms, long local-time offset, utf country, utf source device. On the device: `"84521"`, -1, -1, null, null.
+- **`annotation.cache.object` [fw]:** int n, then n times an int type (0 bookmark, 1 highlight, 2 note, 3 clip) followed by a `saved.avl.interval.tree` of `annotation.personal.*` objects. Each object holds utf start, utf end, long created ms, long modified ms, and a utf tags/flags list; notes add a utf with the note text. Highlighted text itself is not stored, only its positions. **Not yet seen with entries on the device**, so this layout is unverified there.
 
 Positions:
 
-- **MOBI and AZW3:** decimal byte offsets into the book text. Positions imported from an old `.mbp` are `pos:n:n:base64`.
-- **PDF:** `a b c nRects [x y w h]…`, field meaning not checked.
-- **KFX:** `serialized:positionId`.
+- **MOBI [dev]:** the first `:`-separated field is a decimal byte offset into the uncompressed book text. AZW3 is the same per the firmware **[fw]**, not yet seen on the device.
+- **PDF [fw]:** `a b c nRects [x y w h]…`, field meaning not checked.
+- **KFX [fw]:** `serialized:positionId`.
+
+Checked against the stock UI, via the page maps: `7510` lies on page 4 of 180 (1.8%), shown as 2%; `49114` lies on page 22 of 1,732 (1.2%), shown as 1% **[dev]**.
+
+`.apnx` page map **[dev]** (both samples, written by calibre; big-endian):
+
+```text
+u16 1, u16 1, u32 offset of the page header, u32 length of JSON 1
+JSON 1   {"contentGuid":"…","asin":"…","cdeType":"EBOK","fileRevisionId":"1"}
+header   u16 1, u16 length of JSON 2, u16 page count, u16 32
+JSON 2   {"asin":"…","pageMap":"(1,a,1)"}
+u32 × page count   start position of each page (here every 2300 positions)
+```
+
+`pageMap` lists `(first page, a|r, first number)` groups: arabic or roman numbering from a given page.
 
 **What we import** (`sidecar` module; on scan for new books, or `aristotle-library-cli import-sidecars`):
 
-- **Progress from `lpr`**, for MOBI and AZW3. The fraction is the position divided by the uncompressed text length from record 0, using the KF8 header's length when the sidecar is an `.azw3f`/`.azw3r`. The locator is `kindle { position }`, timestamped with the `lpr` time; a fraction of 0.99 or more marks the book finished.
+- **Progress from `lpr`**, for MOBI and AZW3.
+  - The position is the first decimal field of the string.
+  - The fraction is the position divided by the uncompressed text length from record 0, using the KF8 header's length when the sidecar is an `.azw3f`/`.azw3r`. Without a text length, the `.apnx` page map gives the fraction instead: the page index plus the share of the current page, over the page count.
+  - The page label (for "page 4 of 180") comes from the page map.
+  - The locator is `kindle { position }`, timestamped with the `lpr` time; a fraction of 0.99 or more marks the book finished.
 - **Bookmarks, highlights and notes** with their start/end positions, creation time and note text. Kindle locations are derived as position / 150 + 1 (**[calibre]**'s constant; **[inference]** that 5.x uses the same).
 - **Not imported:**
   - PDF and KFX positions (semantics not traced);
   - `fpr` (kept for later);
   - font preferences (they map to the stock fonts, not ours).
 
-The parser is tested against KRDS files built to the firmware's layout. **It has not yet been run against a sidecar from our device.** That is the first thing to check once the device is plugged in: the `.sdr` folders on `/mnt/us/documents` can be copied read-only from the USB mount.
+The unit tests build `.mbs`, `.mbp1` and `.apnx` files with the device layouts and invented values; the owner's files are not committed. An ignored test parses real copies: `ARISTOTLE_SDR_SAMPLES=~/.cache/aristotle/sdr-samples cargo test -p aristotle-library device_samples -- --ignored --nocapture`.
+
+Firmware 5.13.6 used `.mbs`/`.mbp1` (MOBI 7 class) for both sideloaded `.mobi` books, not `.azw3f` **[dev]**.
+
+Bug fixed after the first device run: the first version expected a bare decimal `lpr`, so it imported nothing from real sidecars. A scan imports sidecars only for books new to the index, so for books indexed earlier use `import-sidecars`. It reports how many books have sidecars and how many changed.
 
 ### KOReader
 
@@ -303,8 +351,8 @@ On the device: the static `armv7-unknown-linux-musleabihf` release binary of `ar
 
 ## Open issues
 
-- **Stock sidecars are unverified on real data.** The KRDS reader follows the decompiled 5.13.6 code, but no `.azw3f`/`.mbs` file from our Kindle has been parsed yet. Polish clipping labels are a best guess for the same reason.
+- **Stock annotations are unverified on real data.** The `.mbs`/`.mbp1`/`.apnx` layouts and `lpr` positions are verified on device copies, but neither sample had bookmarks, highlights or notes, and no `.azw3f`/`.azw3r` (KF8) sidecar has been seen yet. Polish clipping labels are still a best guess.
 - **No PDF thumbnails.** That needs page rendering (MuPDF in the reader). GIF and WebP covers are not decoded.
 - **KOReader highlights** are not imported, only progress and status.
-- **Author name order in MOBI.** EXTH 100 can carry a wrong name order ("Schopenhauer Arthur" in one sample), and MOBI has no `file-as` to fix it.
+- **Author name order in MOBI.** EXTH 100 can be inverted or run several names together ("Żółkiewska Jadwiga Łęcki Tomasz"). The author folder repairs this when it is clearly the same people (see Metadata); otherwise the embedded order stays.
 - **Thumbnail size.** Stored as 8-bit PGM; packing to 4 bits would halve them if storage ever matters.

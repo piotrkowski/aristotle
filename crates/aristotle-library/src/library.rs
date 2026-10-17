@@ -456,23 +456,37 @@ impl Library {
 
     /// Imports stock Kindle and KOReader sidecars for every book. Returns
     /// how many books changed.
-    pub fn import_sidecars(&mut self) -> (usize, Vec<String>) {
+    pub fn import_sidecars(&mut self) -> SidecarImport {
+        let mut res = SidecarImport::default();
         let Some(root) = self.root() else {
-            return (0, vec![]);
+            return res;
         };
-        let mut changed = 0;
-        let mut errors = Vec::new();
         for b in &mut self.index.books {
             let outcome = apply_sidecars(b, &root.join(&b.file.path));
-            changed += usize::from(outcome.changed());
-            errors.extend(outcome.errors);
+            res.changed += usize::from(outcome.changed());
+            res.with_sidecars += usize::from(outcome.found);
+            res.errors.extend(outcome.errors);
         }
-        (changed, errors)
+        res
     }
+}
+
+/// Result of [`Library::import_sidecars`].
+#[derive(Debug, Default)]
+pub struct SidecarImport {
+    /// Books whose progress or annotations changed.
+    pub changed: usize,
+    /// Books with a readable stock or KOReader sidecar, changed or not. A
+    /// scan already imports the sidecars of new books, so a later import
+    /// usually finds them up to date.
+    pub with_sidecars: usize,
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Default)]
 pub struct SidecarOutcome {
+    /// A stock or KOReader sidecar was found and parsed.
+    pub found: bool,
     pub progress: bool,
     pub annotations: usize,
     pub errors: Vec<String>,
@@ -490,6 +504,7 @@ impl SidecarOutcome {
 pub fn apply_sidecars(rec: &mut BookRecord, abs: &Path) -> SidecarOutcome {
     let sc = sidecar::read_sidecars(abs);
     let mut out = SidecarOutcome {
+        found: sc.kindle.is_some() || sc.koreader.is_some(),
         errors: sc.errors,
         ..Default::default()
     };
@@ -519,6 +534,7 @@ pub fn apply_sidecars(rec: &mut BookRecord, abs: &Path) -> SidecarOutcome {
                     locator,
                     updated: k.modified.unwrap_or(0),
                     source: Some("koreader".into()),
+                    page: None,
                 };
                 candidates.push((p, k.status));
             }
@@ -526,7 +542,7 @@ pub fn apply_sidecars(rec: &mut BookRecord, abs: &Path) -> SidecarOutcome {
     }
     if let Some(st) = &sc.kindle {
         if let (Some((pos, ts)), Format::Mobi | Format::Azw3) = (&st.last_read, rec.format) {
-            if let Ok(position) = pos.trim().parse::<u64>() {
+            if let Some(position) = sidecar::kindle_position(pos) {
                 let lens = crate::mobi::text_lengths(abs).ok();
                 let kf8 = sc
                     .kindle_ext
@@ -535,12 +551,23 @@ pub fn apply_sidecars(rec: &mut BookRecord, abs: &Path) -> SidecarOutcome {
                 let len = lens
                     .and_then(|(m, k)| if kf8 { k.or(Some(m)) } else { Some(m) })
                     .filter(|&l| l > 0);
-                if let Some(len) = len {
+                // The text length is exact; the page map is the fallback
+                // (its last page start is close to the end of the text).
+                let fraction = match len {
+                    Some(len) => Some(position as f64 / len as f64),
+                    None => sc.page_map.as_ref().and_then(|m| m.fraction(position)),
+                };
+                if let Some(fraction) = fraction {
+                    let page = sc
+                        .page_map
+                        .as_ref()
+                        .and_then(|m| Some(m.label(m.page_index(position)?)));
                     let p = Progress {
-                        fraction: (position as f64 / len as f64).min(1.0) as f32,
+                        fraction: fraction.clamp(0.0, 1.0) as f32,
                         locator: Locator::Kindle { position },
                         updated: ts.map(|t| t / 1000).unwrap_or(0),
                         source: Some("kindle".into()),
+                        page,
                     };
                     candidates.push((p, None));
                 }
@@ -665,6 +692,78 @@ mod tests {
     use super::*;
     use crate::index::AnnotationKind;
 
+    /// The device case that once imported nothing: a MOBI under an author
+    /// folder whose `.sdr` holds `.mbs`, `.mbp1` and `.apnx` in the layouts
+    /// seen on firmware 5.13.6, with an `lpr` of "pos:pos:n:base64" form.
+    #[test]
+    fn device_layout_sidecars_import_position_and_percent() {
+        let dir = crate::testdir("device-sdr");
+        let root = dir.join("documents");
+        let book = root.join("Adam Mickiewicz/Pan Tadeusz - Adam Mickiewicz.mobi");
+        let sdr = root.join("Adam Mickiewicz/Pan Tadeusz - Adam Mickiewicz.sdr");
+        fs::create_dir_all(&sdr).unwrap();
+        // No text length in record 0, so the page map supplies the percent.
+        fs::write(
+            &book,
+            crate::mobi::testutil::build("Pan Tadeusz", &[(100, "Adam Mickiewicz".as_bytes())], &[], 6),
+        )
+        .unwrap();
+        let pages = sidecar::testutil::even_pages(180);
+        let lpr = "7510:7510:11:REFUQQAAAHxFQkFSAAAAAQAAAABFQlZT";
+        fs::write(
+            sdr.join("Pan Tadeusz - Adam Mickiewicz.mbs"),
+            sidecar::testutil::device_mbs(lpr, "84521", 1_792_229_945_807),
+        )
+        .unwrap();
+        fs::write(
+            sdr.join("Pan Tadeusz - Adam Mickiewicz.mbp1"),
+            sidecar::testutil::device_mbp1(&pages),
+        )
+        .unwrap();
+        fs::write(
+            sdr.join("Pan Tadeusz - Adam Mickiewicz.apnx"),
+            sidecar::testutil::apnx(&pages, "(1,a,1)"),
+        )
+        .unwrap();
+
+        // Scan without the automatic import, then import explicitly, as the
+        // CLI's import-sidecars does.
+        let mut lib = Library::open(dir.join("data")).unwrap();
+        let opts = ScanOptions {
+            import_sidecars: false,
+            covers: false,
+            ..ScanOptions::default()
+        };
+        lib.scan(&root, &opts).unwrap();
+        assert!(lib.books()[0].progress.is_none());
+        let r = lib.import_sidecars();
+        assert_eq!((r.changed, r.with_sidecars, r.errors.len()), (1, 1, 0));
+        let b = &lib.books()[0];
+        let p = b.progress.as_ref().unwrap();
+        assert_eq!(p.locator, Locator::Kindle { position: 7510 });
+        assert_eq!(
+            (p.page.as_deref(), p.updated, b.status),
+            (Some("4"), 1_792_229_945, Status::Reading)
+        );
+        assert_eq!((p.fraction * 100.0).round(), 2.0, "stock reader shows 2 %");
+
+        // With the text length known, it is used instead (exact).
+        let mut mobi = crate::mobi::testutil::build("Pan Tadeusz", &[], &[], 6);
+        mobi[88 + 4..88 + 8].copy_from_slice(&375_500u32.to_be_bytes());
+        fs::write(&book, mobi).unwrap();
+        let mut lib = Library::open(dir.join("data2")).unwrap();
+        lib.scan(
+            &root,
+            &ScanOptions {
+                covers: false,
+                ..ScanOptions::default()
+            },
+        )
+        .unwrap();
+        let p = lib.books()[0].progress.clone().unwrap();
+        assert!((p.fraction - 0.02).abs() < 1e-6, "{}", p.fraction);
+    }
+
     #[test]
     fn kindle_sidecar_progress_and_annotations() {
         let dir = crate::testdir("kindle-sdr");
@@ -708,9 +807,10 @@ mod tests {
                 locator: Locator::Kindle { position: 27_000 },
                 updated: 2_000_000_000,
                 source: None,
+                page: None,
             },
         );
-        assert_eq!(lib.import_sidecars().0, 0);
+        assert_eq!(lib.import_sidecars().changed, 0);
         assert_eq!(
             lib.book(&id).unwrap().progress.as_ref().unwrap().fraction,
             0.9
