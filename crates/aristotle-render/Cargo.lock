@@ -65,6 +65,7 @@ version = "0.1.0"
 dependencies = [
  "aristotle-hal",
  "libc",
+ "percent-encoding",
  "plato-core",
  "zip",
 ]

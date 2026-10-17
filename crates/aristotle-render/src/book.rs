@@ -9,10 +9,28 @@ use plato_core::document::{self, file_kind, Document, Location, TocEntry};
 use plato_core::framebuffer::Pixmap;
 use plato_core::metadata::TextAlign;
 
+use plato_core::geom::CycleDir;
+
 use crate::lang;
 use crate::mobi::MobiInfo;
 use crate::page::{Chrome, Folio, Page};
+use crate::position::{PosMap, Spine};
 use crate::style::Style;
+
+/// A reading position in units that outlive one layout (see
+/// [`crate::position`]): what the library index stores.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Position {
+    /// EPUB spine item and byte offset inside it.
+    Spine { item: usize, offset: usize },
+    /// Stock Kindle position: byte offset into the MOBI text.
+    Kindle(u64),
+    /// Zero-based page of a fixed-layout document.
+    Page(usize),
+    /// Share of the book read, 0 to 1: the fallback when nothing exact is
+    /// known (KOReader XPointers, a format the renderer reads differently).
+    Fraction(f32),
+}
 
 /// Which engine lays the book out. It decides what a "location" is and how
 /// the page is placed on the screen.
@@ -45,6 +63,8 @@ pub struct Book {
     /// Whether `pages` covers the whole book.
     complete: bool,
     mobi: Option<MobiConversion>,
+    /// Spine item sizes, to convert Plato locations to spine positions.
+    spine: Option<Spine>,
 }
 
 /// A MOBI book opened through its converted EPUB (see [`crate::mobi`]).
@@ -55,6 +75,8 @@ pub struct MobiConversion {
     pub epub: PathBuf,
     /// False when the EPUB came from the cache.
     pub converted_now: bool,
+    /// MOBI positions to EPUB locations; `None` if the map is missing.
+    pub posmap: Option<PosMap>,
 }
 
 /// How the book will be hyphenated.
@@ -91,6 +113,7 @@ impl Book {
                     kind = "epub".into();
                     mobi = Some(MobiConversion {
                         info,
+                        posmap: crate::mobi::load_posmap(&epub),
                         epub,
                         converted_now,
                     });
@@ -157,7 +180,16 @@ impl Book {
 
         let toc = doc.toc().unwrap_or_default();
         let title = doc.title().filter(|t| !t.trim().is_empty());
+        // Only trusted when it agrees with Plato's own idea of the size.
+        let spine = if engine == Engine::Plato {
+            Spine::read(path)
+                .ok()
+                .filter(|s| s.total() == doc.pages_count())
+        } else {
+            None
+        };
         Ok(Book {
+            spine,
             doc,
             engine,
             style: style.clone(),
@@ -320,10 +352,170 @@ impl Book {
             .unwrap_or_default();
         Folio {
             header,
-            page: index + 1,
+            page: Some(index + 1),
             pages: self.known_page_count(),
             progress: self.progress(index, location),
         }
+    }
+
+    // Navigation by location, for the reader app. A reader opens a book at
+    // a saved position and turns from there, so it cannot depend on page
+    // indices, which need the whole book laid out first (seconds on the
+    // device). Indices come in later from a background pagination
+    // ([`Book::set_pagination`]) and only feed "x / y".
+
+    /// Size of the location space: bytes of text for Plato's engine, pages
+    /// otherwise.
+    pub fn len(&self) -> usize {
+        self.doc.pages_count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Start of the page that contains `location` (clamped to the book),
+    /// laying out its chapter if needed.
+    pub fn page_start(&mut self, location: usize) -> Option<usize> {
+        let last = self.len().checked_sub(1)?;
+        let location = location.min(last);
+        match self.engine {
+            Engine::Plato => self
+                .doc
+                .resolve_location(Location::Exact(location))
+                .or_else(|| self.doc.resolve_location(Location::Exact(0))),
+            _ => Some(location),
+        }
+    }
+
+    /// Start of the page after the one starting at `location`.
+    pub fn next_page(&mut self, location: usize) -> Option<usize> {
+        self.doc
+            .resolve_location(Location::Next(location))
+            .filter(|&n| n > location)
+    }
+
+    /// Start of the page before the one starting at `location`.
+    pub fn previous_page(&mut self, location: usize) -> Option<usize> {
+        self.doc
+            .resolve_location(Location::Previous(location))
+            .filter(|&p| p < location)
+    }
+
+    /// Start of the next (or previous) chapter in the table of contents.
+    pub fn chapter_page(&mut self, location: usize, forward: bool) -> Option<usize> {
+        let dir = if forward {
+            CycleDir::Next
+        } else {
+            CycleDir::Previous
+        };
+        let target = self
+            .doc
+            .chapter_relative(location, dir, &self.toc)
+            .map(|entry| entry.location.clone())?;
+        let found = self.doc.resolve_location(target)?;
+        self.page_start(found)
+    }
+
+    /// Take page locations found elsewhere (a background pagination, or a
+    /// cache on disk) as the whole book's pagination. They must come from
+    /// the same file and style. Ignored for engines that know their pages.
+    pub fn set_pagination(&mut self, pages: Vec<usize>) {
+        if self.engine == Engine::Plato && !pages.is_empty() {
+            self.pages = pages;
+            self.complete = true;
+        }
+    }
+
+    /// The start of every page, once the whole book has been laid out.
+    pub fn pagination(&self) -> Option<&[usize]> {
+        (self.engine == Engine::Plato && self.complete).then_some(&self.pages[..])
+    }
+
+    /// Index of the page starting at or before `location`, if known
+    /// without laying anything out.
+    pub fn index_of(&self, location: usize) -> Option<usize> {
+        if self.engine != Engine::Plato {
+            return Some(location);
+        }
+        let last = *self.pages.last()?;
+        if !self.complete && location > last {
+            return None;
+        }
+        Some(
+            self.pages
+                .partition_point(|&p| p <= location)
+                .saturating_sub(1),
+        )
+    }
+
+    /// Position in the book, 0 to 1: "x / y" when the pages are known,
+    /// else the share of the text before `location`.
+    pub fn fraction(&self, location: usize) -> f32 {
+        match (self.known_page_count(), self.index_of(location)) {
+            (Some(total), Some(index)) => (index + 1) as f32 / total.max(1) as f32,
+            _ => location as f32 / self.len().max(1) as f32,
+        }
+    }
+
+    /// The location of a saved position, if this book can place it exactly
+    /// or by fraction. Not necessarily a page start (see
+    /// [`Book::page_start`]).
+    pub fn location_of(&self, position: &Position) -> Option<usize> {
+        let len = self.len();
+        let by_fraction =
+            |f: f32| ((f.clamp(0.0, 1.0) * len as f32) as usize).min(len.saturating_sub(1));
+        match (self.engine, position) {
+            (_, Position::Fraction(f)) => Some(by_fraction(*f)),
+            (Engine::Plato, Position::Spine { item, offset }) if self.mobi.is_none() => {
+                self.spine.as_ref()?.location(*item, *offset)
+            }
+            (Engine::Plato, Position::Kindle(p)) => self
+                .mobi
+                .as_ref()
+                .and_then(|m| m.posmap.as_ref())
+                .map(|m| m.location(*p) as usize),
+            (Engine::MupdfReflow | Engine::Fixed, Position::Page(i)) => {
+                Some((*i).min(len.saturating_sub(1)))
+            }
+            _ => None,
+        }
+    }
+
+    /// The most exact position of `location` this book can name.
+    pub fn position_at(&self, location: usize) -> Position {
+        match self.engine {
+            Engine::Plato => {
+                if let Some(map) = self.mobi.as_ref().and_then(|m| m.posmap.as_ref()) {
+                    Position::Kindle(map.position(location as u64))
+                } else if let (None, Some(spine)) = (&self.mobi, &self.spine) {
+                    let (item, offset) = spine.coordinates(location);
+                    Position::Spine { item, offset }
+                } else {
+                    Position::Fraction(location as f32 / self.len().max(1) as f32)
+                }
+            }
+            _ => Position::Page(location),
+        }
+    }
+
+    /// Render the page starting at `location`, with header and footer.
+    pub fn render_location(&mut self, location: usize, chrome: &mut Chrome) -> Result<Page, Error> {
+        let body = self
+            .render_body(location)
+            .ok_or_else(|| format_err!("can't render the page at {location}"))?;
+        let header = self
+            .chapter_title(location)
+            .or_else(|| self.title.clone())
+            .unwrap_or_default();
+        let index = self.index_of(location);
+        let folio = Folio {
+            header,
+            page: index.map(|i| i + 1),
+            pages: self.known_page_count(),
+            progress: self.fraction(location),
+        };
+        Ok(self.compose(&body, &folio, chrome))
     }
 
     /// Locate, render and compose page `index` (0-based).

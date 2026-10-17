@@ -24,6 +24,7 @@ pub mod book;
 pub mod lang;
 pub mod mobi;
 pub mod page;
+pub mod position;
 pub mod screen;
 pub mod style;
 

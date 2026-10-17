@@ -15,6 +15,8 @@ description = "E-book page renderer for Aristotle on the PW4, built on Plato's d
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
 libc = "0.2"
+# Same version as plato-core, to decode spine hrefs exactly as it does.
+percent-encoding = "2.3.2"
 plato-core = { path = "../../third_party/plato-patched/crates/core" }
 # Same version as plato-core uses, to read EPUB metadata it does not expose.
 zip = "7.0.0"

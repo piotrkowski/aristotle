@@ -138,8 +138,9 @@ impl Framebuffer for Page {
 pub struct Folio {
     /// Chapter title, or the book title when the chapter is unknown.
     pub header: String,
-    /// 1-based page number.
-    pub page: usize,
+    /// 1-based page number, when known (a reader that opened a book in the
+    /// middle knows it only once the book is paginated).
+    pub page: Option<usize>,
     /// Total pages, when the book has been paginated.
     pub pages: Option<usize>,
     /// Position in the book, 0.0 to 1.0.
@@ -204,9 +205,10 @@ impl Chrome {
             .render(page, color, &plan, Point::new(x, self.header_baseline));
 
         self.regular.set_size(self.size, self.dpi);
-        let number = match folio.pages {
-            Some(total) => format!("{} / {}", folio.page, total),
-            None => folio.page.to_string(),
+        let number = match (folio.page, folio.pages) {
+            (Some(page), Some(total)) => format!("{page} / {total}"),
+            (Some(page), None) => page.to_string(),
+            (None, _) => String::new(),
         };
         let plan = self.regular.plan(&number, None, None);
         let x = (width - plan.width) / 2;
