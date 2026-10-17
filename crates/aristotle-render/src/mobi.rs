@@ -749,9 +749,15 @@ pub fn cached_epub(src: &Path, cache_dir: &Path) -> Result<(PathBuf, MobiInfo, b
     let mobi = parse(&data)?;
     fs::create_dir_all(cache_dir)
         .with_context(|| format!("can't create {}", cache_dir.display()))?;
-    let tmp = out.with_extension("epub.part");
+    // Two threads may convert the same book at once (the reader's open and
+    // a snapshot made ahead of time): each writes its own temporary files,
+    // and the renames, of identical results, are atomic.
+    static CONVERSIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = CONVERSIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let part = format!("{}-{n}.part", std::process::id());
+    let tmp = out.with_extension(format!("epub.{part}"));
     let posmap = write_epub(&mobi, &tmp)?;
-    let map_tmp = out.with_extension("posmap.part");
+    let map_tmp = out.with_extension(format!("posmap.{part}"));
     fs::write(&map_tmp, posmap.to_text())?;
     fs::rename(&map_tmp, posmap_path(&out))?;
     fs::rename(&tmp, &out)?;
