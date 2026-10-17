@@ -111,15 +111,16 @@ CARGO_CMD=test tools/build-render.sh host
 `cargo <command> -p aristotle-render -p aristotle-reader` against the C
 libraries of a `tools/build-plato.sh` run.
 
-README screenshots are composed by `tools/screenshots/compose.sh` from raw
-panel captures listed in its manifest.
+The screenshots of the README, the docs and the site, and the site's demo
+frames, are made by `tools/screenshots/compose.sh` from the device captures
+listed in its manifest (`tools/screenshots/README.md`).
 
 ## Text and test data
 
-Everything is in English: code, comments, docs and commits. Tests, docs and
-screenshots use public-domain books (Prus, Mickiewicz, Plato in Witwicki's
-translation, Austen, Melville) or text written for the test, never copyrighted
-books.
+Everything is in English: code, comments, docs and commits.
+Tests, docs and screenshots use public-domain books (Prus, Mickiewicz, Plato
+in Witwicki's translation, Aristotle in Chase's translation, Austen, Melville)
+or text written for the test, never copyrighted books.
 
 ## AI-assisted contributions
 

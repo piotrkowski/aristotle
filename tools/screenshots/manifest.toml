@@ -1,10 +1,14 @@
 # Screenshot manifest for compose.py.
 #
-# Inputs are raw 1072x1448 8-bit gray panel captures. Relative input paths
-# resolve against `base`; set SCREENSHOTS_BASE to override it, e.g. to point at
-# device captures. Paths may use ~ and $VARS. `out_dir` is relative to this file.
+# Inputs are raw 1072x1448 8-bit gray captures of the device's framebuffer
+# (devloop/host/screenshot.sh), in English, of public-domain books: Aristotle's
+# Nicomachean Ethics, Book I, in Bywater's Greek and Chase's translation
+# (Project Gutenberg #8438), with a Wiktionary dictionary (CC BY-SA). Relative
+# input paths resolve against `base`; set SCREENSHOTS_BASE to override it.
+# Paths may use ~ and $VARS. `out_dir` is relative to this file; an output may
+# set its own.
 
-base = "$ARISTOTLE_CACHE/ui-preview"
+base = "$ARISTOTLE_CACHE/captures/readme"
 out_dir = "../../assets/screenshots"
 
 # Frame styles; an output picks one with `style`, which overrides `default`.
@@ -40,68 +44,152 @@ bezel_color = "#262626"
 border = "#ffffff/26"
 shadows = [[1, 2, 0.30], [16, 30, 0.55]]
 
-# README: library, book page, dictionary. 536 px is half the panel width,
-# so the README shows the panel's pixels at 2x density.
+# The site's figures: a narrower margin, so the card fills its column.
+[style.site]
+padding = 32
+shadows = [[1, 2, 0.05], [8, 16, 0.13]]
+
+[style.site-night]
+padding = 32
+border = "#ffffff/26"
+shadows = [[1, 2, 0.30], [8, 16, 0.45]]
+
+# README: library, English page, Greek dictionary popup. 536 px is half the
+# panel width, so the README shows the panel's pixels at 2x density.
 [[output]]
 name = "readme-light.png"
 screen_width = 536
-inputs = ["docs-v1/library-cards.png", "docs-v1/reader.png", "reading/04-dict-polish.png"]
+inputs = ["day-library.png", "day-english-page.png", "day-greek-popup.png"]
 
 [[output]]
 name = "readme-dark.png"
 style = "night"
 screen_width = 536
-inputs = ["docs-v1/library-cards-night.png", "docs-v1/reader-night.png", "reading/05n-night-dict.png"]
+inputs = ["night-library.png", "night-english-page.png", "night-greek-popup.png"]
 
-# Single shots for the docs.
+# Single shots for the docs, at the same 2x density.
 [[output]]
 name = "library.png"
-screen_width = 600
-inputs = ["docs-v1/library.png"]
-
-[[output]]
-name = "library-night.png"
-style = "night"
-screen_width = 600
-inputs = ["docs-v1/library-night.png"]
-
-[[output]]
-name = "library-cards.png"
-screen_width = 600
-inputs = ["docs-v1/library-cards.png"]
-
-[[output]]
-name = "library-folders.png"
-screen_width = 600
-inputs = ["docs-v1/library-folders.png"]
+screen_width = 536
+inputs = ["day-library.png"]
 
 [[output]]
 name = "reader.png"
-screen_width = 600
-inputs = ["docs-v1/reader.png"]
+screen_width = 536
+inputs = ["day-english-page.png"]
+
+[[output]]
+name = "dictionary.png"
+screen_width = 536
+inputs = ["day-greek-popup.png"]
+
+[[output]]
+name = "reader-menu.png"
+screen_width = 536
+inputs = ["day-menu.png"]
+
+[[output]]
+name = "settings.png"
+screen_width = 536
+inputs = ["day-settings.png"]
 
 [[output]]
 name = "reader-night.png"
 style = "night"
-screen_width = 600
-inputs = ["docs-v1/reader-night.png"]
+screen_width = 536
+inputs = ["night-english-page.png"]
+
+# The site's figures.
+[[output]]
+name = "dictionary.png"
+out_dir = "../../site/assets/shots"
+style = "site"
+screen_width = 536
+inputs = ["day-greek-popup.png"]
 
 [[output]]
 name = "reader-menu.png"
-screen_width = 600
-inputs = ["reading/01-menu.png"]
+out_dir = "../../site/assets/shots"
+style = "site"
+screen_width = 536
+inputs = ["day-menu.png"]
 
 [[output]]
-name = "dictionary.png"
-screen_width = 600
-inputs = ["reading/04-dict-polish.png"]
+name = "reader-night.png"
+out_dir = "../../site/assets/shots"
+style = "site-night"
+screen_width = 536
+inputs = ["night-english-page.png"]
+
+# The site's demo: every capture unframed, in the panel's 16 grays.
+[[output]]
+name = "library.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-library.png"]
 
 [[output]]
-name = "footnote.png"
-screen_width = 600
-inputs = ["reading/13-footnote.png"]
+name = "greek-page.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-greek-page.png"]
+
+[[output]]
+name = "greek-popup.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-greek-popup.png"]
+
+[[output]]
+name = "english-page.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-english-page.png"]
+
+[[output]]
+name = "menu.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-menu.png"]
 
 [[output]]
 name = "settings.png"
-screen_width = 600
-inputs = ["docs-v1/settings.png"]
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["day-settings.png"]
+
+[[output]]
+name = "library-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-library.png"]
+
+[[output]]
+name = "greek-page-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-greek-page.png"]
+
+[[output]]
+name = "greek-popup-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-greek-popup.png"]
+
+[[output]]
+name = "english-page-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-english-page.png"]
+
+[[output]]
+name = "menu-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-menu.png"]
+
+[[output]]
+name = "settings-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["night-settings.png"]

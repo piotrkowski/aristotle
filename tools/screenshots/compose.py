@@ -8,6 +8,10 @@ each as a rounded card (the bare page, or the page in a thin dark bezel) with
 a 1 px hairline and a soft drop shadow, on a transparent background. The
 panel is resampled once at most, downwards, with Lanczos, and the PNG is
 written losslessly.
+
+An output with `frame = false` is one capture as it is, snapped to the
+panel's 16 gray levels and stored as a 4-bit PNG: the frames of the site's
+demo, which draws its own device.
 """
 
 import os
@@ -144,6 +148,19 @@ def save_png(img, path):
     return mode
 
 
+def save_panel16(capture, path):
+    """Write one capture unframed, snapped to the 16 levels the panel shows
+    (0x00, 0x11, ... 0xff), as a 4-bit palette PNG."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    snapped = capture.point(lambda v: round(v / 17) * 17)
+    pal = Image.new("P", (1, 1))
+    pal.putpalette([v for i in range(16) for v in (i * 17,) * 3])
+    img = snapped.convert("RGB").quantize(palette=pal, dither=Image.Dither.NONE)
+    if img.convert("L").tobytes() != snapped.tobytes():
+        fail(f"{path.name}: palette conversion changed pixels")
+    img.save(path, optimize=True, bits=4)
+
+
 def main(argv):
     if len(argv) != 2:
         fail("usage: compose.py manifest.toml")
@@ -156,10 +173,16 @@ def main(argv):
     styles = m["style"]
 
     for spec in m["output"]:
-        style = {**styles["default"], **styles.get(spec.get("style", "default"), {})}
         captures = [load_capture(expand(p, base)) for p in spec["inputs"]]
+        out = expand(spec.get("out_dir", out_dir), here) / spec["name"]
+        if not spec.get("frame", True):
+            if len(captures) != 1:
+                fail(f"{spec['name']}: an unframed output takes one input")
+            save_panel16(captures[0], out)
+            print(f"{out.name}: {PANEL[0]}x{PANEL[1]}, {out.stat().st_size // 1024} KB (16 grays)")
+            continue
+        style = {**styles["default"], **styles.get(spec.get("style", "default"), {})}
         img = compose(captures, spec, style)
-        out = out_dir / spec["name"]
         mode = save_png(img, out)
         print(f"{out.name}: {img.width}x{img.height}, {out.stat().st_size // 1024} KB ({mode})")
 
