@@ -182,7 +182,10 @@ pub fn private_dir(dir: &Path) -> io::Result<()> {
     let me = unsafe { libc::geteuid() };
     if !dir.exists() {
         let mode = if me == 0 { 0o000 } else { 0o700 };
-        fs::DirBuilder::new().recursive(true).mode(mode).create(dir)?;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(mode)
+            .create(dir)?;
     }
     let m = fs::symlink_metadata(dir)?;
     let bad = |why: &str| {
@@ -566,7 +569,10 @@ mod tests {
         // Created owner-only when missing.
         let dir = base.join("var-local-aristotle");
         private_dir(&dir).unwrap();
-        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
         let a = Accounts {
             device_id: "X".into(),
             ..Accounts::default()
