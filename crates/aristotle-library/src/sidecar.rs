@@ -13,14 +13,14 @@
 //! - **KOReader** keeps `metadata.<ext>.lua`, a Lua table with
 //!   `percent_finished`, `last_xpointer` or `last_page`, and a summary status.
 //!
-//! The KRDS layout below comes from the firmware's `ObjectReader`,
-//! `ObjectWriter` and `State` classes (`ReaderContentSDK.jar`), confirmed by
-//! decompiling 5.13.6, and verified byte for byte on `.mbs` and `.mbp1`
-//! files copied from our device. These format notes come from
-//! interoperability analysis, so that a reader can take over the user's own
-//! reading positions and annotations; this module is our own code and
-//! contains no Amazon code. Everything is big-endian
-//! (`java.io.DataOutputStream`):
+//! The KRDS format is publicly documented: jhowell's KRDS notes on
+//! MobileRead, the krdsrw project (<https://github.com/midrare/krdsrw>) and
+//! the `kindle_formats` crate. The layout below is described in our own
+//! words from those sources and checked byte for byte against `.mbs` and
+//! `.mbp1` files on our device. It is here for interoperability, so that
+//! positions and annotations carry over between the stock reader and
+//! Aristotle; this module is our own code and includes no Amazon code.
+//! Everything is big-endian (`java.io.DataOutputStream`):
 //!
 //! ```text
 //! 00 00 00 00 00 1A B1 26        magic, untagged
@@ -41,7 +41,7 @@
 //! text)). Highlighted text is not stored in sidecars; only positions are.
 //! MOBI positions start with a decimal byte offset into the book text (see
 //! [`kindle_position`] for the forms seen on the device). The annotation
-//! layout is read from firmware only: both device samples had none.
+//! layout is not yet checked on the device: both device samples had none.
 
 use std::fs;
 use std::path::{Path, PathBuf};

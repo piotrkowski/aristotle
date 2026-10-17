@@ -181,6 +181,8 @@ Search folds case and diacritics with a table covering Latin-1 and Latin Extende
 
 ## What the stock Kindle leaves behind, and what we import
 
+Aristotle reads and writes the Kindle's reading-position sidecars (KRDS) so that positions and highlights carry over between the stock reader and Aristotle. The format is described here in our own words, from public documentation (jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), `kindle_formats`) and from files on the device, for interoperability. No Amazon code is included.
+
 ### Sidecar folders **[fw]**
 
 For `<dir>/<name>.<ext>` the stock reader uses `<dir>/<name>.sdr/<name><sidecar-ext>`, two files per book. The book class (`ReaderSDK.jar`, `AbstractBook` and subclasses) decides the extensions:
@@ -199,7 +201,7 @@ The folder also holds the following:
 - **`.han`/`.tan`:** legacy annotation and cache files.
 - **`.mbp`:** the old PalmDB format. Firmware 5.x only reads it once through `MobiLegacyProvider`, migrates it into the KRDS files and deletes it; no `.mbp` writer exists in 5.13.6. Older sidecars from KOReader (`metadata.<ext>.lua`) live in the same `.sdr` folders.
 
-Both KRDS files use the Kindle Reader Data Store serialisation (`ReaderContentSDK.jar`, `ObjectReader`/`ObjectWriter`/`State`). It is big-endian `DataOutputStream`. The layout below is **[fw]**. It also matches, byte for byte, the four `.mbs`/`.mbp1` files copied from our device for two sideloaded MOBIs opened on 5.13.6 **[dev]**.
+Both KRDS files use the Kindle Reader Data Store serialisation, big-endian like Java's `DataOutputStream`. The layout below follows the public descriptions above and matches what the firmware expects **[fw]**. It also matches, byte for byte, the four `.mbs`/`.mbp1` files copied from our device for two sideloaded MOBIs opened on 5.13.6 **[dev]**.
 
 ```text
 00 00 00 00 00 1A B1 26        magic (untagged)
