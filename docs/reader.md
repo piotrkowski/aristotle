@@ -35,7 +35,8 @@ aristotle-render (CLI: info, render, show, bench, turn)
   - `0001`: static musl linking (from the Plato cross-build, `tools/build-plato.sh`);
   - `0002`: `PLATO_LIB_DIRS` lets another workspace point `build.rs` at the static archives, and the x86_64 musl host target is accepted;
   - `0003`: MuPDF's embedded-font symbol names on every musl target (Zig's MuPDF build uses the same names on x86_64 as on ARM);
-  - `0004`: `EpubDocument::set_language`, see "Hyphenation".
+  - `0004`: `EpubDocument::set_language`, see "Hyphenation";
+  - `0008`: lazy layout of spine items, see "Lazy layout".
 - **C libraries.** `tools/build-plato.sh` builds them with Zig as static archives: for the device as before, and with `PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1` for the host (about 6 minutes on 2 cores, once).
 - **Workspace.** `crates/aristotle-render` is its own Cargo workspace and the root workspace excludes it, so `cargo build` at the root keeps working on hosts that never ran the Plato build. It depends on `../../third_party/plato-patched/crates/core` by path and on `aristotle-hal`. Its `Cargo.lock` started from Plato's, so dependency versions match the tested Plato build.
 - **Build.** `tools/build-render.sh device|host` prepares the source, sets `PLATO_LIB_DIRS` and the Zig C compiler (for `zstd-sys`), builds, and assembles the bundle in `~/.cache/aristotle/render/<device|host>/`. `CARGO_CMD=clippy|test` runs those instead. `PLATO_BUILD` selects a `build-plato.sh` output directory (default `plato-build/main`, or `host-x86_64`).
@@ -96,7 +97,7 @@ The host has no MOBI files; `devloop/host/make-test-mobi.py` makes a MOBI 7 test
 
 ## Pages and progress
 
-For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out one spine item (chapter file) at a time and caches its pages. `x / y` needs the whole book laid out: `render`, `show` and `turn` paginate first unless `--percent` is given. Progress is `x / y` once paginated, else the byte offset over the book's size. For MuPDF documents locations are page indices and the count is known.
+For Plato's engine a location is a byte offset into the book's text. Pages are found by walking `Location::Next`, which lays out a spine item (chapter file) as far as needed and caches its pages (see "Lazy layout" below). `x / y` needs the whole book laid out: `render`, `show` and `turn` paginate first unless `--percent` is given. Progress is `x / y` once paginated, else the byte offset over the book's size. For MuPDF documents locations are page indices and the count is known.
 
 A reader cannot afford to lay out the whole book before showing a page, so `Book` also navigates by location: `page_start` (the page containing a location), `next_page`, `previous_page`, `chapter_page`, and `render_location`, whose footer leaves out the page number until one is known. `set_pagination` adopts page starts computed elsewhere; a test (`tests/navigation.rs`) checks that walking from page to page, forwards and backwards across chapters, finds exactly the pages of a full pagination.
 
@@ -166,7 +167,19 @@ Without a snapshot there is nothing to show early: the tapped card stays inverte
 
 On the device the layout is about 8 times slower than on the host ("Pan Tadeusz": 1989 ms against about 250 ms), so the submit should land at about 10 to 20 ms after the release, and the page should be on the panel after the 480 ms of the mode-8 flash: about 0.5 s from tap to page, against 2.9 s before and 0.8 s for the stock reader. These are host numbers until verified on the device; the scenario `devloop/kindle/scenarios/aristotle-open.txt` (`aristotle-observe run`) exercises opening, turning, the menu and going back while a book opens, and opening another book after that.
 
-**Splitting huge chapters instead.** The converter could cut a one-chapter MOBI into spine items of, say, 50 KB, so placing a position lays out only its piece (about a tenth of the time). But a spine item boundary is a forced page break: every cut would end a page early, leaving a part-empty page every 20 pages or so, at places that differ from both the stock reader and the book. Cutting only at scene breaks would hide some of that, at the cost of a typographic rule the book does not have. The snapshot makes reopening fast without touching page breaks, so the converter keeps chapters whole; the remaining cost is the first open of a book (no snapshot yet) and a size change in the menu, which lay out the chapter on the main thread.
+**Lazy layout.** Plato laid out a whole spine item before it could place a position in it or draw any of its pages, so "Pan Tadeusz" cost 2.2 to 2.9 s on the device for every open without a snapshot, every placement on the worker and every font, spacing or margin change, wherever the reader was in it. Patch `0008` makes the engine's block loop stop between two children of a block (never inside a paragraph or a table) once two complete pages follow the location asked for, keeping one frame per nesting level (next child, loop context, rectangles); `EpubDocument` keeps the parsed chapter and the layout state, and resumes when a later page is asked for, 8 pages ahead. Resuming replays exactly what a full layout does, so the cost of placing a position is now proportional to how far into its chapter it is, and page breaks do not move: `aristotle-render pages BOOK 20` (every page start plus 20 placements in fresh copies) gives identical output for 39 books (the "Pan Tadeusz" stand-in, Lalka and 13 other converted MOBIs, the 23 Platon EPUBs, a test book with nested blocks, lists, quotes and tables) against an unpatched build, and rendered pages match byte for byte. Going back into a previous spine item still lays it out whole. Host, the "Pan Tadeusz" stand-in on one CPU (`aristotle-render place`, before → after):
+
+| Position in the chapter | Place | Restyle (+1 pt) and place | Next page |
+| --- | --- | --- | --- |
+| 0 % | 261 → 9 ms | 225 → 5 ms | 3 → 3 ms |
+| 2 % | 230 → 7 ms | 224 → 9 ms | 3 → 8 ms |
+| 25 % | 229 → 62 ms | 229 → 59 ms | 3 → 11 ms |
+| 50 % | 234 → 121 ms | 233 → 129 ms | 2 → 7 ms |
+| 95 % | 235 → 226 ms | 228 → 224 ms | 3 → 7 ms |
+
+A whole pagination costs the same as before (225 → 234 ms for the stand-in, 1357 → 1307 ms for Lalka). On the device, where "Pan Tadeusz" takes 2.5 s whole, the place step should scale the same way (host numbers until verified). A restyle whose chapter text before the page exceeds 48 KB (about 300 ms on the device) shows the busy mark at the right of the menu's top bar with the button's release, one DU update, before the new page's full mode-9 update.
+
+**Splitting huge chapters instead** (not done). The converter could cut a one-chapter MOBI into spine items of, say, 50 KB. But a spine item boundary is a forced page break: every cut would end a page early, leaving a part-empty page every 20 pages or so, at places that differ from both the stock reader and the book; cutting only at scene breaks would hide some of that. Lazy layout gives the same gain near the start of a chapter without moving any page break, and less towards its end.
 
 ### Running it on the device
 
