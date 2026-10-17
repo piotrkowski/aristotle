@@ -1,5 +1,6 @@
 //! Opening a book with Plato's document engine and turning it into pages.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use plato_core::anyhow::{format_err, Error};
@@ -13,8 +14,10 @@ use plato_core::geom::CycleDir;
 
 use crate::lang;
 use crate::mobi::MobiInfo;
+use crate::notes;
 use crate::page::{Chrome, Folio, Page};
 use crate::position::{PosMap, Spine};
+use crate::richtext::RichText;
 use crate::style::Style;
 
 /// A reading position in units that outlive one layout (see
@@ -65,6 +68,91 @@ pub struct Book {
     mobi: Option<MobiConversion>,
     /// Spine item sizes, to convert Plato locations to spine positions.
     spine: Option<Spine>,
+    /// The file Plato reads (the converted EPUB for a MOBI book).
+    source: PathBuf,
+    /// The book's source, opened on the first footnote.
+    notes: Option<notes::Source>,
+    /// Locations of table of contents entries found without layout, by
+    /// entry index (see [`Book::toc_location_cheap`]).
+    toc_locations: HashMap<usize, Option<usize>>,
+}
+
+/// A rectangle on the screen, in pixels: `x0..x1`, `y0..y1`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Bounds {
+    pub x0: i32,
+    pub y0: i32,
+    pub x1: i32,
+    pub y1: i32,
+}
+
+impl Bounds {
+    pub fn contains(&self, x: i32, y: i32) -> bool {
+        x >= self.x0 && x < self.x1 && y >= self.y0 && y < self.y1
+    }
+
+    /// Squared distance from a point to the rectangle (0 inside).
+    pub fn dist2(&self, x: i32, y: i32) -> i64 {
+        let dx = (self.x0 - x).max(0).max(x - self.x1 + 1) as i64;
+        let dy = (self.y0 - y).max(0).max(y - self.y1 + 1) as i64;
+        dx * dx + dy * dy
+    }
+
+    pub fn union(&self, o: &Bounds) -> Bounds {
+        Bounds {
+            x0: self.x0.min(o.x0),
+            y0: self.y0.min(o.y0),
+            x1: self.x1.max(o.x1),
+            y1: self.y1.max(o.y1),
+        }
+    }
+}
+
+/// A word (or a hyphenated piece of one) on a rendered page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Word {
+    /// As laid out; a piece before a hyphenation break ends in U+00AD.
+    pub text: String,
+    pub rect: Bounds,
+    /// Plato location of the word's first byte (EPUB); for fixed-layout
+    /// documents the page index.
+    pub offset: usize,
+}
+
+/// A link on a rendered page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Link {
+    /// The `href` as written in the book (percent-decoded).
+    pub uri: String,
+    pub rect: Bounds,
+    pub offset: usize,
+}
+
+/// A flattened table of contents line.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TocItem {
+    pub title: String,
+    pub depth: usize,
+    /// Plato's entry index, for [`Book::toc_page`].
+    pub index: usize,
+}
+
+/// Where the current chapter is, for the progress line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChapterInfo {
+    /// 1-based number among the chapters at the chosen level.
+    pub number: usize,
+    pub count: usize,
+    pub start: usize,
+    /// Where the next chapter starts (or the end of the book).
+    pub end: usize,
+}
+
+fn flatten(entries: &[TocEntry], depth: usize, out: &mut Vec<(usize, TocEntry)>) {
+    for e in entries {
+        out.push((depth, e.clone()));
+        flatten(&e.children, depth + 1, out);
+    }
 }
 
 /// A MOBI book opened through its converted EPUB (see [`crate::mobi`]).
@@ -199,6 +287,9 @@ impl Book {
             pages: Vec::new(),
             complete: false,
             mobi,
+            source: path.to_path_buf(),
+            notes: None,
+            toc_locations: HashMap::new(),
         })
     }
 
@@ -355,6 +446,7 @@ impl Book {
             page: Some(index + 1),
             pages: self.known_page_count(),
             progress: self.progress(index, location),
+            left: None,
         }
     }
 
@@ -501,6 +593,17 @@ impl Book {
 
     /// Render the page starting at `location`, with header and footer.
     pub fn render_location(&mut self, location: usize, chrome: &mut Chrome) -> Result<Page, Error> {
+        self.render_location_with(location, chrome, None)
+    }
+
+    /// [`Book::render_location`] with `footer_left` at the left of the
+    /// footer.
+    pub fn render_location_with(
+        &mut self,
+        location: usize,
+        chrome: &mut Chrome,
+        footer_left: Option<String>,
+    ) -> Result<Page, Error> {
         let body = self
             .render_body(location)
             .ok_or_else(|| format_err!("can't render the page at {location}"))?;
@@ -514,6 +617,7 @@ impl Book {
             page: index.map(|i| i + 1),
             pages: self.known_page_count(),
             progress: self.fraction(location),
+            left: footer_left,
         };
         Ok(self.compose(&body, &folio, chrome))
     }
@@ -528,5 +632,205 @@ impl Book {
             .ok_or_else(|| format_err!("can't render page {}", index + 1))?;
         let folio = self.folio(index, location);
         Ok(self.compose(&body, &folio, chrome))
+    }
+}
+
+// Reading interactions: words and links on a page, footnotes, the table of
+// contents. Coordinates are screen pixels of the composed page.
+impl Book {
+    /// How the body of the page at `location` is placed on the screen:
+    /// (scale, x offset, y offset), as [`Book::render_body`] and
+    /// [`Book::compose`] place it.
+    fn placement(&mut self, location: usize) -> Option<(f32, i32, i32)> {
+        let (top, body_h) = self.style.body();
+        let m = self.style.margin_px();
+        match self.engine {
+            Engine::Plato => Some((1.0, 0, top)),
+            Engine::MupdfReflow => Some((1.0, m, top + m)),
+            Engine::Fixed => {
+                let (w, h) = self.doc.dims(location)?;
+                let scale =
+                    ((self.style.width as f32) / w).min((body_h as f32 - 2.0 * m as f32) / h);
+                let (pw, ph) = ((w * scale) as i32, (h * scale) as i32);
+                Some((
+                    scale,
+                    (self.style.width as i32 - pw) / 2,
+                    top + (body_h as i32 - ph) / 2,
+                ))
+            }
+        }
+    }
+
+    fn to_screen(b: &plato_core::geom::Boundary, (scale, dx, dy): (f32, i32, i32)) -> Bounds {
+        Bounds {
+            x0: (b.min.x * scale).floor() as i32 + dx,
+            y0: (b.min.y * scale).floor() as i32 + dy,
+            x1: (b.max.x * scale).ceil() as i32 + dx,
+            y1: (b.max.y * scale).ceil() as i32 + dy,
+        }
+    }
+
+    /// The words of the page starting at `location`, in reading order.
+    pub fn words(&mut self, location: usize) -> Vec<Word> {
+        let Some(place) = self.placement(location) else {
+            return Vec::new();
+        };
+        let Some((words, _)) = self.doc.words(Location::Exact(location)) else {
+            return Vec::new();
+        };
+        words
+            .into_iter()
+            .filter(|w| !w.text.trim().is_empty())
+            .map(|w| Word {
+                rect: Self::to_screen(&w.rect, place),
+                offset: w.location.location(),
+                text: w.text,
+            })
+            .collect()
+    }
+
+    /// The links of the page starting at `location`.
+    pub fn links(&mut self, location: usize) -> Vec<Link> {
+        let Some(place) = self.placement(location) else {
+            return Vec::new();
+        };
+        let Some((links, _)) = self.doc.links(Location::Exact(location)) else {
+            return Vec::new();
+        };
+        links
+            .into_iter()
+            .map(|l| Link {
+                rect: Self::to_screen(&l.rect, place),
+                offset: l.location.location(),
+                uri: l.text,
+            })
+            .collect()
+    }
+
+    /// The archive path of the spine item holding `location`.
+    fn spine_path(&self, location: usize) -> Option<String> {
+        let spine = self.spine.as_ref()?;
+        let (item, _) = spine.coordinates(location);
+        spine.paths.get(item).cloned()
+    }
+
+    /// The note behind `link` if it is a footnote (see [`crate::notes`]);
+    /// `link_text` is the marker the link shows.
+    pub fn footnote(&mut self, link: &Link, link_text: &str) -> Option<RichText> {
+        if self.engine != Engine::Plato {
+            return None;
+        }
+        let base = self.spine_path(link.offset)?;
+        if self.notes.is_none() {
+            self.notes = notes::Source::open(&self.source);
+        }
+        self.notes.as_mut()?.footnote(&base, &link.uri, link_text)
+    }
+
+    /// Start of the page a link in the page at `location` leads to.
+    pub fn link_page(&mut self, location: usize, uri: &str) -> Option<usize> {
+        let target = self
+            .doc
+            .resolve_location(Location::LocalUri(location, uri.to_string()))?;
+        self.page_start(target)
+    }
+
+    /// The table of contents, flattened with depths.
+    pub fn toc_items(&self) -> Vec<TocItem> {
+        let mut flat = Vec::new();
+        flatten(&self.toc, 0, &mut flat);
+        flat.into_iter()
+            .map(|(depth, e)| TocItem {
+                title: e.title.trim().to_string(),
+                depth,
+                index: e.index,
+            })
+            .collect()
+    }
+
+    /// Start of the page a table of contents entry points at (lays out its
+    /// chapter).
+    pub fn toc_page(&mut self, index: usize) -> Option<usize> {
+        let mut flat = Vec::new();
+        flatten(&self.toc, 0, &mut flat);
+        let (_, entry) = flat.into_iter().find(|(_, e)| e.index == index)?;
+        let target = self.doc.resolve_location(entry.location)?;
+        self.page_start(target)
+    }
+
+    /// The index of the table of contents entry for `location`.
+    pub fn toc_current(&mut self, location: usize) -> Option<usize> {
+        self.doc
+            .chapter(location, &self.toc)
+            .map(|(entry, _)| entry.index)
+    }
+
+    /// Where a table of contents entry starts, found from the spine and the
+    /// target file's ids without laying anything out (Plato's own resolver
+    /// lays out the chapter, a page turn's time per entry).
+    fn toc_location_cheap(&mut self, entry: &TocEntry) -> Option<usize> {
+        if let Some(found) = self.toc_locations.get(&entry.index) {
+            return *found;
+        }
+        let found = match &entry.location {
+            Location::Exact(n) => Some(*n),
+            Location::Uri(uri) => {
+                let (path, frag) = match uri.split_once('#') {
+                    Some((p, f)) => (p, Some(f)),
+                    None => (uri.as_str(), None),
+                };
+                let start = self
+                    .spine
+                    .as_ref()
+                    .and_then(|s| s.item_of(path).and_then(|i| s.start(i)));
+                match (start, frag) {
+                    (Some(start), Some(frag)) => {
+                        if self.notes.is_none() {
+                            self.notes = notes::Source::open(&self.source);
+                        }
+                        let offset = self.notes.as_mut().and_then(|n| n.id_offset(path, frag));
+                        Some(start + offset.unwrap_or(0))
+                    }
+                    (start, _) => start,
+                }
+            }
+            _ => None,
+        };
+        self.toc_locations.insert(entry.index, found);
+        found
+    }
+
+    /// Which chapter `location` is in and where it ends. Chapters are the
+    /// table of contents entries at the first level with more than one
+    /// entry (a book whose contents is one title with chapters under it
+    /// counts the chapters).
+    pub fn chapter_info(&mut self, location: usize) -> Option<ChapterInfo> {
+        if self.engine != Engine::Plato || self.toc.is_empty() {
+            return None;
+        }
+        let mut flat = Vec::new();
+        flatten(&self.toc, 0, &mut flat);
+        let max_depth = flat.iter().map(|(d, _)| *d).max().unwrap_or(0);
+        let level = (0..=max_depth)
+            .find(|&d| flat.iter().filter(|(x, _)| *x == d).count() > 1)
+            .unwrap_or(0);
+        let mut starts: Vec<usize> = Vec::new();
+        for (_, e) in flat.iter().filter(|(d, _)| *d == level) {
+            if let Some(l) = self.toc_location_cheap(e) {
+                starts.push(l);
+            }
+        }
+        starts.sort_unstable();
+        starts.dedup();
+        let number = starts.partition_point(|&s| s <= location);
+        if number == 0 {
+            return None;
+        }
+        Some(ChapterInfo {
+            number,
+            count: starts.len(),
+            start: starts[number - 1],
+            end: starts.get(number).copied().unwrap_or(self.len()),
+        })
     }
 }

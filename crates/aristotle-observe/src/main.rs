@@ -13,7 +13,8 @@
 //! ```
 //!
 //! Script lines: `tap X Y`, `hold X Y MS`, `swipe X1 Y1 X2 Y2 MS`,
-//! `wait MS`, `label TEXT`, `go-home` (stock Home via the app manager, so a
+//! `drag X1 Y1 X2 Y2 HOLD MS` (rest HOLD ms, then move over MS ms without
+//! lifting: a long press that extends a text selection), `wait MS`, `label TEXT`, `go-home` (stock Home via the app manager, so a
 //! scenario starts from a known state), `snap NAME` (save the screen and
 //! the active app, to verify each step), `# comment`.
 //!
@@ -141,8 +142,14 @@ impl Injector {
     }
 
     fn swipe(&mut self, from: (u32, u32), to: (u32, u32), ms: u64) -> io::Result<()> {
+        self.drag(from, to, 0, ms)
+    }
+
+    /// Down at `from`, rest `hold` ms, move to `to` over `ms`, lift.
+    fn drag(&mut self, from: (u32, u32), to: (u32, u32), hold: u64, ms: u64) -> io::Result<()> {
         let steps = (ms / 16).max(2);
         self.down(from.0, from.1)?;
+        thread::sleep(Duration::from_millis(hold));
         for i in 1..=steps {
             let t = i as i64;
             let s = steps as i64;
@@ -405,6 +412,11 @@ fn run_script(path: &str) -> io::Result<()> {
             Some("swipe") => {
                 let down = monotonic_us();
                 inj.swipe((n(1), n(2)), (n(3), n(4)), n(5) as u64)?;
+                obs.injected((n(1), n(2)), down, monotonic_us());
+            }
+            Some("drag") => {
+                let down = monotonic_us();
+                inj.drag((n(1), n(2)), (n(3), n(4)), n(5) as u64, n(6) as u64)?;
                 obs.injected((n(1), n(2)), down, monotonic_us());
             }
             Some("wait") => obs.pump_for(n(1) as u64)?,

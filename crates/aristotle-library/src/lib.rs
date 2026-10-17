@@ -11,6 +11,7 @@
 //! - [`cover`]: grayscale, 16-level dithered thumbnails for e-ink.
 //! - [`index`]: the persistent records, progress and settings.
 //! - [`query`]: sorting, filters, diacritic-insensitive search.
+//! - [`export`]: highlights to `My Clippings.txt` and Markdown.
 //! - [`clippings`], [`sidecar`]: importing state left by the stock Kindle
 //!   reader and KOReader.
 //!
@@ -21,6 +22,7 @@ pub mod cover;
 pub mod encoding;
 pub mod epub;
 pub mod error;
+pub mod export;
 pub mod format;
 pub mod id;
 pub mod index;

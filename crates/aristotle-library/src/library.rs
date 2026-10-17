@@ -206,6 +206,26 @@ impl Library {
         true
     }
 
+    /// Adds an annotation to a book unless an equal one is there already.
+    /// Returns whether it was added.
+    pub fn add_annotation(&mut self, id: &str, a: Annotation) -> bool {
+        match self.book_mut(id) {
+            Some(b) => merge_annotation(b, a),
+            None => false,
+        }
+    }
+
+    /// Removes the book's annotations for which `remove` is true. Returns
+    /// how many went.
+    pub fn remove_annotations(&mut self, id: &str, remove: impl Fn(&Annotation) -> bool) -> usize {
+        let Some(b) = self.book_mut(id) else {
+            return 0;
+        };
+        let before = b.annotations.len();
+        b.annotations.retain(|a| !remove(a));
+        before - b.annotations.len()
+    }
+
     pub fn set_status(&mut self, id: &str, status: Status) -> bool {
         let Some(b) = self.book_mut(id) else {
             return false;

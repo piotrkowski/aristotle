@@ -91,7 +91,7 @@ Rendering the next page takes about 106 ms on the device and fits inside the pan
 
 | Interaction | Stock | Target | How |
 | --- | --- | --- | --- |
-| Page turn, visible | 565 ms | **≤ 510 ms** (503 ms measured; 317 ms with DU4) | One full mode-9 update like stock, next page prerendered, turn triggered on touch-down |
+| Page turn, visible | 565 ms | **≤ 510 ms** (503 ms measured; 317 ms with DU4); about 440 ms from the release | One full mode-9 update like stock, next page prerendered, turn triggered on the tap's release (a hold selects text and must not turn) |
 | Page turn, settled | 830 ms | ≤ 510 ms (503 ms measured) | The footer is drawn in the same frame, so there is no second update |
 | Touch feedback | none before the result | ≤ 150 ms | A2 highlight on touch-down (`aristotle-ui`) |
 | Open a book | 0.8 s settled | ≤ 0.6 s (2.9 s measured for "Pan Tadeusz" before snapshots [dev]; host: submit 1 ms after the release instead of 278 ms, so about 0.5 s with the 480 ms flash; device check pending) | The page left last time shown from a snapshot with one mode-8 flash; layout on a worker thread; page numbers cached per book (see `reader.md`, "Opening a book") |
@@ -105,7 +105,7 @@ These are commitments to measure, not claims. Each will be checked with the same
 
 ## Transitions in the Aristotle app
 
-Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-transitions.txt` (injected taps; `aristotle-observe` counts the taps it injects, since the app grabs the touchscreen). Times run from the finger lifting; page turns fire on touch-down, so they show 0 ms to the first update.
+Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-transitions.txt` (injected taps; `aristotle-observe` counts the taps it injects, since the app grabs the touchscreen). Times run from the finger lifting; page turns then fired on touch-down, so they showed 0 ms to the first update. Since turns fire on release (the owner's decision: a long press on a word had turned the page first and flashed the next page before the definition), a turn's time from the release is the submit (the next page is prerendered) plus the panel's 440 ms; the target stays about 440 ms from the release, to be measured again with the same scenario.
 
 | Interaction | Acknowledged | Settled | Updates | Flash | Waveforms |
 | --- | --- | --- | --- | --- | --- |

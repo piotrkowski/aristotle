@@ -16,7 +16,15 @@
 //! Not handled, so [`crate::book::Book`] falls back to MuPDF: DRM,
 //! HUFF/CDIC compression (Amazon store books), KF8-only files (AZW3). Joint
 //! MOBI/KF8 files use their MOBI 7 part. Not converted yet: the table of
-//! contents (NCX index) and `filepos` links.
+//! contents (NCX index).
+//!
+//! `filepos` links (`<a filepos=12345>`, a byte offset into the text: how
+//! MOBI books link footnotes and their back links) become EPUB links: an
+//! anchor `<a id="filepos12345"/>` is put where the offset falls, in
+//! whichever chapter file that is, and the link gets
+//! `href="ch0003.xhtml#filepos12345"`. calibre names its anchors the same
+//! way, and the reader's footnote popups know them
+//! ([`crate::notes::note_id`]).
 //!
 //! Format references: MobileRead wiki ("MOBI", "PalmDOC") and calibre's
 //! `mobi/reader` (trailing entries).
@@ -34,7 +42,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 /// Bump when the conversion output changes, to invalidate cached EPUBs.
-const CONVERTER_VERSION: u32 = 2;
+const CONVERTER_VERSION: u32 = 3;
 
 const COMPRESSION_NONE: u16 = 1;
 const COMPRESSION_PALMDOC: u16 = 2;
@@ -422,7 +430,47 @@ fn mobi_style(attrs: &mut Vec<(String, String)>) {
 /// Turn MOBI 7 HTML into well-formed XHTML body fragments, one per chapter
 /// (split at `<mbp:pagebreak/>`).
 pub fn chapters(html: &str, images: &[(u32, &'static str, Vec<u8>)]) -> Vec<String> {
-    chapters_mapped(html, images).0
+    chapters_mapped(html, images, true).0
+}
+
+/// The name of chapter `n`'s file in the EPUB.
+fn chapter_file(n: usize) -> String {
+    format!("ch{n:04}.xhtml")
+}
+
+/// The targets of `filepos` links, as (offset in `html`, filepos), sorted.
+/// A filepos counts bytes of the MOBI text: in a UTF-8 book the same bytes
+/// as `html`, in a CP1252 book one character of `html` each.
+fn filepos_targets(html: &str, utf8: bool) -> Vec<(usize, u64)> {
+    let mut raw: Vec<u64> = Vec::new();
+    let mut rest = html;
+    while let Some(i) = rest.find("filepos") {
+        rest = &rest[i + 7..];
+        let v = rest
+            .trim_start_matches(|c: char| c == '=' || c == '"' || c == '\'' || c.is_whitespace());
+        let digits: String = v.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = digits.parse::<u64>() {
+            raw.push(n);
+        }
+    }
+    raw.sort_unstable();
+    raw.dedup();
+    if utf8 {
+        return raw
+            .into_iter()
+            .filter(|&r| (r as usize) <= html.len())
+            .map(|r| (r as usize, r))
+            .collect();
+    }
+    let mut out = Vec::with_capacity(raw.len());
+    let mut it = raw.into_iter().peekable();
+    for (n, (byte, _)) in html.char_indices().enumerate() {
+        while it.peek().is_some_and(|&r| r as usize <= n) {
+            out.push((byte, it.next().expect("peeked")));
+        }
+    }
+    out.extend(it.map(|r| (html.len(), r)));
+    out
 }
 
 /// Minimum distance in source bytes between two anchors of the position
@@ -435,6 +483,7 @@ const ANCHOR_STEP: usize = 200;
 pub fn chapters_mapped(
     html: &str,
     images: &[(u32, &'static str, Vec<u8>)],
+    utf8: bool,
 ) -> (Vec<String>, Vec<Vec<(usize, usize)>>) {
     let body = html
         .find("<body")
@@ -458,10 +507,34 @@ pub fn chapters_mapped(
             map.push((body + src_off, out_off));
         }
     };
+    // Link targets still to place, and the chapter each one landed in.
+    let targets = filepos_targets(html, utf8);
+    let mut next_target = 0;
+    let mut target_chapter: Vec<(u64, usize)> = Vec::new();
+    // Place the anchors of targets at or before `at` (an offset in `src`).
+    let place = |at: usize,
+                 next: &mut usize,
+                 cur: &mut String,
+                 placed: &mut Vec<(u64, usize)>,
+                 chapter: usize| {
+        while *next < targets.len() && targets[*next].0 <= body + at {
+            let raw = targets[*next].1;
+            cur.push_str(&format!("<a id=\"filepos{raw}\"></a>"));
+            placed.push((raw, chapter));
+            *next += 1;
+        }
+    };
     // Open elements: (name, start tag as emitted).
     let mut stack: Vec<(String, String)> = Vec::new();
     let mut i = 0;
     while i < src.len() {
+        place(
+            i,
+            &mut next_target,
+            &mut cur,
+            &mut target_chapter,
+            out.len(),
+        );
         let Some(lt) = src[i..].find('<').map(|k| i + k) else {
             anchor(&mut map, i, cur.len());
             cur.push_str(&src[i..]);
@@ -524,6 +597,17 @@ pub fn chapters_mapped(
             }
             attrs.retain(|(k, _)| !k.ends_with("recindex"));
         }
+        if name == "a" {
+            // A link to a text offset: its target file is known only once
+            // every chapter is cut (see below).
+            if let Some(fp) = attrs
+                .iter()
+                .find(|(k, _)| k == "filepos")
+                .and_then(|(_, v)| v.trim().parse::<u64>().ok())
+            {
+                attrs.push(("href".into(), format!("@@filepos{fp}@@")));
+            }
+        }
         attrs.retain(|(k, _)| k != "filepos");
         if matches!(name.as_str(), "p" | "div" | "blockquote") {
             mobi_style(&mut attrs);
@@ -565,10 +649,44 @@ pub fn chapters_mapped(
             text || c.contains("<img")
         })
         .collect();
+    // Chapters keep their order, so a kept chapter's file number is the
+    // number of kept chapters before it.
+    let file_of: Vec<Option<usize>> = keep
+        .iter()
+        .scan(0usize, |n, &k| {
+            let f = k.then_some(*n);
+            *n += k as usize;
+            Some(f)
+        })
+        .collect();
     let mut k = keep.iter();
     out.retain(|_| *k.next().expect("one flag per chapter"));
     let mut k = keep.iter();
     maps.retain(|_| *k.next().expect("one flag per chapter"));
+    if out.iter().any(|c| c.contains("@@filepos")) {
+        for c in &mut out {
+            let mut fixed = String::with_capacity(c.len());
+            let mut rest = c.as_str();
+            while let Some(i) = rest.find("@@filepos") {
+                fixed.push_str(&rest[..i]);
+                let after = &rest[i + 9..];
+                let end = after.find("@@").unwrap_or(after.len());
+                let raw = after[..end].parse::<u64>().unwrap_or(u64::MAX);
+                let file = target_chapter
+                    .iter()
+                    .find(|(r, _)| *r == raw)
+                    .and_then(|&(_, ch)| file_of.get(ch).copied().flatten());
+                match file {
+                    Some(f) => fixed.push_str(&format!("{}#filepos{raw}", chapter_file(f))),
+                    // The target fell in a chapter with nothing in it.
+                    None => fixed.push_str(&format!("#filepos{raw}")),
+                }
+                rest = &after[(end + 2).min(after.len())..];
+            }
+            fixed.push_str(rest);
+            *c = fixed;
+        }
+    }
     (out, maps)
 }
 
@@ -588,10 +706,10 @@ const MOBI_CSS: &str = "p { margin: 0; text-indent: 1.5em; }\n\
 pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<PosMap, Error> {
     let lang = mobi.info.language.clone().unwrap_or_else(|| "en".into());
     let title = mobi.info.title.clone().unwrap_or_else(|| "Untitled".into());
-    let (chapters, maps) = chapters_mapped(&mobi.html, &mobi.images);
     // The html is the MOBI text decoded: UTF-8 books keep their byte
     // offsets, CP1252 books turned every byte into one char.
     let utf8 = mobi.info.encoding == 65001;
+    let (chapters, maps) = chapters_mapped(&mobi.html, &mobi.images, utf8);
     let (mut seen_bytes, mut seen_chars) = (0usize, 0usize);
     let mut raw_offset = |html_offset: usize| -> u64 {
         if utf8 {
@@ -626,7 +744,7 @@ pub fn write_epub(mobi: &Mobi, path: &Path) -> Result<PosMap, Error> {
         String::from("<item id=\"css\" href=\"mobi.css\" media-type=\"text/css\"/>\n");
     let mut spine = String::new();
     for (n, (body, map)) in chapters.iter().zip(&maps).enumerate() {
-        let name = format!("ch{n:04}.xhtml");
+        let name = chapter_file(n);
         zip.start_file(&name, opts)?;
         let head = format!(
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
@@ -808,6 +926,37 @@ mod tests {
             ch[1],
             "<div><p>cztery <img src=\"images/00001.jpg\"/></p></div>"
         );
+    }
+
+    #[test]
+    fn filepos_links_become_epub_links() {
+        // A note reference in the first chapter, the notes in the second.
+        let text = "Tekst<a filepos=0000000NNN><sup>1</sup></a>.<mbp:pagebreak/><p>";
+        let note = "<p>1. Przypis.</p>";
+        let html0 = format!("<html><body>{text}{note}</body></html>");
+        let at = html0.find(note).unwrap();
+        let html = html0.replace("NNN", &format!("{at:03}"));
+        let ch = chapters(&html, &[]);
+        assert_eq!(ch.len(), 2);
+        let fp = format!("filepos{at}");
+        assert!(
+            ch[0].contains(&format!("<a href=\"ch0001.xhtml#{fp}\"><sup>1</sup></a>")),
+            "{}",
+            ch[0]
+        );
+        assert!(ch[1].contains(&format!("<a id=\"{fp}\"></a>")), "{}", ch[1]);
+        // CP1252: offsets count characters.
+        let pl = "Zażółć<a filepos=NN>*</a><mbp:pagebreak/>";
+        let at = "<html><body>".len() + pl.chars().count();
+        let html =
+            format!("<html><body>{pl}<p>Uwaga.</p></body></html>").replace("NN", &at.to_string());
+        let (ch, _) = chapters_mapped(&html, &[], false);
+        assert!(
+            ch[0].contains(&format!("ch0001.xhtml#filepos{at}")),
+            "{}",
+            ch[0]
+        );
+        assert!(ch[1].contains(&format!("id=\"filepos{at}\"")), "{}", ch[1]);
     }
 
     /// A fresh directory under `$TMPDIR` (the build script points it at

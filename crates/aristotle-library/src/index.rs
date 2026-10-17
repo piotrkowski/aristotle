@@ -206,6 +206,12 @@ pub struct Annotation {
     pub created: Option<String>,
     /// "kindle-clippings", "kindle-sidecar", "koreader", "aristotle".
     pub source: String,
+    /// Chapter title at the start of the annotation, when the reader knew it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chapter: Option<String>,
+    /// The reader's note attached to a highlight.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 impl Index {

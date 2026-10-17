@@ -12,6 +12,8 @@
 //!   the header and footer ([`page::Chrome`]) and the black and white
 //!   version used for fast page turns;
 //! - [`screen::Screen`]: the measured page-turn strategy (A2, then GL16).
+//! - [`notes`], [`richtext`]: footnotes behind links, and small HTML
+//!   fragments as styled paragraphs for popups.
 //!
 //! # Runtime data
 //!
@@ -23,8 +25,10 @@
 pub mod book;
 pub mod lang;
 pub mod mobi;
+pub mod notes;
 pub mod page;
 pub mod position;
+pub mod richtext;
 pub mod screen;
 pub mod style;
 

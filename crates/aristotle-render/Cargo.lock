@@ -69,9 +69,13 @@ dependencies = [
  "aristotle-library",
  "aristotle-render",
  "aristotle-ui",
+ "flate2",
  "libc",
+ "png",
+ "regex",
  "serde",
  "serde_json",
+ "unicode-normalization",
  "zstd",
 ]
 
