@@ -11,6 +11,8 @@ members = [
     "crates/aristotle-ui",
     "crates/aristotle-app",
 ]
+# Separate workspace: needs the patched Plato source and static C libraries.
+exclude = ["crates/aristotle-render"]
 
 [workspace.package]
 edition = "2021"

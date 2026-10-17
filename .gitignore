@@ -3,3 +3,4 @@
 __pycache__/
 devloop/kindle/aristotle-usbnet/authorized_keys
 /.claude/
+/third_party/plato-patched/
