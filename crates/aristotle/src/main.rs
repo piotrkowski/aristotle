@@ -2398,7 +2398,7 @@ mod tests {
             panel,
             Prefs::default(),
             start_dictionaries(&args),
-            None,
+            powerd::Sleep::none(),
         )
         .unwrap()
     }
