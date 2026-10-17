@@ -836,6 +836,10 @@ impl App {
             self.ui.layout();
             ids.sync(&mut self.ui.tree);
             let now = self.ui.tree.page(list).0;
+            if now != page {
+                // A new page of settings: clean, without a flash.
+                self.ui.request_clean_refresh();
+            }
             if let Screen::Settings { page: p, .. } = &mut self.screen {
                 *p = now;
             }
@@ -1302,12 +1306,14 @@ impl App {
                     } else if view.handle(&mut self.ui.tree, id) {
                         self.ui.layout();
                         view.sync(&mut self.ui.tree);
-                        // A text-only list does not ghost: a quiet partial
-                        // update. Cards and cover photos (large grays) do:
-                        // their page turns are one clean flash each, never
-                        // a flash by count.
+                        // A new page of the list is a new screen of text:
+                        // one clean full-screen mode-9 update, like a book
+                        // page. Cards and cover photos (large grays) need
+                        // the flash, as on the stock home screen.
                         if self.prefs.covers.mode() != CoverMode::None {
                             self.ui.request_full_refresh();
+                        } else {
+                            self.ui.request_clean_refresh();
                         }
                     }
                 }
@@ -2844,6 +2850,87 @@ mod tests {
         assert!(steps[0].location > start && !steps[0].menu_open);
         assert_eq!(steps[1].updates, ["turn"]);
         assert_eq!(steps[1].location, start);
+    }
+
+    /// Dragging a selection over several words keeps the page on the
+    /// panel, with the selection shaded over it: each step is at most one
+    /// update, never a blank page, and the lift settles the screen with one
+    /// update that cleans what the drag's A2 steps left.
+    #[test]
+    fn dragging_a_selection_keeps_the_page() {
+        let Some((library, root, _)) = reopen_fixture(true) else {
+            return;
+        };
+        let library = copy_library(&library);
+        let mut app = memory_app(&library, &root);
+        assert_eq!(reopen(&mut app, "Reopened"), ["flash"]);
+        let Screen::Reader(r) = &mut app.screen else {
+            panic!("not reading");
+        };
+        let words = r.session.words(r.session.current);
+        let page = r.session.page(r.session.current).unwrap();
+        let ink = |data: &[u8], stride: usize| {
+            (0..1448usize)
+                .map(|y| {
+                    data[y * stride..y * stride + 1072]
+                        .iter()
+                        .filter(|&&p| p < 0x80)
+                        .count()
+                })
+                .sum::<usize>()
+        };
+        let page_ink = ink(&page.data, page.stride);
+        assert!(page_ink > 1000, "a page with text");
+        let centre = |i: usize| {
+            let w = &words[i];
+            (
+                ((w.rect.x0 + w.rect.x1) / 2) as u32,
+                ((w.rect.y0 + w.rect.y1) / 2) as u32,
+            )
+        };
+        let first = words.len() / 3;
+        let (x, y) = centre(first);
+        let t = monotonic_us();
+        touch(&mut app, HalPhase::Down, x, y, t);
+        app.tick_reading(t + 600_000).unwrap();
+        let mut steps = Vec::new();
+        for k in 1..=6u64 {
+            let before = updates(&app).len();
+            let (x, y) = centre(first + k as usize * 2);
+            touch(&mut app, HalPhase::Move, x, y, t + 600_000 + k * 60_000);
+            app.render_ui().unwrap();
+            let Panel::Memory(m) = &app.panel else {
+                unreachable!()
+            };
+            let shown = ink(&m.pixels, m.stride);
+            assert!(
+                shown * 2 > page_ink,
+                "step {k}: the page is on the panel ({shown} of {page_ink} dark pixels)"
+            );
+            let new: Vec<String> = m.updates[before..]
+                .iter()
+                .map(|u| format!("{} {}", u.mode, u.label))
+                .collect();
+            assert!(new.len() <= 1, "step {k}: one update at most: {new:?}");
+            steps.push(new);
+        }
+        let before = updates(&app).len();
+        let (x, y) = centre(first + 12);
+        touch(&mut app, HalPhase::Up, x, y, t + 1_100_000);
+        let Panel::Memory(m) = &app.panel else {
+            unreachable!()
+        };
+        let last: Vec<(u32, bool)> = m.updates[before..]
+            .iter()
+            .map(|u| (u.mode, u.full_screen))
+            .collect();
+        assert_eq!(last, [(9, true)], "the lift: one clean update ({steps:?})");
+        assert!(ink(&m.pixels, m.stride) * 2 > page_ink);
+        let Screen::Reader(r) = &app.screen else {
+            panic!("not reading");
+        };
+        assert!(matches!(r.overlay, Overlay::Actions { .. }));
+        app.leave().unwrap();
     }
 
     /// Back to the library at once after a reopen that kept the snapshot's

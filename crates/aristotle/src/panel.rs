@@ -9,12 +9,18 @@
 //!   submitted directly (about 1 ms when the panel is idle) so the caller
 //!   can prerender the next page while the panel works.
 //! - **UI chrome** (library, menu) goes through the HAL display thread,
-//!   which never blocks the input loop: DU for black and white changes,
-//!   GL16 for grays (the UI's own hints), and mode 8 full for screen
-//!   switches and cleanups (the stock UI's flashing refresh). When the book
-//!   page itself changed behind the open menu (new font size, chapter jump),
-//!   the frame goes out as a full mode-9 update of the whole screen like a
-//!   page turn ([`Content::Page`]).
+//!   which never blocks the input loop: A2 only to acknowledge a touch,
+//!   DU for black and white changes, GL16 for grays (the UI's own hints),
+//!   mode 9 in full mode ([`CLEAN`]) for whatever A2 showed and for new
+//!   pages of a list, and mode 8 full for screen switches and cleanups
+//!   (the stock UI's flashing refresh). When the book page itself changed
+//!   behind the open menu (new font size, chapter jump, a popup), the frame
+//!   goes out as a full mode-9 update of the whole screen like a page turn
+//!   ([`Content::Page`]).
+//! - **Ghost budget**: after [`PARTIALS_PER_FLASH`] partial updates, or
+//!   partial updates covering [`PARTIAL_SCREENS_PER_FLASH`] screens, since
+//!   the last full-screen update, the next settled update is a flash
+//!   ([`GhostBudget`]).
 //! - **Night mode** keeps all of the above, so page turns stay one full
 //!   mode-9 update and flashes full mode 8 (the waveforms FBInk names
 //!   night waveforms). Gray chrome updates switch from GL16 to GLKW16
@@ -60,6 +66,61 @@ pub fn night_page(page: &Page, night: bool) -> Cow<'_, Page> {
 
 /// The stock UI's full flashing refresh (GC16 equivalent on the PW4).
 pub const FLASH: FbWaveform = FbWaveform::GCK16;
+/// The cleaning update without a flash: mode 9 in full mode, the update
+/// the stock reader turns pages with [dev]. Used for the UI's `GLKW16`
+/// hint (the final state after A2, list pages) and the reader menu.
+pub const CLEAN: FbWaveform = FbWaveform::GLKW16;
+
+/// Partial updates (DU and GL16, not A2 or [`CLEAN`]) allowed between two
+/// full-screen updates before the next settled update becomes a flash.
+/// Six is KOReader's default full-refresh interval ("Full refresh rate:
+/// every 6 pages"; from KOReader's settings, not measured here). A2 does
+/// not count: it is always cleaned by a [`CLEAN`] update.
+pub const PARTIALS_PER_FLASH: u32 = 6;
+/// The same limit by area: partial and [`CLEAN`] region updates adding up
+/// to this many screens since the last full-screen update. An inference:
+/// region updates leave residue at their edges, and three screens' worth
+/// is about one settings page of toggles.
+pub const PARTIAL_SCREENS_PER_FLASH: i64 = 3;
+
+/// A [`CLEAN`] region at least this share of the screen goes out as one
+/// full-screen update instead: the same panel time, and no edge between
+/// cleaned and uncleaned pixels.
+const CLEAN_FULL_SCREEN: (i64, i64) = (1, 2);
+
+/// How much non-flashing partial work the panel took since the last
+/// full-screen update.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GhostBudget {
+    partials: u32,
+    area: i64,
+}
+
+impl GhostBudget {
+    /// Whether the next settled update should be a flash.
+    pub fn spent(&self, screen: Rect) -> bool {
+        self.partials >= PARTIALS_PER_FLASH
+            || self.area >= screen.area() * PARTIAL_SCREENS_PER_FLASH
+    }
+
+    /// Account for one request that went out.
+    pub fn note(&mut self, req: Request, rect: Rect) {
+        match req {
+            Request::FullScreen(_) => *self = GhostBudget::default(),
+            Request::Partial(wf) if wf == FbWaveform::A2 => {}
+            Request::Partial(_) => {
+                self.partials += 1;
+                self.area += rect.area();
+            }
+            Request::Clean(_) => self.area += rect.area(),
+        }
+    }
+
+    /// A full-screen update went out some other way (a page, the menu).
+    pub fn reset(&mut self) {
+        *self = GhostBudget::default();
+    }
+}
 /// What a UI frame shows, which decides how gray changes reach the panel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Content {
@@ -79,23 +140,49 @@ pub enum Request {
     /// A partial update of the damaged rectangle, through the display
     /// thread.
     Partial(FbWaveform),
+    /// A full-mode update of the damaged rectangle alone (every pixel
+    /// driven), through the display thread.
+    Clean(FbWaveform),
 }
 
 /// The transition policy at the panel (`docs/ui-framework.md`,
-/// "Transitions"):
+/// "Transitions") for one damage rectangle `rect` of `screen`:
 ///
+/// - A2 (touch-down feedback) is partial, and never anything else, so the
+///   acknowledgement stays at about 150 ms;
 /// - GC16 (a screen switch, the night switch, a cleanup) is one full
-///   update of the whole screen with mode 8, the stock flash;
+///   update of the whole screen with mode 8, the stock flash, and so is
+///   any settled update once the ghost budget is `spent`;
 /// - a gray change of the book page behind the menu is one full update of
 ///   the whole screen with the turn waveform (mode 9), like a page turn;
-/// - A2 (touch-down feedback) and DU (black-and-white changes) are partial;
+/// - GLKW16 (the cleaning hint) is a full-mode mode-9 update of the
+///   rectangle, or of the whole screen when it covers half of it;
+/// - DU (black-and-white changes) is partial;
 /// - GL16 (gray chrome) is partial, and becomes GLKW16 (mode 9) at night:
 ///   the gray waveform Lab126 made for dark pages (FBInk; KOReader's
 ///   `waveform_night` on Rex and Zelda).
-pub fn plan(hint: Waveform, content: Content, night: bool, turn: FbWaveform) -> Request {
+pub fn plan(
+    hint: Waveform,
+    rect: Rect,
+    screen: Rect,
+    content: Content,
+    night: bool,
+    turn: FbWaveform,
+    spent: bool,
+) -> Request {
     match hint {
+        Waveform::A2 => Request::Partial(FbWaveform::A2),
         Waveform::GC16 => Request::FullScreen(FLASH),
-        Waveform::GL16 if content == Content::Page => Request::FullScreen(turn),
+        _ if spent => Request::FullScreen(FLASH),
+        Waveform::GL16 | Waveform::GLKW16 if content == Content::Page => Request::FullScreen(turn),
+        Waveform::GLKW16 => {
+            let (n, d) = CLEAN_FULL_SCREEN;
+            if rect.area() * d >= screen.area() * n {
+                Request::FullScreen(CLEAN)
+            } else {
+                Request::Clean(CLEAN)
+            }
+        }
         Waveform::GL16 if night => Request::Partial(FbWaveform::GLKW16),
         other => Request::Partial(FbWaveform(other.mode())),
     }
@@ -226,6 +313,7 @@ pub struct Device {
     night: Option<NightMethod>,
     /// Full-screen full-mode updates submitted so far (pages and flashes).
     full_updates: u64,
+    ghosts: GhostBudget,
 }
 
 fn fb_rect(r: Rect) -> FbRect {
@@ -252,6 +340,7 @@ impl Device {
             turn: FbWaveform(turn_mode),
             night: None,
             full_updates: 0,
+            ghosts: GhostBudget::default(),
         })
     }
 
@@ -279,21 +368,24 @@ impl Device {
     /// Send a UI frame's damage (see the module documentation).
     pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
         for d in damage {
-            match plan(d.waveform, content, self.night.is_some(), self.turn) {
+            let req = plan(
+                d.waveform,
+                d.rect,
+                Rect::screen(),
+                content,
+                self.night.is_some(),
+                self.turn,
+                self.ghosts.spent(Rect::screen()),
+            );
+            self.ghosts.note(req, d.rect);
+            match req {
                 Request::FullScreen(wf) => {
                     // Full-screen, full-mode: clears ghosting.
                     self.blit_ui_wait(ui, Rect::screen())?;
                     let all = self.fb.full_screen();
                     let m = self.fb.update(all, wf, true)?;
                     self.full_updates += 1;
-                    self.track(
-                        m,
-                        if wf == FLASH {
-                            "flash"
-                        } else {
-                            "page (menu open)"
-                        },
-                    );
+                    self.track(m, if wf == FLASH { "flash" } else { "page (ui)" });
                 }
                 Request::Partial(wf) => {
                     // No wait: the driver latched the last page when it
@@ -301,42 +393,37 @@ impl Device {
                     self.blit_ui(ui, d.rect);
                     self.display.damage(fb_rect(d.rect), wf, &[]);
                 }
+                Request::Clean(wf) => {
+                    self.blit_ui(ui, d.rect);
+                    self.display.damage_full(fb_rect(d.rect), wf, &[]);
+                }
             }
         }
         Ok(())
     }
 
     /// Show an overlay that just appeared over the page, such as the reader
-    /// menu's top bar and bottom sheet (`parts`), in two steps that never
-    /// touch the page between the parts:
+    /// menu's top bar and bottom sheet (`parts`): one full-mode mode-9
+    /// update of the whole screen ([`CLEAN`]), the update the page itself
+    /// came with. Only the parts are copied to the framebuffer, so the page
+    /// between them stays as it is.
     ///
-    /// 1. one A2 update over the parts, partial, so only pixels that
-    ///    changed move: the menu is there in about 150 ms, in black and
-    ///    white;
-    /// 2. one full-mode gray update of each part alone (GL16, GLKW16 at
-    ///    night), which brings the grays and clears what A2 left; full
-    ///    mode because a partial update would skip the pixels A2 already
-    ///    moved.
-    ///
-    /// A single gray update over the bounding box of both parts would cover
-    /// almost the whole page and show nothing for a full waveform.
+    /// The menu used to appear as A2 first and a full-mode GL16 pass per
+    /// part after it; GL16 did not clear what A2 left over gray text
+    /// (`docs/benchmarks.md`, "What real reading showed"), and the menu
+    /// ghosted. One update also makes one coherent change.
     pub fn present_overlay(&mut self, ui: &Ui, parts: &[Rect]) {
         let parts: Vec<Rect> = parts.iter().copied().filter(|r| !r.is_empty()).collect();
-        let Some(union) = parts.iter().copied().reduce(|a, b| a.union(&b)) else {
+        if parts.is_empty() {
             return;
-        };
+        }
         self.wait_idle();
         for p in &parts {
             self.blit_ui(ui, *p);
         }
-        let gray = if self.night.is_some() {
-            FbWaveform::GLKW16
-        } else {
-            FbWaveform::GL16
-        };
-        let mut job = vec![(fb_rect(union), FbWaveform::A2, false)];
-        job.extend(parts.iter().map(|p| (fb_rect(*p), gray, true)));
-        self.sequencer.submit(job);
+        self.ghosts.reset();
+        self.sequencer
+            .submit(vec![(self.fb.full_screen(), CLEAN, true)]);
     }
 
     /// Show a book page: one full update of the whole screen with the turn
@@ -354,6 +441,7 @@ impl Device {
         let wf = if flash { FLASH } else { self.turn };
         let m = self.fb.update(rect, wf, true)?;
         self.full_updates += 1;
+        self.ghosts.reset();
         self.track(m, label);
         Ok(waited)
     }
@@ -468,6 +556,7 @@ pub struct Memory {
     pub updates: Vec<Update>,
     turn: FbWaveform,
     night: Option<NightMethod>,
+    ghosts: GhostBudget,
 }
 
 impl Memory {
@@ -481,6 +570,7 @@ impl Memory {
             updates: Vec::new(),
             turn: FbWaveform(turn_mode),
             night: None,
+            ghosts: GhostBudget::default(),
         }
     }
 
@@ -518,10 +608,20 @@ impl Memory {
     }
 
     fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) {
+        let all = self.all();
         for d in damage {
-            match plan(d.waveform, content, self.night.is_some(), self.turn) {
+            let req = plan(
+                d.waveform,
+                d.rect,
+                all,
+                content,
+                self.night.is_some(),
+                self.turn,
+                self.ghosts.spent(all),
+            );
+            self.ghosts.note(req, d.rect);
+            match req {
                 Request::FullScreen(wf) => {
-                    let all = self.all();
                     self.copy_ui(ui, all);
                     let label = if wf == FLASH { "flash" } else { "page (ui)" };
                     self.record(all, wf.0, label);
@@ -529,6 +629,10 @@ impl Memory {
                 Request::Partial(wf) => {
                     self.copy_ui(ui, d.rect);
                     self.record(d.rect, wf.0, "ui");
+                }
+                Request::Clean(wf) => {
+                    self.copy_ui(ui, d.rect);
+                    self.record(d.rect, wf.0, "clean");
                 }
             }
         }
@@ -547,6 +651,7 @@ impl Memory {
             }
         }
         let mode = if flash { FLASH.0 } else { self.turn.0 };
+        self.ghosts.reset();
         self.record(self.all(), mode, label);
     }
 }
@@ -597,18 +702,15 @@ impl Panel {
         match self {
             Panel::Device(d) => d.present_overlay(ui, parts),
             Panel::Memory(m) => {
-                let gray = if m.night.is_some() {
-                    FbWaveform::GLKW16
-                } else {
-                    FbWaveform::GL16
-                };
-                if let Some(u) = parts.iter().copied().reduce(|a, b| a.union(&b)) {
-                    m.copy_ui(ui, u);
-                    m.record(u, FbWaveform::A2.0, "overlay");
+                let parts: Vec<Rect> = parts.iter().copied().filter(|r| !r.is_empty()).collect();
+                if parts.is_empty() {
+                    return;
                 }
-                for p in parts {
-                    m.record(*p, gray.0, "overlay");
+                for p in &parts {
+                    m.copy_ui(ui, *p);
                 }
+                m.ghosts.reset();
+                m.record(m.all(), CLEAN.0, "overlay");
             }
         }
     }
@@ -627,7 +729,13 @@ impl Panel {
     pub fn full_updates(&self) -> u64 {
         match self {
             Panel::Device(d) => d.full_updates(),
-            Panel::Memory(m) => m.updates.iter().filter(|u| u.full_screen).count() as u64,
+            // The menu's update leaves the page between its parts as it
+            // was, so it does not count, as on the device.
+            Panel::Memory(m) => m
+                .updates
+                .iter()
+                .filter(|u| u.full_screen && u.label != "overlay")
+                .count() as u64,
         }
     }
 
@@ -656,13 +764,19 @@ mod tests {
     use super::*;
 
     const TURN: FbWaveform = FbWaveform::GLKW16;
+    const SCREEN: Rect = Rect::screen();
+    const BUTTON: Rect = Rect::new(100, 100, 300, 120);
+
+    fn p(w: Waveform, content: Content, night: bool) -> Request {
+        plan(w, BUTTON, SCREEN, content, night, TURN, false)
+    }
 
     #[test]
     fn screen_switches_and_night_switch_are_one_mode_8_flash() {
         for night in [false, true] {
             for content in [Content::Chrome, Content::Page] {
                 assert_eq!(
-                    plan(Waveform::GC16, content, night, TURN),
+                    plan(Waveform::GC16, SCREEN, SCREEN, content, night, TURN, false),
                     Request::FullScreen(FbWaveform::GCK16)
                 );
             }
@@ -671,20 +785,30 @@ mod tests {
 
     #[test]
     fn page_behind_the_menu_goes_out_like_a_turn() {
-        assert_eq!(
-            plan(Waveform::GL16, Content::Page, false, TURN),
-            Request::FullScreen(FbWaveform(9))
-        );
-        assert_eq!(
-            plan(Waveform::GL16, Content::Page, true, FbWaveform(7)),
-            Request::FullScreen(FbWaveform(7)),
-            "the chosen turn waveform, day or night"
-        );
+        for hint in [Waveform::GL16, Waveform::GLKW16] {
+            assert_eq!(
+                p(hint, Content::Page, false),
+                Request::FullScreen(FbWaveform(9))
+            );
+            assert_eq!(
+                plan(
+                    hint,
+                    BUTTON,
+                    SCREEN,
+                    Content::Page,
+                    true,
+                    FbWaveform(7),
+                    false
+                ),
+                Request::FullScreen(FbWaveform(7)),
+                "the chosen turn waveform, day or night"
+            );
+        }
     }
 
     #[test]
     fn chrome_is_partial_and_night_grays_use_glkw16() {
-        let p = |w, night| plan(w, Content::Chrome, night, TURN);
+        let p = |w, night| p(w, Content::Chrome, night);
         assert_eq!(p(Waveform::A2, false), Request::Partial(FbWaveform::A2));
         assert_eq!(p(Waveform::A2, true), Request::Partial(FbWaveform::A2));
         assert_eq!(p(Waveform::DU, true), Request::Partial(FbWaveform::DU));
@@ -693,6 +817,129 @@ mod tests {
             p(Waveform::GL16, true),
             Request::Partial(FbWaveform::GLKW16)
         );
+    }
+
+    #[test]
+    fn cleaning_is_full_mode_mode_9_and_whole_screen_when_large() {
+        for night in [false, true] {
+            assert_eq!(
+                p(Waveform::GLKW16, Content::Chrome, night),
+                Request::Clean(FbWaveform(9))
+            );
+            let half = Rect::new(0, 0, SCREEN.w, SCREEN.h / 2);
+            assert_eq!(
+                plan(
+                    Waveform::GLKW16,
+                    half,
+                    SCREEN,
+                    Content::Chrome,
+                    night,
+                    TURN,
+                    false
+                ),
+                Request::FullScreen(FbWaveform(9)),
+                "a list page: no flash"
+            );
+            assert_eq!(
+                plan(
+                    Waveform::GLKW16,
+                    SCREEN,
+                    SCREEN,
+                    Content::Chrome,
+                    night,
+                    FbWaveform(7),
+                    false
+                ),
+                Request::FullScreen(FbWaveform(9)),
+                "mode 9 even when turns use DU4"
+            );
+        }
+    }
+
+    #[test]
+    fn a_spent_budget_flashes_the_next_settled_update_but_not_a2() {
+        let spent = |w| plan(w, BUTTON, SCREEN, Content::Chrome, false, TURN, true);
+        assert_eq!(spent(Waveform::A2), Request::Partial(FbWaveform::A2));
+        for w in [Waveform::DU, Waveform::GL16, Waveform::GLKW16] {
+            assert_eq!(spent(w), Request::FullScreen(FLASH));
+        }
+    }
+
+    #[test]
+    fn ghost_budget_counts_partials_and_area() {
+        let mut b = GhostBudget::default();
+        let small = Rect::new(0, 0, 100, 100);
+        for _ in 0..PARTIALS_PER_FLASH - 1 {
+            b.note(Request::Partial(FbWaveform::DU), small);
+            b.note(Request::Partial(FbWaveform::A2), small);
+            b.note(Request::Clean(CLEAN), small);
+        }
+        assert!(!b.spent(SCREEN), "A2 and cleaning updates do not count");
+        b.note(Request::Partial(FbWaveform::GL16), small);
+        assert!(b.spent(SCREEN));
+        b.note(Request::FullScreen(FLASH), SCREEN);
+        assert!(!b.spent(SCREEN), "a full-screen update starts over");
+        for _ in 0..PARTIAL_SCREENS_PER_FLASH {
+            b.note(Request::Clean(CLEAN), SCREEN);
+        }
+        assert!(b.spent(SCREEN), "by area");
+        b.reset();
+        assert!(!b.spent(SCREEN));
+    }
+
+    #[test]
+    fn a_tap_is_a2_then_one_cleaning_update_and_the_menu_one_update() {
+        use aristotle_ui::input::TouchEvent;
+        use aristotle_ui::text::{FamilyId, TextEngine, TextStyle};
+        use aristotle_ui::tree::{Kind, Node, Tree};
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../aristotle-render/assets/fonts");
+        let mut t = Tree::new();
+        let l = t.label("Open", TextStyle::new(FamilyId(0), 40.0));
+        let btn = t.button(Node::new(Kind::Spacer).border(3, 0, 12), l, 42);
+        let root = t.align(0.5, 0.5, btn);
+        t.set_root(root);
+        let fonts = crate::ui_fonts(&dir).unwrap();
+        let mut ui = Ui::new(t, TextEngine::new(fonts), 1072, 1448);
+        let mut m = Memory::new(1072, 1448, 9);
+        let d = ui.render();
+        m.present(&ui, &d, Content::Chrome);
+        let c = ui.tree.rect(btn).center();
+        let touch = |phase, ms: u64| TouchEvent {
+            phase,
+            id: 0,
+            x: c.x,
+            y: c.y,
+            time_us: ms * 1000,
+        };
+        ui.handle_touch(touch(aristotle_ui::input::Phase::Down, 0));
+        let d = ui.render();
+        m.present(&ui, &d, Content::Chrome);
+        ui.handle_touch(touch(aristotle_ui::input::Phase::Up, 80));
+        let d = ui.render();
+        m.present(&ui, &d, Content::Chrome);
+        let modes: Vec<(u32, &str)> = m.updates[1..]
+            .iter()
+            .map(|u| (u.mode, u.label.as_str()))
+            .collect();
+        assert_eq!(modes, vec![(6, "ui"), (9, "clean")]);
+        let mut panel = Panel::Memory(m);
+        let before = panel.full_updates();
+        panel.present_overlay(
+            &ui,
+            &[Rect::new(0, 0, 1072, 200), Rect::new(0, 1000, 1072, 448)],
+        );
+        let Panel::Memory(m) = &panel else {
+            unreachable!()
+        };
+        let last = m.updates.last().unwrap();
+        assert_eq!(
+            (last.mode, last.full_screen),
+            (9, true),
+            "menu: one mode-9 update"
+        );
+        assert_eq!(m.updates.len(), 4);
+        assert_eq!(panel.full_updates(), before);
     }
 
     #[test]

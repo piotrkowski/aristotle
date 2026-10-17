@@ -566,6 +566,15 @@ impl App {
         Ok(())
     }
 
+    /// Send the frame's changes as cleaning updates (full-mode mode 9 of
+    /// the changed rectangle): gray text that replaces gray text, or a
+    /// selection drawn over it, must not leave the old pixels behind.
+    fn present_clean(&mut self) -> Result<(), Error> {
+        let damage = self.ui.render_clean();
+        self.panel.present(&self.ui, &damage, Content::Chrome)?;
+        Ok(())
+    }
+
     /// Take the overlay away: the page comes back with one full mode-9
     /// update of the whole screen.
     pub(crate) fn close_overlay(&mut self) -> Result<(), Error> {
@@ -681,11 +690,9 @@ impl App {
                 // The dictionary is slow: the word first, the popup when
                 // the answer comes (see `background`).
                 perf!("hold: \"{word}\" selected, dictionary still looking");
+                // Not A2: it would crush the gray text under the marker.
                 self.rebuild_reader(Refresh::Auto)?;
-                if let Some(n) = self.reading().and_then(|r| r.nodes.selection) {
-                    self.ui.tree.invalidate(n, Refresh::Transient);
-                }
-                self.present_fast()?;
+                self.present_clean()?;
             }
         }
         perf!(
@@ -1214,7 +1221,8 @@ impl App {
             // A list page is a new screen of text: clean, like a page.
             self.present_full()
         } else {
-            self.present_fast()
+            // A popup's next page: new gray text over the old.
+            self.present_clean()
         }
     }
 
@@ -1383,8 +1391,8 @@ impl App {
                 }
             }
             self.rebuild_reader(Refresh::Auto)?;
-            // Only the popup's inside changes: a partial update of it.
-            self.present_fast()?;
+            // Only the popup's inside changes: a cleaning update of it.
+            self.present_clean()?;
         }
         Ok(())
     }
@@ -1419,7 +1427,7 @@ impl App {
                 }
             }
             self.rebuild_reader(Refresh::Auto)?;
-            self.present_fast()?;
+            self.present_clean()?;
         }
         Ok(())
     }
