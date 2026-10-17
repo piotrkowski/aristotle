@@ -21,4 +21,4 @@ plato-core = { path = "../../third_party/plato/crates/core" }
 # Same version as plato-core uses, to read EPUB metadata it does not expose
 # and to write converted MOBI books (stored). Deflate only, as in plato-core
 # (the fork's "core: zip deflate only"): EPUBs use no other codec.
-zip = { version = "7.0.0", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.0.3", default-features = false, features = ["deflate-flate2"] }
