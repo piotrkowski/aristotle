@@ -4,7 +4,11 @@
 
 pub mod canvas;
 pub mod geom;
+pub mod icons;
+pub mod input;
 pub mod text;
+pub mod tree;
+pub mod ui;
 pub mod waveform;
 
 pub use canvas::{Canvas, Painter};
