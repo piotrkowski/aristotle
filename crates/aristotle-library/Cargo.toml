@@ -15,3 +15,7 @@ miniz_oxide = "0.8"
 jpeg-decoder = { version = "0.3", default-features = false }
 png = "0.18"
 md-5 = "0.10"
+
+[[bin]]
+name = "aristotle-library-cli"
+path = "src/bin/cli.rs"
