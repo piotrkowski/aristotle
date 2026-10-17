@@ -2,10 +2,58 @@
 
 Aristotle is offline first. The reader opens no connections and listens on no
 port. The only network it sets up is the USB link to a computer for
-development (`usb0`, see [AGENTS.md](../AGENTS.md)). Wi-Fi stays under the
+development (`usb0`, see [The USB link](#the-usb-link)). Wi-Fi stays under the
 stock system's control unless you switch on the **scoped** policy described
 here. Features that need a server, such as a dashboard that fetches from one
 host, are meant to run with it.
+
+## The USB link
+
+The device agent (`agent/boot.sh`) and KUAL › Aristotle › Start USB network
+once (`bin/start.sh`) load `g_ether` and give `usb0` the address
+`192.168.15.244/24`; `dropbear` listens on that address only. On the
+computer, `devloop/host/setup-host-net.sh` creates a NetworkManager profile,
+matched by the gadget's fixed MAC, with the address `192.168.15.201/24` and
+no default route, and `devloop/host/ssh_config` names the Kindle by its
+address. There is no gateway or DHCP on the link: both ends have fixed
+addresses in one `/24`.
+
+If your own network uses `192.168.15.0/24` too, the computer has two routes
+to the same subnet while the Kindle is plugged in, and one of them wins:
+either SSH to the Kindle or the hosts of your network in that range stop
+answering. Move the USB link to a private `/24` that nothing else on your
+computer uses (`ip route` lists the ones in use), for example
+`10.73.77.0/24`. The address appears in these files:
+
+| File | Side | What to change |
+|------|------|----------------|
+| `devloop/kindle/aristotle-usbnet/agent/boot.sh` | device, agent | `DEV_IP`; the `netmask` in `net_up` if the prefix is not `/24` |
+| `devloop/kindle/aristotle-usbnet/bin/start.sh` | device, KUAL | `DEV_IP`; the `netmask` of its `ifconfig` line likewise |
+| `devloop/kindle/aristotle-usbnet/agent/migrate.sh` | device | `DEV_IP` (what the migration checks before it commits) |
+| `devloop/host/setup-host-net.sh` | computer | the address in `ipv4.addresses` |
+| `devloop/host/ssh_config` | computer | `HostName` |
+| `devloop/kindle/tests/migrate.sh` | test | the address the fake `ifconfig` prints |
+
+Change both sides together; the device and the computer must agree on the
+subnet, or SSH has nothing to connect to. Then apply the change on each
+side:
+
+1. Copy the extension to the device with
+   `devloop/host/install-extensions.sh` while it is in drive mode (Settings ›
+   USB port › USB drive in Aristotle, or `aristotlectl mode storage 10` over
+   SSH). The KUAL start item uses the new address from then on.
+2. If the agent is installed, run KUAL › Aristotle › Install agent once more.
+   The agent runs its own copy of `boot.sh` in `/var/local/aristotle`, so a
+   new extension alone does not change it; the install copies it and
+   restarts the agent, which moves `usb0` and `dropbear` to the new address.
+   It writes `/var/local`, so on someone else's device it needs their
+   go-ahead, like the first install.
+3. On the computer, run `devloop/host/setup-host-net.sh` again. It replaces
+   the profile bound to the gadget's MAC.
+4. Reconnect. SSH keeps known host keys by address, so the first connection
+   to the new address adds a new entry (`accept-new`).
+
+`.github/SECURITY.md` and `AGENTS.md` quote the default address in prose.
 
 ## Modes
 
