@@ -114,7 +114,8 @@ The driver runs one update at a time [dev]. A submit blocks while an earlier upd
 - Frontlight: `/sys/class/backlight/bl/brightness`, range 0–2047. Writes take effect and read back exactly [dev].
 - Battery: `/sys/class/power_supply/bd71827_bat/` with `capacity`, `status`, `charging`, `voltage_now` (µV) and `temp` (°C). The charger is `bd71827_ac` [dev].
 - Hall sensor: `/sys/bus/platform/drivers/hall_sensor/rex_hall/hall_enable` [ko].
-- `lipc-set-prop com.lab126.powerd preventScreenSaver 1` keeps `powerd` from blanking to the screensaver and suspending [ko]. The reader app and the USB network script set it too.
+- `lipc-set-prop com.lab126.powerd preventScreenSaver 1` keeps `powerd` from blanking to the screensaver and suspending [ko]. While it is 1, powerd also ignores the power button (`pbigpss::Prevent screen saver set. Ignoring power button` in its log) [dev], and it ignores the button while it thinks USB drive mode is on, which on our unit includes the USB network (`drive_mode_state:1`) [dev]. The USB network script sets it; the reader app sets it unless `ARISTOTLE_POWERD=1`.
+- powerd ignores the power button until it receives `bootSplashCleanup` from `com.lab126.hal`, which only the stock `framework_setup` job sends [fw]. A boot without the framework must send it (`ui-boot.sh` does).
 
 ## Filesystems
 
@@ -145,6 +146,10 @@ system (udevd) → filesystems → system_setup → lab126 → lab126_gui
 | Native renderers | `kfxreader`, `kfxview`, `webreader` |
 | Cloud, telemetry and extras | `todo`, `tmd`, `dmld`, `fastmetrics`, `clickstream_logging`, `perfd`, `stackdumpd`, `otaupd`, `otav3`, `rcm`, `archive`, `scanner`, `stored`, `asr`, `ivona_ttsd`, `ttsorchestrator`, `playermgr`, `btd`, `btmanagerd`, `btfd`, `acsbtfd`, `ffsd`, `demd`, `cmd`, `phd`, `wand` |
 | Developer jobs, inert | `sshd`, `usbnetd`, `usbnet-autostart`, `adb-autostart`, `vnc`. They wait for flag files in `/mnt/base-us` (`ENABLE_USBNET`, `ENABLE_ADB`, `ENABLE_VNC`), and their binaries under `/usr/local` are missing from production images |
+
+Upstart is 0.6.6 [dev]: no `.override` files, no `manual` stanza [fw], so stock jobs cannot be disabled without editing them. A task that starts `on starting X` runs to completion before X's process is executed: Aristotle's OTA job bind-mounts over `/usr/bin/otav3` that way and the real binary never ran [dev, emulator]. `stored` counts its starts per session and reboots the device after more than five that ran under 10 s each (`mesquite_functions`) [fw]; `takeover.sh stop` therefore leaves it, `scanner`, `dmld`, `fastmetrics` and `clickstream_logging` to `framework_ready`.
+
+The stock `framework` job runs `chgrp -R javausers` and `chmod -R g=u` on `/var/local`, `/var/log`, `/var/lock`, `/var/tmp` and `/var/run` at every start [fw]; `/var/local` belongs to the `framework` user, `/var/tmp` is world-writable without the sticky bit and `fs.protected_symlinks` is 0 [dev]. [device/README.md](../device/README.md#security) has what that means for Aristotle.
 
 `lipc` is Lab126's property and event bus on D-Bus, served by `lipc-daemon` and driven with `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, `lipc-send-event` and `lipc-wait-event`. Services are named `com.lab126.<name>`. The probe dumps all of them with their properties.
 

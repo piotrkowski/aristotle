@@ -93,6 +93,11 @@ check "off: chains removed" "[ ! -e $T/ARISTOTLE_IN ] && [ ! -e $T/ARISTOTLE_OUT
 # net-allow, the user's own lines left alone, applied at once in scoped
 # mode only.
 cp "$HERE/../extension/agent/net.sh" "$S/net.sh"
+# aristotlectl works only in a folder that is its owner's alone; here the
+# owner is the user running the test.
+chmod 700 "$S"
+AGENT_TEST_OWNER=$(id -u)
+export AGENT_TEST_OWNER
 CTL="sh $HERE/../extension/agent/aristotlectl"
 printf '%s\n' 'calibre.lan:8080   # my own line' > "$S/net-allow"
 $CTL net allow add calibre.lan:8080 opds > /dev/null

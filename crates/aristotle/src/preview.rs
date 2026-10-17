@@ -312,7 +312,7 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
             .unwrap_or_else(|| Prefs::default().language),
         ..Prefs::default()
     };
-    let mut app = crate::build_app(&a, panel, prefs, service, None)?;
+    let mut app = crate::build_app(&a, panel, prefs, service, crate::powerd::Sleep::none())?;
     // Exports as `--test-clippings` sends them: beside the PNGs.
     let export_root = out.join(format!("export-{stamp}"));
     fs::create_dir_all(&export_root)?;

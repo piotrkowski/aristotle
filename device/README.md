@@ -7,7 +7,7 @@ itself is the `aristotle` crate.
 | Path | What | Installed to |
 |------|------|--------------|
 | `extension/` | The KUAL extension: the menu, the manual USB network, the device guard | `/mnt/us/extensions/aristotle/` |
-| `extension/agent/` | The agent: an upstart job, its boot script, `aristotlectl` and the Wi-Fi policy | `/etc/upstart/aristotle-agent.conf` and `/var/local/aristotle/` |
+| `extension/agent/` | The agent: three upstart jobs (the agent, Aristotle at boot, the OTA block), their scripts, `aristotlectl` and the Wi-Fi policy | `/etc/upstart/aristotle-{agent,ui,ota}.conf` and `/var/local/aristotle/` |
 | `app/` | `run-aristotle.sh` and `takeover.sh`, which launch the app in place of the stock UI | `/mnt/us/aristotle/`, in the app bundle |
 | `probe/` | A read-only probe, a KUAL extension | `/mnt/us/extensions/aristotle-probe/` |
 | `tests/` | Host-side tests of the scripts above, against a fake device root | stays on the host |
@@ -48,11 +48,28 @@ KUAL › Aristotle offers:
 
 | Item | Runs |
 |------|------|
-| Install agent (SSH on every boot) | `agent/install.sh` |
+| Start Aristotle | `bin/aristotle-start.sh` |
+| Return to the Kindle interface | `bin/aristotle-stop.sh` |
+| Start Aristotle at boot: on (agent installed) | `agent/autostart.sh on` |
+| Start Aristotle at boot: off | `agent/autostart.sh off` |
+| Install agent (SSH on every boot, no Amazon updates) | `agent/install.sh` |
 | USB drive mode for 10 minutes (agent installed) | `aristotlectl mode storage 10` |
-| Remove agent completely (job, state, SSH key) | `agent/uninstall.sh` |
+| Remove agent completely (jobs, state, SSH key) | `agent/uninstall.sh` |
 | Start USB network once (manual) | `bin/start.sh` |
 | Stop USB network (manual) | `bin/stop.sh` |
+
+`bin/aristotle-start.sh` runs `/mnt/us/aristotle/run-aristotle.sh` and
+returns at once. KUAL runs its actions as children of the Java framework,
+which the takeover stops, and upstart signals the framework's whole process
+group, so the launcher starts in a session of its own (`setsid`). The app's
+log goes to `/mnt/us/.aristotle/app.log`. `bin/aristotle-stop.sh` stops
+Aristotle however it was started (SIGTERM, or `aristotlectl app stop` for
+the boot job; it saves first) and brings back what the takeover stopped. On
+the device [dev, 2026-10-17]: an app started this way kept running after
+the stand-in for KUAL's process group was killed with SIGKILL, and Return
+stopped it (`=== exit 0`) and brought the stock GUI back. Started from
+KUAL's own menu by tapping, it has not been tried yet. From inside
+Aristotle, holding the "Library" title for a second also returns.
 
 `bin/start.sh` is the dev loop without the agent: it swaps the USB mass
 storage gadget for `g_ether`, gives `usb0` the address `192.168.15.244`, opens
@@ -63,11 +80,12 @@ reboot, undoes it. On the host, `tools/host/setup-host-net.sh` (once) and
 
 ## The agent
 
-`agent/install.sh` copies `boot.sh`, `aristotlectl`, `net.sh` and the key to
-`/var/local/aristotle` and installs one upstart job,
-`/etc/upstart/aristotle-agent.conf`, with `mntroot rw` and `mntroot ro`. That
-is its only root-filesystem write, and it is skipped when the job file is
-unchanged. The job starts on `started lab126` and runs
+`agent/install.sh` copies the scripts, the key, `takeover.sh` and a copy of
+KOReader's `dropbear` (with its host key) to `/var/local/aristotle` and
+installs three upstart jobs in one `mntroot rw` / `mntroot ro` window:
+`aristotle-agent.conf`, `aristotle-ota.conf` and `aristotle-ui.conf`. That is
+its only root-filesystem write, skipped when the job files are unchanged. No
+stock file is changed. The agent job starts on `started lab126` and runs
 `/var/local/aristotle/boot.sh`, which:
 
 - brings up the USB network and key-only SSH whenever the USB mode is `net`,
@@ -80,7 +98,9 @@ unchanged. The job starts on `started lab126` and runs
 - applies the [Wi-Fi policy](#network).
 
 State and logs live in `/var/local/aristotle` (persistent ext3). Deleting
-`boot.sh` there disables the job without touching the root filesystem.
+`boot.sh` there disables the job without touching the root filesystem. SSH
+runs the agent's copy of `dropbear` from there; if it does not start, the
+agent falls back to KOReader's.
 
 `aristotlectl` is the remote control, run over SSH as root:
 
@@ -93,12 +113,106 @@ aristotlectl net status        # mode, allowed addresses, rule counters
 aristotlectl net allow add|remove HOST:PORT FEATURE   # a tagged net-allow line
 aristotlectl takeover on|off   # tell the watchdog the stock GUI is down on purpose
 aristotlectl gui-restart       # restart the stock GUI now
+aristotlectl app status        # Aristotle at boot: on/off, running, failed launches
+aristotlectl app start         # start Aristotle as at boot (needs autostart's copy)
+aristotlectl app stop [--keep-takeover]  # stop it, not counted as a crash
 aristotlectl log [N]           # last N log lines (default 40)
 aristotlectl reboot            # reboot; the agent brings SSH back on boot
 ```
 
 The app's settings screen switches the USB mode through the same script
 (`aristotle_hal::system::set_usb_mode`).
+
+### Aristotle at boot
+
+`aristotle-ui.conf` starts on `started lab126_gui`, once per boot, and does
+nothing unless `/var/local/aristotle/autostart` exists. KUAL › Aristotle ›
+Start Aristotle at boot: on (`agent/autostart.sh on`) copies the app from
+`/mnt/us/aristotle` to `/var/local/aristotle/app`, where USB drive mode cannot
+take it away, and creates that file; off deletes both. The job runs
+`ui-boot.sh`, which stops the stock GUI as `takeover.sh start` does (the
+stock boot is unchanged up to `lab126_gui`), unloads blanket's boot splash,
+sends powerd the `bootSplashCleanup` that the framework would have sent, and
+runs the app. It falls back to the stock GUI for the rest of the boot when:
+
+- `/mnt/us/aristotle-disable` exists;
+- three launches in a row did not stay up for two minutes. The count
+  survives reboots, so three forced restarts also count, and later boots
+  stay stock until autostart is turned on again;
+- Aristotle quits normally;
+- `aristotlectl app stop` asks for it (not counted as a failure).
+  `run-aristotle.sh` stops a boot-started Aristotle this way first, with
+  `--keep-takeover`, so developers can run their own build.
+
+It logs to `ui.log`, the app to `app.log`. Measured on our PW4 [dev,
+2026-10-17]: the job started at 37.2 s of uptime, the stock GUI was down at
+39.6 s, the app started at 39.8 s and submitted the library's first frame
+1.0 s later, so about 41 s from power-on to the library, without Java
+(`framework`, `pillow` and `lab126_gui` stopped, `x` and `powerd` running).
+382 MB of 490 MB were available. In the emulator the crash fallback (three
+failed launches, then stock, and stock again on the next boot) and
+`app stop`/`app start` were also checked; on the device only one boot,
+`app stop` and autostart off were.
+
+### Amazon's updates
+
+`aristotle-ota.conf` handles `starting otaupd` and `starting otav3`: it
+bind-mounts `/var/local/aristotle/ota-stub`, which only sleeps, read-only
+over `/usr/bin/otaupd` and `/usr/bin/otav3` before upstart runs them. The real
+daemons never run and `com.lab126.ota` never appears. No stock file changes;
+the mounts end at the next reboot, and without the job they do not come
+back. The `update.bin.tmp.partial` folder on the USB drive stays as a second
+layer: our firmware deletes it if it is not a directory, but `otav3` also has
+code to delete it [fw]. On the device [dev]: both daemons ran as
+`sleep 2147483647` after install, with the two read-only bind mounts in
+`/proc/mounts`; in the emulator the real `otav3` never started at boot (no
+`OTAController` lines). To update the firmware on purpose: remove the agent,
+reboot, update. The kill switch does not turn this off.
+
+### Security
+
+The stock `framework` job runs `chgrp -R javausers` and `chmod -R g=u` on
+`/var/local` at every start [fw], and `/var/local` itself belongs to the
+`framework` user [dev]. A directory there that root's scripts run from would
+be writable by the framework (Pillow, the web content it shows) after the
+first stock boot. So:
+
+- `install.sh` makes `/var/local/aristotle` root's with mode `000`. With no
+  bits for the owner, `g=u` gives the group none; root needs none. After a
+  stock boot the directory shows as `d-----S---` with group `javausers`
+  [dev], still closed to everyone else.
+- Each job checks, before running anything, that the directory is not a
+  link, belongs to root and gives nothing to group or others (a setgid bit
+  is fine). Otherwise it does not start, logs to syslog and to
+  `/mnt/us/aristotle-refused.log`, and the stock system boots as usual.
+  `aristotlectl` checks the same.
+- The jobs enter the checked directory and the scripts reach their files
+  through `/proc/PID/cwd`, so a directory renamed or replaced later in the
+  boot cannot change what runs.
+- Nothing on the USB drive runs as root at boot: SSH uses the agent's copy
+  of `dropbear` and its own `authorized_keys`, and the boot job runs its own
+  copy of the app.
+- `install.sh` over a directory others could write (earlier versions) keeps
+  only the log and the settings, as plain files, and replaces the rest.
+
+Not fixed here, because it is not ours: the USB drive is writable by every
+process, and KUAL runs its extensions from it as root; the jailbreak runs
+`/mnt/us/emergency.sh` as root; the stock system runs
+`/var/local/system/fixup`, in a directory the framework's group can write.
+`takeover.sh` and the KUAL launcher still log to `/var/tmp`, which any user
+can write.
+
+### Recovery without SSH
+
+Verified on our PW4 [dev, 2026-10-17]: the jailbreak's `bridge.conf` runs
+`/mnt/us/emergency.sh` as root once the stock framework is up. A script that
+only appended a line to a log on the USB drive ran as uid 0 about 110 s
+after the reboot, and the jailbreak skipped its own repairs on that boot, as
+its job says. With the agent unreachable, put a script there that undoes
+what is needed, for example `sh /mnt/us/extensions/aristotle/agent/uninstall.sh`,
+eject and reboot; delete the script afterwards. It runs only on a boot that
+reaches the stock framework, so with Aristotle at boot it needs the kill
+switch, a fallback or Return first.
 
 ### Kill switch
 
@@ -115,9 +229,13 @@ reboot. Delete the file and reboot to have the agent back.
 KUAL › Aristotle › Remove agent completely, or `agent/uninstall.sh` over SSH
 (the session drops at the end), removes:
 
-- the upstart job;
+- the three upstart jobs, in one `mntroot` window;
+- Aristotle started at boot, if it runs (it saves; the stock GUI comes back);
+- the OTA block: the stubs are unmounted and daemons that were running are
+  started again for real;
 - `/var/local/aristotle`: the scripts, the state (USB mode, Wi-Fi policy and
-  allowlist, watchdog flags), the agent's copy of the key and the log;
+  allowlist, watchdog flags, autostart and its copy of the app), the agent's
+  copies of the key and of `dropbear`, and the logs;
 - `/var/local/aristotle-migrate`, backups an earlier version may have left;
 - the agent's keys from KOReader's `settings/SSH/authorized_keys` (other keys
   there stay), and the extension's `authorized_keys`, also under the old
@@ -125,7 +243,8 @@ KUAL › Aristotle › Remove agent completely, or `agent/uninstall.sh` over SSH
 - the runtime state: `dropbear`, `usb0` and `g_ether`, the `usb0` firewall
   rules and the Wi-Fi policy chains.
 
-It appends the log to `/mnt/us/aristotle-agent.log` first, for diagnosis. It
+Tested on the host only (`device/tests/agent.sh`); on the device it would
+drop the SSH link it is run over. It appends the logs to `/mnt/us/aristotle-agent.log` first, for diagnosis. It
 is not guarded, and running it twice is harmless. The app, the extensions and
 `/mnt/us/.aristotle` stay on the USB drive until you delete them.
 
@@ -135,7 +254,8 @@ The app bundle unpacks to `/mnt/us/aristotle/` with `run-aristotle.sh`,
 `takeover.sh` and a copy of `guard.sh`. `run-aristotle.sh` runs
 `takeover.sh start`, which stops the stock GUI and the cloud and telemetry
 jobs, then the app, then `takeover.sh stop`, which brings the stock GUI back
-(30 to 60 s of boot splash). It logs to `/var/tmp/aristotle.log` and ignores
+(30 to 60 s of boot splash). The app follows powerd for sleep only with
+`ARISTOTLE_POWERD=1` for now ([docs/reader.md](../docs/reader.md)). It logs to `/var/tmp/aristotle.log` and ignores
 hangups, so the app outlives a dropped SSH session:
 
 ```sh
