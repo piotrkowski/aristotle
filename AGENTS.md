@@ -7,7 +7,7 @@ Repo `aristotle` (the working name), product **Aristotle**: a replacement for th
 - Work on a real device can brick it, and **no recovery path has been verified yet**. Until one exists, do not write to the root filesystem, boot partitions, bootloader, `/mnt/wfm` or `/var/local` without the user's explicit go-ahead.
 - Run device-side experiments as reversible overlays: bind mounts, `/var/tmp` copies, stopped services. A reboot must bring back the stock system.
 - Everything in this repo is in English: code, comments, docs, commits.
-- `third_party/plato` is an upstream submodule. Don't edit it: changes go into `tools/plato-patches/`. When you borrow code, copy it into our crates and keep the AGPL notice and attribution, and list it in `THIRD_PARTY.md`.
+- `third_party/plato` is our Plato fork ([piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`): upstream Plato plus one commit per change. Changes to Plato go there as commits on `aristotle`, followed by a submodule bump here (`docs/reader.md`, "Plato fork"); keep each one small and described. When you borrow other code, copy it into our crates and keep the AGPL notice and attribution, and list it in `THIRD_PARTY.md`.
 - Test data and docs use public-domain books (Prus, Mickiewicz, Plato in Witwicki's translation, Austen, Melville) or text written for the test, never copyrighted books or anyone's own library.
 - Mark device claims with their source: verified on the device, read from firmware, or borrowed from KOReader or other projects. Don't promote an inference to a fact.
 
@@ -47,4 +47,4 @@ Repo `aristotle` (the working name), product **Aristotle**: a replacement for th
 
 - Static questions: answer them from the firmware image in `~/.cache/aristotle/probe/static/` before touching the device.
 - Runtime questions: extend `probe/device/aristotle-probe/bin/probe.sh`. It must stay read-only outside its output directory. Copy results into `~/.cache/aristotle/probe/device/` and record durable findings in `docs/pw4-reference.md`.
-- For Plato: its engine is consumed through `crates/aristotle-render` against a patched copy (`docs/reader.md`, "How Plato is consumed"); `third_party/plato` is the reference for its internals. PDF and the other non-EPUB formats go through MuPDF (`mupdf_wrapper`).
+- For Plato: its engine is consumed through `crates/aristotle-render`, which builds `plato-core` from the fork in `third_party/plato` (`docs/reader.md`, "How Plato is consumed"). PDF and the other non-EPUB formats go through MuPDF (`mupdf_wrapper`).

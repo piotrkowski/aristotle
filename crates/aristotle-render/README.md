@@ -8,7 +8,7 @@ Design, defaults and measurements: [`docs/reader.md`](../../docs/reader.md).
 
 `plato-core` is not on crates.io and needs two things a fresh checkout lacks:
 
-1. the Plato source with our patches (`tools/plato-patches/`), which `tools/prepare-plato-src.sh` writes to `third_party/plato-patched/` (gitignored; the submodule stays untouched);
+1. the Plato source: our fork, in the `third_party/plato` submodule;
 2. Plato's C dependencies (MuPDF, FreeType, HarfBuzz, ...) as static archives, which `tools/build-plato.sh` builds with Zig.
 
 So this crate has its own `[workspace]` and the root workspace excludes it: `cargo build` at the repo root keeps working on any host, and only this crate needs the Plato build.

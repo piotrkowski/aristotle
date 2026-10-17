@@ -33,7 +33,7 @@ pub mod screen;
 pub mod style;
 
 /// Plato's core, for callers that need its types (errors, locations)
-/// without depending on the patched source tree themselves.
+/// without depending on the Plato submodule themselves.
 pub use plato_core;
 
 use std::io;

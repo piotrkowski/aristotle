@@ -214,10 +214,10 @@ fn kindle_positions_reopen_on_the_same_page() {
 }
 
 /// Plato lays a spine item out only as far as needed and resumes later
-/// (tools/plato-patches/plato-0008). Placing a location in a fresh copy,
+/// (the Plato fork's `core: lazy epub layout`). Placing a location in a fresh copy,
 /// turning from there both ways, and paginating everything must agree, also
 /// with nested blocks, lists, quotes and a table in one long chapter.
-/// (Against an unpatched build: `aristotle-render pages BOOK 20`.)
+/// (Against a build without it: `aristotle-render pages BOOK 20`.)
 #[test]
 fn lazy_layout_agrees_with_a_full_walk() {
     let Some(data) = data_dir() else {

@@ -1,3 +1,4 @@
 [submodule "third_party/plato"]
 	path = third_party/plato
-	url = https://github.com/baskerville/plato
+	url = https://github.com/piotrkowski/plato.git
+	branch = aristotle

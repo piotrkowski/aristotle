@@ -60,10 +60,15 @@ export TMPDIR="$HOME/.cache/aristotle/tmp"
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/aristotle/target-render}
 mkdir -p "$TMPDIR"
 
-sh "$REPO/tools/prepare-plato-src.sh"
+SRC="$REPO/third_party/plato"
+if [ ! -f "$SRC/crates/core/Cargo.toml" ]; then
+    echo "third_party/plato is not checked out; run: git submodule update --init" >&2
+    exit 1
+fi
 
-# plato-core's patched build.rs links the archives from these directories
-# (libmupdf_wrapper.a sits in target/mupdf_wrapper/Kindle in older builds).
+# plato-core's build.rs (the fork's "core: lib dirs and host musl") links the
+# archives from these directories (libmupdf_wrapper.a sits in
+# target/mupdf_wrapper/Kindle in older builds).
 export PLATO_LIB_DIRS="$B/plato/libs:$B/plato/target/mupdf_wrapper/Kindle"
 # zstd-sys (the reader app's page snapshots) compiles C with the cc crate:
 # use Zig too.
@@ -77,7 +82,6 @@ cargo "$CARGO_CMD" --config "$REPO/.cargo/config.toml" --release --target "$TARG
     --manifest-path "$REPO/crates/aristotle-render/Cargo.toml" --workspace
 [ "$CARGO_CMD" = build ] || exit 0
 
-SRC="$REPO/third_party/plato-patched"
 DL="$TOOLS/downloads"
 mkdir -p "$DL"
 # fetch NAME URL SHA256: download once into $DL, checked.
@@ -151,9 +155,9 @@ done
 cp -p "$REPO/crates/aristotle-render/assets/fonts/Literata-OFL.txt" "$OUT/data/serif/"
 cp -p "$SRC/css/epub.css" "$SRC/css/html.css" "$OUT/data/css/"
 
-# Glyph fallback for Plato's engine when MuPDF has no Noto fonts (patch
-# 0005): DejaVu Sans cut to arrows, mathematical operators, box drawing,
-# geometric shapes, miscellaneous symbols up to the music signs, dingbats up
+# Glyph fallback for Plato's engine when MuPDF has no Noto fonts (the fork's
+# "core: mupdf tofu fallback"): DejaVu Sans cut to arrows, mathematical
+# operators, box drawing, geometric shapes, miscellaneous symbols up to the music signs, dingbats up
 # to the checkmarks, crosses and stars, and the white squares (about 105 KB
 # unhinted), and Noto Sans Coptic from MuPDF's tree. Neither licence
 # reserves the names used here. CJK stays without a font.

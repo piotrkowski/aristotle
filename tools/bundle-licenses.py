@@ -203,7 +203,7 @@ def main() -> None:
     commit = git("rev-parse", "HEAD") or "unknown"
     dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
     plato_rev = git("rev-parse", "HEAD:third_party/plato") or "unknown"
-    patches = sorted((REPO / "tools/plato-patches").glob("*.patch"))
+    patches = sorted((REPO / "tools/mupdf-patches").glob("*.patch"))
     c_sources = []
     in_list = False
     for line in (REPO / "tools/build-plato.sh").read_text().splitlines():
@@ -221,10 +221,14 @@ def main() -> None:
         "source of this build:\n\n"
         f"Aristotle: {REPO_URL}\n"
         f"  commit {commit}{dirty}\n\n"
-        f"Plato (document engine): https://github.com/baskerville/plato\n"
-        f"  commit {plato_rev}, with these patches from Aristotle's tools/plato-patches/:\n"
+        "Plato (document engine), Aristotle's fork of\n"
+        "https://github.com/baskerville/plato:\n"
+        "  https://github.com/piotrkowski/plato, branch aristotle\n"
+        f"  commit {plato_rev}\n\n"
+        "C libraries, built by tools/build-plato.sh; MuPDF with these patches\n"
+        "from Aristotle's tools/mupdf-patches/:\n"
         + "".join(f"  {p.name}\n" for p in patches)
-        + "\nC libraries, built by tools/build-plato.sh with the same patches:\n"
+        + "Sources:\n"
         + "\n".join(c_sources)
         + "\n\nHyphenation patterns: https://github.com/baskerville/plato/releases/tag/0.9.45\n"
         "Rust crates: crates.io, versions in crates/aristotle-render/Cargo.lock\n"
