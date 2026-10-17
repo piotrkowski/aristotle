@@ -44,7 +44,7 @@ pub const LIGHT_PRESETS: [(&str, u32); 4] =
 /// Screensaver delays offered, in minutes; `None` is never.
 pub const SLEEP_MINUTES: [Option<u32>; 4] = [Some(5), Some(15), Some(30), None];
 
-/// The USB port, as the aristotle agent reports it.
+/// The USB port, as the device agent reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Usb {
     Network,
@@ -79,7 +79,7 @@ pub struct SystemView<'a> {
     /// "sobota, 17 października 2026".
     pub date: &'a str,
     pub time: &'a str,
-    /// `None` when the aristotle agent is not installed.
+    /// `None` when the device agent is not installed.
     pub usb: Option<Usb>,
     /// "O czytniku" lines: a label and a value.
     pub about: &'a [(&'a str, String)],

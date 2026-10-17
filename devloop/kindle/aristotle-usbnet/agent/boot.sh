@@ -1,5 +1,5 @@
 #!/bin/sh
-# aristotle agent, started by /etc/upstart/aristotle.conf on every boot.
+# Aristotle agent, started by /etc/upstart/aristotle-agent.conf on every boot.
 #
 # Keeps the device reachable and healthy without anyone touching it:
 # - USB network (g_ether, usb0 at 192.168.15.244) and key-only SSH (KOReader's
@@ -20,6 +20,11 @@ LOG=$S/log
 KO=/mnt/us/koreader
 PIDFILE=/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
+# Fixed MACs for both ends of the USB link, so the host's NetworkManager
+# profile (devloop/host/setup-host-net.sh) can match the interface. The bytes
+# are arbitrary: any unicast address with the locally administered bit set
+# (0x02 in the first byte) works. bin/start.sh and setup-host-net.sh repeat
+# them; change all three together.
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
 TICK=15

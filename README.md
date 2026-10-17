@@ -74,7 +74,7 @@ catalogs.
 > Aristotle reads **DRM-free** books only.
 
 Installing the device agent writes one file to the root filesystem
-(`/etc/upstart/aristotle.conf`); everything else lives in the user storage and in
+(`/etc/upstart/aristotle-agent.conf`); everything else lives in the user storage and in
 `/var/local`. KUAL removes the agent again.
 
 ## Install

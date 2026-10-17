@@ -26,7 +26,7 @@ installation (`devloop/kindle/aristotle-usbnet/`):
   Without the key they get no further, but the device is not protected against
   someone who has both the device and the key.
 - **One file on the root filesystem.** The agent installs
-  `/etc/upstart/aristotle.conf`; everything it runs lives in
+  `/etc/upstart/aristotle-agent.conf`; everything it runs lives in
   `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes it out again.
 
 Books are parsed by Plato's engine (Rust) and MuPDF (C), which read

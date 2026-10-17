@@ -1,13 +1,13 @@
 //! System facts for the settings screen: storage, memory, firmware, local
-//! time, and the USB mode of the aristotle agent.
+//! time, and the USB mode of the device agent.
 //!
 //! Everything here is read-only except [`set_usb_mode`], which asks the
-//! aristotle agent (`devloop/kindle/aristotle-usbnet/agent/`) to switch through
-//! its own `aristotlectl`, the same command a developer runs over SSH.
+//! agent (`devloop/kindle/aristotle-usbnet/agent/`) to switch through its own
+//! `aristotlectl`, the same command a developer runs over SSH.
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// Size and free space of a filesystem, in bytes.
@@ -111,7 +111,7 @@ pub fn local_time() -> Option<LocalTime> {
     }
 }
 
-/// How the USB port is used, as the aristotle agent keeps it.
+/// How the USB port is used, as the device agent keeps it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsbMode {
     /// USB network with SSH (the agent's default).
@@ -120,16 +120,30 @@ pub enum UsbMode {
     Storage { until: i64 },
 }
 
-/// The agent's state directory (`/var/local/aristotle`).
-pub const ARISTOTLE_DIR: &str = "/var/local/aristotle";
+/// The agent's state directory.
+pub const AGENT_DIR: &str = "/var/local/aristotle";
+
+/// Where to look for the agent, current layout first. Agents installed before
+/// the project's rename keep the old layout until the device has run
+/// `agent/migrate.sh`; drop the second entry once no device needs it.
+const AGENT_LAYOUTS: [(&str, &str); 2] = [
+    (AGENT_DIR, "aristotlectl"),
+    ("/var/local/aristotle", "aristotlectl"),
+];
+
+/// The installed agent's state directory and control script.
+fn agent() -> Option<(&'static Path, PathBuf)> {
+    AGENT_LAYOUTS.iter().find_map(|&(dir, ctl)| {
+        let dir = Path::new(dir);
+        let ctl = dir.join(ctl);
+        ctl.exists().then_some((dir, ctl))
+    })
+}
 
 /// The mode the agent applies, from its `usb-mode` file. `None` when the
 /// agent is not installed.
 pub fn usb_mode() -> Option<UsbMode> {
-    let dir = Path::new(ARISTOTLE_DIR);
-    if !dir.join("aristotlectl").exists() {
-        return None;
-    }
+    let (dir, _) = agent()?;
     let s = fs::read_to_string(dir.join("usb-mode")).unwrap_or_default();
     Some(parse_usb_mode(&s, now()))
 }
@@ -153,7 +167,7 @@ fn now() -> i64 {
 /// drive mode SSH drops and the device cannot write `/mnt/us` while the host
 /// has it mounted.
 pub fn set_usb_mode(storage_minutes: Option<u32>) -> io::Result<()> {
-    let ctl = Path::new(ARISTOTLE_DIR).join("aristotlectl");
+    let (_, ctl) = agent().ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
     let mut cmd = Command::new("/bin/sh");
     cmd.arg(&ctl).arg("mode");
     match storage_minutes {
@@ -168,7 +182,7 @@ pub fn set_usb_mode(storage_minutes: Option<u32>) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(io::Error::other(format!("aristotlectl: {status}")))
+        Err(io::Error::other(format!("{}: {status}", ctl.display())))
     }
 }
 

@@ -9,7 +9,7 @@ BASE=/mnt/us/extensions/aristotle-usbnet
 KO=/mnt/us/koreader
 PIDFILE=/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
-# Locally administered MACs so the host can match the interface reliably.
+# The same arbitrary, locally administered MACs as agent/boot.sh.
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
 

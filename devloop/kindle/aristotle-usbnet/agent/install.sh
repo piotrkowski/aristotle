@@ -1,9 +1,12 @@
 #!/bin/sh
-# Install the aristotle agent: one upstart job on the root filesystem, the rest in
-# /var/local/aristotle. Run as root on the device (from KUAL or SSH). Idempotent.
+# Install the Aristotle agent: one upstart job on the root filesystem, the rest
+# in /var/local/aristotle. Run as root on the device (from KUAL or SSH).
+# Idempotent.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 S=/var/local/aristotle
+JOB=/etc/upstart/aristotle-agent.conf
+PIDFILE=/var/run/aristotle-dropbear.pid
 EXT=$(dirname "$HERE")
 
 say() {
@@ -21,15 +24,15 @@ fi
 
 # The single root-filesystem write: the upstart job. mntroot is the stock tool
 # for a temporary read-write root.
-if ! cmp -s "$HERE/aristotle.conf" /etc/upstart/aristotle.conf 2> /dev/null; then
+if ! cmp -s "$HERE/aristotle-agent.conf" "$JOB" 2> /dev/null; then
     mntroot rw || { say "aristotle: mntroot rw failed"; exit 1; }
-    cp "$HERE/aristotle.conf" /etc/upstart/aristotle.conf
+    cp "$HERE/aristotle-agent.conf" "$JOB"
     sync
     mntroot ro
 fi
 initctl reload-configuration 2> /dev/null
 # Hand the USB port over from a manual "Start" session, if one is running.
-[ -f /var/run/aristotle-dropbear.pid ] && kill "$(cat /var/run/aristotle-dropbear.pid)" 2> /dev/null
-rm -f /var/run/aristotle-dropbear.pid
-stop aristotle > /dev/null 2>&1
-start aristotle && say "aristotle agent installed and running"
+[ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2> /dev/null
+rm -f "$PIDFILE"
+stop aristotle-agent > /dev/null 2>&1
+start aristotle-agent && say "aristotle agent installed and running"
