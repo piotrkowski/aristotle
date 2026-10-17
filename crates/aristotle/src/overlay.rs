@@ -409,8 +409,15 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
 
     let content = t.add(Node::column(14).cross(Cross::Stretch), rows);
     let content = t.pad(Insets::new(18, m, 18, m), content);
-    // Takes what the rule leaves, whichever side the rule is on.
-    let content = t.add(Node::column(0).flex(1), [content]);
+    // Takes what the rule leaves, whichever side the rule is on. Without a
+    // body the sheet has no fixed height to share, and a flexible child
+    // would grow it over the whole page (the selection's action sheet
+    // showed as a blank white screen with its buttons).
+    let content = if has_body {
+        t.add(Node::column(0).flex(1), [content])
+    } else {
+        content
+    };
     let rule = t.rule(3, INK);
     let sheet_children = match spec.place {
         Place::Bottom => [rule, content],
