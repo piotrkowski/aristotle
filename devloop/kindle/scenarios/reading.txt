@@ -24,7 +24,7 @@
 #   /var/tmp/aristotle-observe run /var/tmp/reading.txt
 #   ssh kindle md5sum "/mnt/us/documents/My Clippings.txt"   # unchanged
 #   ssh kindle cat "/var/tmp/reading-test/My Clippings.txt"  # the test highlight
-# Snapshots go to /var/tmp/snap-NAME.raw (devloop/host/fb2png.py).
+# Snapshots go to /mnt/us/aristotle-snaps/NAME.raw (devloop/host/fb2png.py).
 wait 3000
 snap 00-open
 label menu

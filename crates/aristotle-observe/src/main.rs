@@ -434,14 +434,19 @@ fn run_script(path: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Where snaps go: the userstore, not `/var/tmp`. `/var` is a 64 MB tmpfs
+/// shared with the stock services, and 1.5 MB snaps filled it once.
+const SNAP_DIR: &str = "/mnt/us/aristotle-snaps";
+
 /// Save the visible framebuffer (1088-byte stride × 1448 rows) to
-/// `/var/tmp/snap-NAME.raw`, so each scenario step can be checked by eye
-/// with `devloop/host/fb2png.py`.
+/// `SNAP_DIR/NAME.raw`, so each scenario step can be checked by eye with
+/// `devloop/host/fb2png.py`.
 fn snap(name: &str) -> io::Result<()> {
     let mut fb = File::open("/dev/fb0")?;
     let mut buf = vec![0u8; 1088 * 1448];
     fb.read_exact(&mut buf)?;
-    fs::write(format!("/var/tmp/snap-{name}.raw"), &buf)?;
+    fs::create_dir_all(SNAP_DIR)?;
+    fs::write(format!("{SNAP_DIR}/{name}.raw"), &buf)?;
     println!("snap {name}: app {}", active_app());
     Ok(())
 }
