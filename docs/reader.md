@@ -126,7 +126,7 @@ The book's CSS applies. The menu offers seven sizes from 8 to 15 pt, line height
 
 ### Hyphenation
 
-Plato uses language patterns, including Polish with minima of 2 letters on either side of a break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements can override it with `lang` or `xml:lang`. Text without matching patterns is not hyphenated.
+Plato uses language patterns, including Polish with minima of 2 letters on either side of a break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements below `body` can override it with `lang` or `xml:lang`; `lang` on `html` or `body` is ignored. Greek words in a non-Greek language use the Ancient Greek patterns. Other text without matching patterns is not hyphenated.
 
 For books declaring several languages, `lang.rs` samples 192 KiB of text and compares marker letters. `aristotle-render --lang TAG` overrides the result. `aristotle-render info BOOK` reports the language and pattern availability.
 
