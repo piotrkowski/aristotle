@@ -100,6 +100,11 @@ pub enum Overlay {
         rows: Vec<MarkRow>,
         page: usize,
     },
+    /// The reading fonts (fonts.rs).
+    Fonts {
+        rows: Vec<crate::fonts::FontRow>,
+        page: usize,
+    },
     GoTo {
         value: f32,
     },
@@ -133,7 +138,8 @@ impl Overlay {
             | Overlay::Gloss { page, .. }
             | Overlay::Note { page, .. }
             | Overlay::Toc { page, .. }
-            | Overlay::Marks { page, .. } => Some(page),
+            | Overlay::Marks { page, .. }
+            | Overlay::Fonts { page, .. } => Some(page),
             _ => None,
         }
     }
@@ -437,6 +443,7 @@ impl App {
                             indent: it.depth,
                             current: Some(it.index) == *current,
                             lines: 2,
+                            family: None,
                         })
                         .collect();
                     let l = overlay::list(
@@ -461,6 +468,7 @@ impl App {
                             indent: 0,
                             current: false,
                             lines: 3,
+                            family: None,
                         })
                         .collect();
                     let l = overlay::list(
@@ -470,6 +478,25 @@ impl App {
                         &rows,
                         tr(Msg::ReaderNoHighlights),
                     );
+                    nodes.pages = Some(l.pages);
+                    nodes.pager = Some(l.pager);
+                    nodes.arrows = Some(l.arrows);
+                    layers.push(l.root);
+                    None
+                }
+                Overlay::Fonts { rows, .. } => {
+                    let rows: Vec<ListRow> = rows
+                        .iter()
+                        .map(|f| ListRow {
+                            text: f.name.clone(),
+                            meta: f.meta.clone(),
+                            indent: 0,
+                            current: false,
+                            lines: 1,
+                            family: f.ui,
+                        })
+                        .collect();
+                    let l = overlay::list(t, &styles, tr(Msg::MenuFont), &rows, "");
                     nodes.pages = Some(l.pages);
                     nodes.pager = Some(l.pager);
                     nodes.arrows = Some(l.arrows);
@@ -1208,7 +1235,7 @@ impl App {
         self.sync_pager();
         let full = matches!(
             self.reading().map(|r| &r.overlay),
-            Some(Overlay::Toc { .. } | Overlay::Marks { .. })
+            Some(Overlay::Toc { .. } | Overlay::Marks { .. } | Overlay::Fonts { .. })
         );
         if full {
             // A list page is a new screen of text: clean, like a page.
@@ -1225,6 +1252,14 @@ impl App {
             act::NAV_GOTO => self.open_goto(),
             act::PREV => self.overlay_page(-1),
             act::NEXT => self.overlay_page(1),
+            act::BACK
+                if matches!(
+                    self.reading().map(|r| &r.overlay),
+                    Some(Overlay::Fonts { .. })
+                ) =>
+            {
+                self.fonts_back()
+            }
             act::CANCEL | act::BACK => self.close_overlay(),
             act::HIGHLIGHT => self.highlight_selection(),
             act::UNHIGHLIGHT => {
@@ -1333,6 +1368,9 @@ impl App {
         let Some(r) = self.reading() else {
             return Ok(());
         };
+        if matches!(r.overlay, Overlay::Fonts { .. }) {
+            return self.pick_font(i);
+        }
         let target = match &r.overlay {
             Overlay::Toc { items, .. } => {
                 let index = items.get(i).map(|it| it.index);

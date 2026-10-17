@@ -8,7 +8,7 @@
 //! through `aristotle-hal`.
 //!
 //! ```text
-//! aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode N]
+//! aristotle [--data DIR] [--library DIR] [--root DIR] [--fonts DIR] [--turn-mode N]
 //!           [--night-method software|hardware] [--no-scan] [--bench-open TITLE]
 //!           [--open TITLE] [--dict DIR]... [--index-dicts] [--test-clippings PATH]
 //!           [--preview OUT BOOK]
@@ -18,6 +18,7 @@
 //!   --library DIR   library index, covers, page cache and preferences;
 //!                   default: $ARISTOTLE_DATA or /mnt/us/.aristotle
 //!   --root DIR      where the books are; default: /mnt/us/documents
+//!   --fonts DIR     the reader's own TTF and OTF fonts; default: /mnt/us/fonts
 //!   --turn-mode N   page-turn waveform: 9 (stock, default) or 7 (DU4);
 //!                   saved in reader.json
 //!   --night-method  how night mode inverts: software (default) or
@@ -49,6 +50,7 @@
 mod catalogs;
 mod device;
 mod dict;
+mod fonts;
 mod marks;
 mod net;
 mod open;
@@ -70,6 +72,7 @@ mod sync;
 mod turns;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -160,10 +163,12 @@ struct Args {
     bundle: PathBuf,
     /// The private folder for passwords (`net::accounts_dir`).
     accounts: PathBuf,
+    /// The user's fonts folder (`fonts.rs`).
+    fonts: PathBuf,
 }
 
 fn usage() -> &'static str {
-    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] \
+    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--fonts DIR] [--turn-mode 9|7] \
      [--night-method software|hardware] [--no-scan] [--bench-open TITLE] [--open TITLE] \
      [--dict DIR]... [--index-dicts] [--test-clippings PATH] [--lang en|pl] \
      [--preview OUT BOOK]"
@@ -192,6 +197,7 @@ fn parse_args() -> Result<Args, Error> {
         lang: None,
         bundle: exe_dir.clone(),
         accounts: net::accounts_dir(),
+        fonts: PathBuf::from(fonts::DEFAULT_DIR),
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -200,6 +206,7 @@ fn parse_args() -> Result<Args, Error> {
             "--data" => a.data = cwd.join(value("--data")?),
             "--library" => a.library = cwd.join(value("--library")?),
             "--root" => a.root = cwd.join(value("--root")?),
+            "--fonts" => a.fonts = cwd.join(value("--fonts")?),
             "--turn-mode" => a.turn_mode = Some(value("--turn-mode")?.parse()?),
             "--night-method" => {
                 a.night_method = Some(match value("--night-method")?.as_str() {
@@ -431,7 +438,10 @@ fn build_app(
         }),
         sync: sync::SyncState::default(),
         catalogs: catalogs::CatalogState::default(),
+        fonts_dir: args.fonts.clone(),
+        font_faces: HashMap::new(),
     };
+    app.load_font();
     app.apply_night();
     app.show_library(Refresh::Full)?;
     Ok(app)
@@ -544,6 +554,10 @@ struct App {
     sync: sync::SyncState,
     /// The catalog screens' requests (catalogs.rs).
     catalogs: catalogs::CatalogState,
+    /// The user's fonts folder (fonts.rs).
+    fonts_dir: PathBuf,
+    /// UI families made for showing font names, by regular face file.
+    font_faces: HashMap<PathBuf, FamilyId>,
 }
 
 /// What a handler wants the loop to do next.
@@ -2124,6 +2138,7 @@ impl App {
                         }
                         Ok(())
                     }
+                    menu_action::FONT_LIST => self.open_fonts(),
                     menu_action::SIZE_DOWN => {
                         s.size = s.size.saturating_sub(1);
                         self.restyle(s)
@@ -2199,6 +2214,12 @@ impl App {
             self.ui.tree.set_hidden(r.menu.busy, false);
             self.render_ui()?;
         }
+        self.relayout(settings)
+    }
+
+    /// Lay the book out again in the style of the preferences and show it
+    /// with the menu open: one full mode-9 update.
+    pub(crate) fn relayout(&mut self, settings: Settings) -> Result<(), Error> {
         let Screen::Reader(r) = &mut self.screen else {
             return Ok(());
         };
@@ -2225,7 +2246,8 @@ impl App {
         );
         update_menu_labels(&mut self.ui, r);
         perf!(
-            "restyle: {} pt, line height {}, margin {} mm: layout and page {:.0} ms",
+            "restyle: {} {} pt, line height {}, margin {} mm: layout and page {:.0} ms",
+            r.session.style.font_family,
             r.session.style.font_size,
             r.session.style.line_height,
             r.session.style.margin_mm,
@@ -2314,8 +2336,9 @@ fn reader_tree_with(
     layers.extend(extra(&mut t));
     let spec = MenuSpec {
         title,
-        // Only Literata ships with the renderer, so there is no font row.
+        // The reading font's row opens the list of fonts (fonts.rs).
         families: None,
+        font_list: true,
         night: true,
         top_extra: extents.0,
         bottom_extra: extents.1,
@@ -2387,6 +2410,9 @@ fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {
     ui.tree.set_text(r.menu.chapter_label, &chapter);
     ui.tree.set_text(r.menu.page_label, &page);
     ui.tree.set_progress(r.menu.progress, fraction);
+    if let Some(l) = r.menu.font_label {
+        ui.tree.set_text(l, &r.session.style.font_family);
+    }
     if let Some(w) = ui.tree.widget_mut::<Steps>(r.menu.size_steps) {
         w.value = r.settings.size;
     }
@@ -2455,6 +2481,7 @@ mod tests {
             lang: None,
             bundle: library.to_path_buf(),
             accounts: library.join("accounts"),
+            fonts: library.join("fonts"),
         };
         let panel = Panel::memory(1072, 1448, prefs::STOCK_TURN);
         build_app(
@@ -2727,6 +2754,7 @@ mod tests {
             Overlay::Note { .. } => "note",
             Overlay::Toc { .. } => "toc",
             Overlay::Marks { .. } => "marks",
+            Overlay::Fonts { .. } => "fonts",
             Overlay::GoTo { .. } => "go to",
             Overlay::Sync { .. } => "sync",
         }

@@ -448,6 +448,8 @@ pub struct ListRow {
     pub current: bool,
     /// Lines of `text` shown at most.
     pub lines: usize,
+    /// Set `text` in this family instead of the UI's (font names).
+    pub family: Option<aristotle_ui::text::FamilyId>,
 }
 
 pub struct List {
@@ -482,7 +484,11 @@ pub fn list(t: &mut Tree, st: &Styles, title: &str, rows: &[ListRow], empty: &st
         items.push(l);
     }
     for (i, r) in rows.iter().enumerate() {
-        let style = if r.current { st.ui_bold() } else { st.ui() };
+        let mut style = if r.current { st.ui_bold() } else { st.ui() };
+        if let Some(f) = r.family {
+            style.family = f;
+            style.size *= 1.15;
+        }
         let mut p = Paragraph::plain(r.text.clone(), style, Align::Left);
         p.style.max_lines = Some(r.lines.max(1));
         let text = t.text(p);
