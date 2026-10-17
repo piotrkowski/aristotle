@@ -13,7 +13,7 @@
   <a href="#install">Install</a> ·
   <a href="https://piotrkowski.github.io/aristotle/">Demo</a> ·
   <a href="docs/benchmarks.md">Benchmarks</a> ·
-  <a href="#documentation">Documentation</a> ·
+  <a href="docs/README.md">Documentation</a> ·
   <a href=".github/CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -28,7 +28,10 @@ Aristotle replaces the Kindle's stock Java interface. While it runs, the store, 
 
 The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
-The stock interface uses about 200 MB of RAM, and Aristotle uses 14.5 MB. While reading, stock leaves about 240 MB free, and Aristotle leaves about 380 MB.
+| Memory | Stock | Aristotle |
+|---|--:|--:|
+| RAM used by the interface | about 200 MB | **14.5 MB** |
+| RAM free while reading | about 240 MB | **about 380 MB** |
 
 ## Features
 
@@ -68,19 +71,6 @@ Then:
 3. On the Kindle, open *KUAL › Aristotle › Start Aristotle*.
 
 [Install](docs/install.md) covers the optional agent and starting at boot. Then follow [Your first book](docs/first-book.md) to read and export a highlight. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
-
-## Documentation
-
-| I want to... | Read |
-| --- | --- |
-| Start reading | [Your first book](docs/first-book.md) |
-| Add word lookups | [Install dictionaries](docs/dictionaries.md) |
-| Sync with KOReader or download from calibre | [Set up network features](docs/network.md) |
-| Preserve my data or install a new version | [Back up and update](docs/maintenance.md) |
-| Fix a problem or collect logs | [Troubleshooting](docs/troubleshooting.md) |
-| Check whether a book will work | [Format support](docs/formats.md) |
-
-The [documentation index](docs/README.md) also links the architecture, reader, library, UI framework, and device references. The [glossary](docs/glossary.md) explains technical terms. [Benchmarks](docs/benchmarks.md) describe the measurements behind the numbers above. [Screenshots](docs/screenshots.md) and the [interactive demo](https://piotrkowski.github.io/aristotle/) show the interface.
 
 ## Contributing
 
