@@ -292,7 +292,7 @@ fn fonts_steps(d: &mut Driver, menu: Point) -> Result<(), Error> {
         let p = d.button(act::BACK)?;
         d.tap("back", p)?;
     }
-    d.tap("close menu", Point { x: 536, y: 700 })
+    d.tap("close menu", Point { x: 536, y: 400 })
 }
 
 fn write_png(m: &Memory, path: &Path) -> Result<(), Error> {
