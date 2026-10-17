@@ -1,49 +1,34 @@
 # Contributing
 
 Small fixes can go straight to a pull request. For anything larger, open an
-issue first, so others know what you are working on and the approach can be
-agreed before the work. Report bugs in the
-[issue tracker](https://github.com/piotrkowski/aristotle/issues) with the
-template's device, firmware and log fields.
+[issue](https://github.com/piotrkowski/aristotle/issues) first to agree on the
+approach. Before you touch the display or input code, read
+[AGENTS.md](../AGENTS.md).
 
-[AGENTS.md](../AGENTS.md) is the short list of device facts that break naive
-code (the framebuffer stride, the waveform numbering, one update at a time);
-read it before you touch the display or input code.
+## Workspace
 
-## One workspace, two parts
+The repository is one Cargo workspace. A plain `cargo build`, `cargo test` or
+`cargo clippy` covers the pure-Rust default members, which CI checks. The two
+native members, `crates/aristotle-render` and the reader app
+`crates/aristotle-reader`, link Plato's engine and its C libraries. CI does not
+build them, so check them locally.
 
-The repository is one Cargo workspace with one `Cargo.lock`:
-
-- **The default members** are the pure-Rust crates: the hardware layer, the UI
-  toolkit, the library, the measurement tools. A plain `cargo build`,
-  `cargo test` or `cargo clippy` at the root covers exactly these; they build
-  and test on any host, and CI checks them.
-- **The native members**, `crates/aristotle-render` and the reader app
-  `crates/aristotle-reader`, link Plato's document engine and its C libraries
-  (MuPDF, FreeType, HarfBuzz and others). Those are built once by
-  `tools/build-plato.sh` with Zig, for the device and for the host, and
-  `tools/build-render.sh` builds the two crates against them. CI does not
-  build them; run their checks locally.
-
-Plato's engine comes from our fork in the `third_party/plato` submodule
-(branch `aristotle`, see [docs/reader.md](../docs/reader.md), "Plato fork").
-Cargo reads it even for the default members, so clone with
-`--recurse-submodules`. In an existing clone, run
-`git submodule sync && git submodule update --init` after the submodule's URL
-or commit changes. Changes to Plato are commits on the fork's `aristotle`
-branch, followed by a submodule bump here.
+Plato comes from our fork in the `third_party/plato` submodule
+([docs/reader.md](../docs/reader.md), "Plato fork"). Cargo needs it even for
+the default members, so clone with `--recurse-submodules`, and run
+`git submodule sync && git submodule update --init` when the submodule
+changes. Changes to Plato are commits on the fork's `aristotle` branch,
+followed by a submodule bump here.
 
 ## Building
 
-You need Rust through [rustup](https://rustup.rs) with the
-`armv7-unknown-linux-musleabihf` and `x86_64-unknown-linux-musl` targets, and
-for the C libraries curl, tar, xz, openssl, xxd, make, cmake, bash and a host
-C compiler.
-`tools/build-plato.sh` downloads a pinned Zig. Builds and downloads go to the
-cache directory, `$ARISTOTLE_CACHE` (default
-`${XDG_CACHE_HOME:-$HOME/.cache}/aristotle`), which `devloop/env.sh` defines;
-the scripts source it. For your own cargo runs, source it too and set
-`CARGO_TARGET_DIR` there: `/tmp` is a small RAM disk on many hosts.
+You need Rust from [rustup](https://rustup.rs) with the
+`armv7-unknown-linux-musleabihf` and `x86_64-unknown-linux-musl` targets. The
+C libraries also need curl, tar, xz, openssl, xxd, make, cmake, bash and a host
+C compiler. `tools/build-plato.sh` downloads a pinned Zig.
+
+Builds go to `$ARISTOTLE_CACHE` (default `~/.cache/aristotle`), since `/tmp`
+is a small RAM disk on many hosts. Do the same for your own cargo runs:
 
 ```sh
 . devloop/env.sh   # ARISTOTLE_CACHE, and TMPDIR inside it
@@ -64,34 +49,26 @@ PLATO_LIBS_ONLY=1 tools/build-plato.sh
 tools/build-render.sh device
 ```
 
-Everything that runs on the Kindle is a **static** `armv7-unknown-linux-musleabihf`
-binary. The stock userspace uses the soft-float ABI, so nothing may link its
-libraries dynamically.
+Everything that runs on the Kindle is a static
+`armv7-unknown-linux-musleabihf` binary.
 
 ## Trying changes
 
-1. **On the host.** The UI toolkit and the reader render the same pixels on the
-   host: `aristotle-ui-preview` for the screens, `aristotle --preview` for the
-   reading interactions (`docs/reader.md`). Both report every panel update with
-   its waveform and rectangle (the reader in `updates.txt`); compare them before
-   and after.
-2. **In the emulator.** `devloop/emulator/setup.sh` sets up a QEMU PW4 with the
-   stock firmware. Anything that could hang boot, touch the stock framework or
-   load kernel code goes there first.
-3. **On the device.** Use the dev loop in `devloop/` (SSH over the USB cable).
-   Never write to the root filesystem, the boot partitions, `/mnt/wfm` or
-   `/var/local` on someone's device without their explicit consent: no recovery
-   path is verified yet. Device experiments are reversible: copies in
-   `/var/tmp`, bind mounts, stopped services, so a reboot restores the stock
-   system.
+1. On the host, `aristotle-ui-preview` renders the screens and
+   `aristotle --preview` the reading interactions (`docs/reader.md`). Both log
+   each panel update with its waveform and rectangle. Compare the logs before
+   and after your change.
+2. Test anything that could hang boot, touch the stock framework or load
+   kernel code in the emulator (`devloop/emulator/setup.sh`).
+3. On the device, use the dev loop in `devloop/`. No recovery path is verified
+   yet, so never write to the root filesystem, the boot partitions, `/mnt/wfm`
+   or `/var/local` on someone's device without their consent.
 
-Changes to what reaches the panel (page turns, menus, popups, the library) also
-run the device scenarios in `devloop/kindle/scenarios/` with `aristotle-observe
-run SCRIPT`. Each scenario reports, per interaction, the time to the first and
-last update, the number of updates, flashes and the waveforms. A change should
-keep the same updates and waveforms, unless changing them is the point, and
-stay within 10 % on latency. Numbers in the docs say where they come from:
-`[dev]` for the device, `[host]` for the PC.
+If your change affects what reaches the panel, run the device scenarios in
+`devloop/kindle/scenarios/` with `aristotle-observe run SCRIPT`. Unless the
+change is meant to alter them, the updates and waveforms should stay the same
+and latency should stay within 10 %. Numbers in the docs are tagged `[dev]` for
+the device and `[host]` for the PC.
 
 ## Checks
 
@@ -109,20 +86,16 @@ CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host
 ```
 
-`tools/build-render.sh` builds, lints or tests the native members with
-`cargo <command> -p aristotle-render -p aristotle-reader` against the C
-libraries of a `tools/build-plato.sh` run.
-
-The screenshots of the README, the docs and the site, and the site's demo
-frames, are made by `tools/screenshots/compose.sh` from the device captures
-listed in its manifest (`tools/screenshots/README.md`).
+`tools/screenshots/compose.sh` makes the screenshots for the README, the docs
+and the site from the device captures in its manifest
+(`tools/screenshots/README.md`).
 
 ## Text and test data
 
-Everything is in English: code, comments, docs and commits.
-Tests, docs and screenshots use public-domain books (Prus, Mickiewicz, Plato
-in Witwicki's translation, Aristotle in Chase's translation, Austen, Melville)
-or text written for the test, never copyrighted books.
+Code, comments, docs and commits are in English. Tests, docs and screenshots
+use public-domain books (Prus, Mickiewicz, Plato in Witwicki's translation,
+Aristotle in Chase's translation, Austen, Melville) or text written for the
+test. Never use copyrighted books.
 
 ## What this project will never include
 
@@ -130,24 +103,24 @@ Allowed:
 
 - Our own userspace, UI, reader and sync, with no Amazon services.
 - A kernel built from Lab126's published GPL sources.
-- E-ink waveforms and Wi-Fi or touch firmware read from the user's own
-  device at install or run time, never shipped (as postmarketOS's
-  `kobo-epdc-extractor` does).
-- Descriptions of file formats and ABIs, in our own words.
+- E-ink waveforms and Wi-Fi or touch firmware read from the user's device at
+  install or run time and never shipped, as postmarketOS's
+  `kobo-epdc-extractor` does.
+- Descriptions of file formats and ABIs in our own words.
 - StarDict or Wiktionary dictionaries that the user supplies.
 
 Never:
 
-- Shipping, downloading or scripting a jailbreak, exploits, keys or OTA
-  blockers.
+- A jailbreak, exploits, keys or OTA blockers, shipped, downloaded or
+  scripted.
 - Anything that touches DRM: keys, KFX, books from the Kindle Store.
-- Committing firmware, waveforms (`/mnt/wfm`), Amazon binaries or libraries,
-  Amazon fonts (Bookerly, Ember) or Kindle Store dictionaries.
-- Decompiled code or Ghidra or JADX output, and copied Amazon configuration
-  files or upstart jobs.
+- Firmware, waveforms (`/mnt/wfm`), Amazon binaries or libraries, Amazon fonts
+  (Bookerly, Ember) or Kindle Store dictionaries in the repository.
+- Decompiled code, Ghidra or JADX output, or copied Amazon configuration files
+  and upstart jobs.
 - Amazon cloud APIs: Whispersync, accounts, device tokens.
-- Writing the boot partitions, U-Boot, IDME or diags before a recovery path
-  is verified, or breaking secure boot.
+- Writes to the boot partitions, U-Boot, IDME or diags before a recovery path
+  is verified, or anything that breaks secure boot.
 - Amazon logos or trade dress, or "Kindle-X" names.
 
 ## AI-assisted contributions
@@ -155,8 +128,8 @@ Never:
 You may use AI tools, but:
 
 - Write issue and pull request descriptions yourself.
-- Understand and review all code you submit. You are responsible for it.
-- Keep the change to the issue, without unrelated generated changes.
+- Understand and review the code you submit. You are responsible for it.
+- Leave out unrelated generated changes.
 
 ## Licence
 

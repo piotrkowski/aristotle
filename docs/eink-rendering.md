@@ -1,22 +1,14 @@
 # E-ink rendering on the PW4
 
-How Aristotle gets pixels onto the Kindle Paperwhite 4 panel quickly, what the stock EPDC driver really does, and how we measured it. Every number here was measured on our device unless marked otherwise. The tools that produced them are in the repo, so any claim can be re-checked.
+How the stock EPDC driver on the Kindle Paperwhite 4 behaves, and how Aristotle gets pixels onto the panel quickly. All numbers were measured on our device with the tools in this repo.
 
-## Model
-
-Drawing and displaying are separate steps:
-
-1. **Draw**: write 8-bit gray pixels into the memory-mapped framebuffer (`Framebuffer::fill`, `Framebuffer::line`). Nothing changes on the panel.
-2. **Update**: ask the EPDC to move a rectangle of the panel to the framebuffer's content with a chosen waveform (`MXCFB_SEND_UPDATE`, Lab126's Rex struct).
-3. **Wait** (optional): block until that update has finished (`MXCFB_WAIT_FOR_UPDATE_COMPLETE`).
-
-The waveform decides speed and quality: how many gray levels, whether the panel flashes, and how much ghosting is left.
+Drawing into the memory-mapped framebuffer does not change the panel. An update (`MXCFB_SEND_UPDATE`, Lab126's Rex struct) asks the EPDC to show a rectangle of the framebuffer with a chosen waveform. `MXCFB_WAIT_FOR_UPDATE_COMPLETE` optionally waits for it to finish. The waveform sets the speed, the gray levels, whether the panel flashes and how much ghosting remains.
 
 ## Waveforms
 
-The PW4 driver uses the **Zelda numbering** from FBInk's `mxcfb-kindle.h`. The older PW2 numbering is wrong here: its "A2" (4) is REAGL on this device and is almost four times slower.
+The PW4 driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`. In the older PW2 numbering, "A2" is 4, which on this device is REAGL and almost four times slower.
 
-Latency of one update on an idle panel, 120 × 120 region, black and white toggles, median of 6 (`aristotle-bench`):
+One update on an idle panel, 120 × 120 region, black and white toggles, median of 6 (`aristotle-bench`):
 
 | Mode | Name | Use | Time |
 | --- | --- | --- | --- |
@@ -28,9 +20,9 @@ Latency of one update on an idle panel, 120 × 120 region, black and white toggl
 | 2 | GC16 | 16 grays with a flash; full clean refresh | 544 ms |
 | 257 | AUTO | driver picks; chose DU for black and white content | 309 ms |
 
-## The driver runs one update at a time
+## One update at a time
 
-`aristotle-bench --bin stream` submits 24 small updates at a fixed interval and times each one from submit to completion. It also times how long the submit ioctl itself blocks.
+`aristotle-bench --bin stream` submits 24 small updates at a fixed interval and records each one's latency and how long its submit blocks.
 
 | Updates | Interval | Latency p50 | Submit blocks |
 | --- | --- | --- | --- |
@@ -40,35 +32,27 @@ Latency of one update on an idle panel, 120 × 120 region, black and white toggl
 | DU, disjoint | 80 ms | 522 ms | 261 ms |
 | GL16, disjoint | 80 ms | 899 ms | 450 ms |
 
-Conclusions:
+`MXCFB_SEND_UPDATE` blocks until the update already on the panel has finished, so an update submitted while another runs costs about two waveform durations. Disjoint and overlapping regions behave the same, so the driver serialises all updates. Updates submitted back to back before the first one starts are merged and finish together, which can make the driver look parallel.
 
-- A new update cannot start while another is on the panel. **`MXCFB_SEND_UPDATE` blocks** until the earlier update finishes, so a streamed update costs about two waveform durations.
-- **Overlap does not matter.** Disjoint and overlapping regions behave the same, so this is not EPDC pixel collision but serialisation in the driver.
-- Several updates submitted back to back *before* the first one starts are merged and finish together. That burst result is what first made it look as if the driver ran updates in parallel. It does not.
+## The display thread
 
-## Design: a display thread with latest-wins damage
+In `aristotle_hal::display::Display`, the input loop draws and calls `display.damage(rect, waveform)`, which adds `rect` to a pending rectangle and never blocks. A dedicated thread submits the pending rectangle and repeats, and only this thread blocks in the ioctl.
 
-`aristotle_hal::display::Display`:
-
-- The input loop draws pixels and calls `display.damage(rect, waveform)`, which only unions `rect` into a pending rectangle and never blocks.
-- A dedicated thread loops: take the pending rectangle, submit it, repeat. It is the only thread that blocks, inside the ioctl, while the panel finishes the previous update.
-- Everything drawn while the panel was busy goes out together in the next update. A point therefore waits for at most the rest of the current update plus its own: about 120 to 240 ms for A2.
+- Everything drawn while the panel is busy goes out in the next update. A point waits at most for the rest of the current update plus its own, about 120 to 240 ms with A2.
 - When merged damage asks for different waveforms, the most faithful one wins (A2 < DU < GL16 family < GC16).
-- A small completion thread (`Completions`) waits on each update marker and timestamps it, for latency measurement. Only one thread may wait on a given marker, because the driver forgets a marker once it has signalled it.
+- A completion thread (`Completions`) waits on each update marker and records when it finished. Only one thread may wait on a marker, because the driver forgets a marker once it has signalled it.
 
-## Measuring stroke latency: record and replay
+## Measuring stroke latency
 
-Feel is hard to judge by eye and easy to fool yourself about, so stroke latency is measured from real input:
+1. `aristotle-pen-live record=/var/tmp/pen.rec` draws as usual and writes each touch event with its kernel timestamp. `EVIOCSCLOCKID` switches the evdev clock to `CLOCK_MONOTONIC`, so the timestamps compare with `monotonic_us()`.
+2. `aristotle-pen-bench /var/tmp/pen.rec [params]` replays the recording at its original pace through the same `Pen` code. Gaps between strokes are shortened to 300 ms.
+3. An event's latency runs from its timestamp until the update that shows it completes. The panel's optical settling comes on top.
 
-1. **Record**: `aristotle-pen-live record=/var/tmp/pen.rec` draws as usual and writes every touch event with its kernel timestamp. The evdev clock is switched to `CLOCK_MONOTONIC` with `EVIOCSCLOCKID`, so timestamps compare with `monotonic_us()`.
-2. **Replay**: `aristotle-pen-bench /var/tmp/pen.rec [params]` replays the recording at its original pace through the same `Pen` code. Idle gaps between strokes are shortened to 300 ms; timing within strokes is unchanged.
-3. **Measure**: for each event, the latency is the time from its (replayed) timestamp until the driver reports the update showing it as complete. That is what the eye actually waits for, minus the panel's own optical settling.
+`devloop/kindle/pen-sweep.sh` runs several variants in one go. The reference recording has 604 events in 52 strokes, including fast and slow lines, handwriting and two fingers.
 
-`devloop/kindle/pen-sweep.sh` runs a set of variants in one go. The reference recording used below has 604 events and 52 strokes: fast and slow lines, handwriting, two fingers.
+## Results
 
-## Results on the reference recording
-
-Event-to-panel latency, in milliseconds:
+Event-to-panel latency on the reference recording, in milliseconds:
 
 | Variant | p50 | p90 | p99 |
 | --- | --- | --- | --- |
@@ -84,21 +68,19 @@ Event-to-panel latency, in milliseconds:
 | Display thread, A2, thin stroke | 197 | 250 | 336 |
 | Display thread, DU | 419 | 532 | 730 |
 
-What we learned along the way:
+- Waiting on each update built up tens of seconds of backlog.
+- A DU cleanup of each finished stroke raised p99 from 375 to 664 ms, because it holds the driver for 309 ms while drawing continues.
+- Queue depth made no difference, since the driver serialises submits.
+- Tiles were meant to let the driver run non-overlapping updates in parallel. Each tile is one more blocking submit, so smaller tiles were slower.
+- The display thread cut p50 by a third. Input never blocks, so the loop handles one frame per event instead of one per 3.7 events.
 
-- **Waiting on each update is the worst option.** The first touch test waited per event and built up tens of seconds of backlog.
-- **Cleanup refreshes hurt.** Redrawing a finished stroke with DU while drawing continues doubles the tail (p99 664 ms against 375 ms), because it occupies the one-at-a-time driver for 309 ms.
-- **Queue depth is irrelevant**, as expected once you know submits serialise in the driver.
-- **Tiles were a wrong hypothesis.** The idea was to avoid overlapping rectangles so the driver could run them concurrently. Every tile is another blocking submit, so smaller tiles made it worse.
-- **A display thread is the fix**: p50 down a third, input never blocked (one frame per event instead of one per 3.7 events).
+## Remaining latency
 
-## Where the remaining time goes
+The floor is one A2 update, about 120 ms. The p50 of 199 ms is about 80 ms above it, because on average a point arrives halfway through the current update. Ideas not yet tried, most promising first:
 
-The floor is one A2 update, about 120 ms. At p50 199 ms we sit about 80 ms above it: on average a point arrives halfway through the current update and waits for it. Ideas not yet tried, roughly in order of promise:
-
-- **Stroke prediction**: extrapolate the finger a few tens of milliseconds ahead and draw the prediction, correcting it in the next update. This is how pen tablets hide latency.
-- **Earlier first update**: start a stroke's first update on touch-down, before any movement.
-- **Driver-level changes**: a kernel module or out-of-tree EPDC driver that keeps several LUTs busy in parallel. Unverified: i.MX EPDC hardware has multiple LUTs, so it is designed for concurrent updates, but whether the stock Lab126 driver serialises by policy or because of a hardware limit on this panel is not known yet.
+- Predict the stroke a few tens of milliseconds ahead and correct the prediction in the next update, as pen tablets do.
+- Start a stroke's first update on touch-down, before any movement.
+- A kernel module or out-of-tree EPDC driver that keeps several LUTs busy at once. i.MX EPDC hardware has several LUTs, but we do not know whether the Lab126 driver serialises by policy or because of a limit of this panel.
 
 ## Code map
 
