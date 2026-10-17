@@ -126,11 +126,13 @@ impl Dictionary {
         })
     }
 
-    /// Short label for the switcher: "grc-pl", or the name.
+    /// Label for the switcher: "grc–pl" from the file name, or the
+    /// `.ifo`'s `bookname` (the popup shortens a long one to fit, see
+    /// `overlay::fit_label`).
     pub fn label(&self) -> String {
         match (&self.source, &self.target) {
             (Some(s), Some(t)) => format!("{s}–{t}"),
-            _ => self.name.chars().take(14).collect(),
+            _ => self.name.clone(),
         }
     }
 

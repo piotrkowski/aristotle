@@ -506,6 +506,45 @@ pub fn percent_label(value: f32, detail: &str) -> String {
     }
 }
 
+/// A dictionary's name for the switcher, at most `max` wide by `measure`:
+/// as it is if it fits; else without a trailing "(...)" (a source such as
+/// "(Wikipedia)"); else cut after the last whole word that fits, with
+/// "…" ("Filozofia — pojęcia…"), dangling dashes and commas dropped; a
+/// single long word is cut inside.
+pub fn fit_label(label: &str, max: f32, mut measure: impl FnMut(&str) -> f32) -> String {
+    let label = label.trim();
+    if measure(label) <= max {
+        return label.to_string();
+    }
+    let base = match label.rfind(" (") {
+        Some(i) if label.ends_with(')') && i > 0 => label[..i].trim_end(),
+        _ => label,
+    };
+    if measure(base) <= max {
+        return base.to_string();
+    }
+    let trim = |s: &str| {
+        s.trim_end_matches(|c: char| c.is_whitespace() || "—–-,;:·/".contains(c))
+            .to_string()
+    };
+    let words: Vec<&str> = base.split(' ').collect();
+    for n in (1..words.len()).rev() {
+        let head = trim(&words[..n].join(" "));
+        if !head.is_empty() && measure(&format!("{head}…")) <= max {
+            return format!("{head}…");
+        }
+    }
+    let mut cut = String::new();
+    for c in base.chars() {
+        cut.push(c);
+        if measure(&format!("{cut}…")) > max {
+            cut.pop();
+            break;
+        }
+    }
+    format!("{}…", trim(&cut))
+}
+
 /// Height of the row of reading actions under the menu's top bar (the row
 /// and its rule).
 pub const NAV_H: i32 = 114;
@@ -543,4 +582,28 @@ pub fn nav_bar(t: &mut Tree, st: &Styles, top_extra: i32) -> NodeId {
 /// The opaque row inside [`nav_bar`]'s layer.
 pub fn nav_row(t: &Tree, nav: NodeId) -> NodeId {
     t.node(nav).children[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fit_label;
+
+    /// One unit per character.
+    fn chars(s: &str) -> f32 {
+        s.chars().count() as f32
+    }
+
+    #[test]
+    fn long_dictionary_names_shorten_on_word_boundaries() {
+        let name = "Filozofia — pojęcia i postacie (Wikipedia)";
+        assert_eq!(fit_label(name, 60.0, chars), name);
+        assert_eq!(
+            fit_label(name, 30.0, chars),
+            "Filozofia — pojęcia i postacie"
+        );
+        assert_eq!(fit_label(name, 22.0, chars), "Filozofia — pojęcia i…");
+        assert_eq!(fit_label(name, 14.0, chars), "Filozofia…");
+        assert_eq!(fit_label("Wikisłownik", 20.0, chars), "Wikisłownik");
+        assert_eq!(fit_label("Słownikjęzykapolskiego", 8.0, chars), "Słownik…");
+    }
 }
