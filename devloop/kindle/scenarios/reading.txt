@@ -1,20 +1,22 @@
 # Reading interactions of the Aristotle reader, on the test book "Próba
 # czytania": contents, dictionary popups (Polish, Polish at night, Greek
-# with "Więcej", the dictionary switcher, a Greek form), selecting by
+# with "More", the dictionary switcher, a Greek form), selecting by
 # dragging, highlighting, a Latin gloss, a footnote, the bookmark corner,
 # the highlights list, go to 50 %.
 #
 # Coordinates come from `aristotle --preview` on the same book with the
-# default typography (10 pt, normal spacing and margins: reader.json absent
-# or at its defaults); regenerate this file with it after layout changes
-# (docs/reader.md, "Reading interactions").
+# default typography and the English UI (10 pt, normal spacing and margins,
+# language "en": reader.json absent or at its defaults); regenerate this
+# file with it after layout changes (docs/reader.md, "Reading
+# interactions"). Button positions depend on the UI language: for another
+# one, regenerate with `--lang CODE` and run the app with the same.
 #
 # Setup, once:
 #   devloop/host/make-reading-test-epub.py proba-czytania.epub
 #   copy it to /mnt/us/documents/Aristotle/, and build the dictionary
 #   indexes on the host (aristotle --index-dicts) into
 #   /mnt/us/.aristotle/dict-index/ (else the device builds them at start;
-#   lookups say "Słownik jest indeksowany" until then).
+#   lookups say "The dictionary is being indexed" until then).
 # Run, the app in front with the book open. --test-clippings keeps the
 # scenario's highlight out of the user's My Clippings.txt (note-taking
 # tools may import it on every plug-in); check it is byte-identical:
@@ -78,7 +80,7 @@ hold 875 302 700
 wait 2000
 snap 06-dict-greek
 label more
-tap 354 1377
+tap 378 1377
 wait 1500
 snap 06m-dict-greek-more
 label other dictionary
@@ -101,25 +103,25 @@ wait 2000
 snap 09-selection-drag
 snap 10-selection-actions
 label highlight
-tap 162 194
+tap 180 194
 wait 1500
 snap 11-highlighted
 label select latin
 drag 809 828 955 828 700 600
 wait 2000
 label gloss
-tap 583 191
+tap 675 191
 wait 1500
 snap 12-gloss
 label close
-tap 369 423
+tap 379 423
 wait 1500
 label footnote
 tap 337 342
 wait 1500
 snap 13-footnote
 label close
-tap 586 1377
+tap 454 1377
 wait 1500
 label bookmark
 tap 1030 45
@@ -133,7 +135,7 @@ tap 535 180
 wait 1500
 snap 15-highlights
 label back
-tap 145 60
+tap 140 60
 wait 1500
 label menu
 tap 536 70
@@ -158,6 +160,6 @@ tap 548 1233
 wait 1500
 snap 16-goto
 label go
-tap 161 1361
+tap 124 1361
 wait 1500
 snap 17-after-goto
