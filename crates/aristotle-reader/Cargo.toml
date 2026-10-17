@@ -16,8 +16,9 @@ path = "src/main.rs"
 aristotle-hal = { path = "../aristotle-hal" }
 aristotle-library = { path = "../aristotle-library" }
 aristotle-render = { path = "../aristotle-render" }
-# The UI font is compiled in; the preview binary and its PNG encoder are not.
-aristotle-ui = { path = "../aristotle-ui", default-features = false, features = ["embedded-fonts"] }
+# Neither the embedded UI font (the app maps Literata from the renderer's
+# data directory) nor the preview binary and its PNG encoder.
+aristotle-ui = { path = "../aristotle-ui", default-features = false }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

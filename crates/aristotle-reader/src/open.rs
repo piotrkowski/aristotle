@@ -41,7 +41,7 @@ use aristotle_render::plato_core::document::html::layout::HYPHENATION_PATTERNS;
 use aristotle_render::style::Style;
 use aristotle_ui::screens::library as ui_lib;
 use aristotle_ui::screens::reader::{Menu, Settings};
-use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
+use aristotle_ui::text::{FamilyId, TextEngine};
 use aristotle_ui::theme::Styles;
 use aristotle_ui::tree::{NodeId, Refresh};
 use aristotle_ui::ui::Ui;
@@ -337,7 +337,7 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
     let (tree, _, _) = crate::reader_tree(&styles, &rec.meta.title, &settings, blank);
     let mut ui = Ui::new(
         tree,
-        TextEngine::new(Fonts::embedded()),
+        TextEngine::new(crate::ui_fonts(Path::new("serif"))?),
         style.width,
         style.height,
     );
