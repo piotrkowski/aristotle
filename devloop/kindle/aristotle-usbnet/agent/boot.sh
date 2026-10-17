@@ -79,6 +79,8 @@ net_up() {
         # KOReader's dropbear reads settings/SSH/authorized_keys relative to
         # its working directory and keeps its host keys there (-R).
         if (cd "$KO" && ./dropbear -E -R -s -p 22 -P "$PIDFILE" >> "$LOG" 2>&1); then
+            # dropbear writes its pid file after forking; give it a moment.
+            sleep 1
             log "ssh: dropbear started (pid $(cat "$PIDFILE" 2> /dev/null))"
         else
             log "ssh: dropbear failed to start"
