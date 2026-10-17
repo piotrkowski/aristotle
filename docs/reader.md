@@ -11,7 +11,7 @@ aristotle-render (CLI: info, render, show, bench, turn)
   └─ Book ─────────── plato-core
   │    EPUB, HTML ──── Plato's HTML engine (our font, Knuth–Plass, Liang hyphenation)
   │    MOBI ────────── mobi.rs → cached EPUB → Plato's HTML engine (MuPDF as fallback)
-  │    PDF, CBZ, ... ─ MuPDF through Plato's PdfOpener, scaled to fit
+  │    PDF, TXT ────── MuPDF through Plato's PdfOpener (PDF scaled to fit)
   ├─ Page, Chrome ─── 1072 × 1448 buffer, stride 1088; header and footer drawn in the same frame
   └─ Screen ───────── aristotle-hal Framebuffer: blit the page, one full mode-9 update of the whole screen
 ```
