@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmarks · Aristotle</title>
+<meta name="description" content="Measured page turns, book opening, menus, memory, binary size and dictionary lookups: the stock Kindle Paperwhite 4 interface and Aristotle.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="inner">
+    <a class="wordmark" href="index.html">Aristotle</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="benchmarks.html" aria-current="page">Benchmarks</a>
+      <a href="guides/index.html">Guides</a>
+      <a href="https://github.com/piotrkowski/aristotle">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="page">
+  <div class="page-head">
+    <h1>Benchmarks</h1>
+    <p>Every number on this site, with how it was measured. Device numbers come from our Paperwhite 4 on firmware 5.13.6. Host numbers come from a PC and are marked <span class="tag host">Host</span>.</p>
+  </div>
+
+  <ul class="toc" aria-label="On this page">
+    <li><a href="#versus">Stock and Aristotle</a></li>
+    <li><a href="#transitions">Transitions</a></li>
+    <li><a href="#turns">Page-turn strategies</a></li>
+    <li><a href="#dictionary">Dictionary and footnotes</a></li>
+    <li><a href="#size">Binary size</a></li>
+    <li><a href="#host">Host measurements</a></li>
+  </ul>
+
+  <section class="bench" aria-labelledby="versus">
+    <h2 id="versus">Stock and Aristotle</h2>
+    <div class="method">
+      <p><strong>How:</strong> <code>aristotle-observe</code> turns on the EPDC driver's debug log, which records every panel update with its waveform, region and start and end times, whoever asked for it. Touches are injected into the real touchscreen node, so the same script drives both interfaces. Times run from the finger lifting.</p>
+      <p><strong>When:</strong> 2026-10-17, Paperwhite 4, firmware 5.13.6.</p>
+    </div>
+
+    <div class="chart">
+      <ul class="legend" aria-hidden="true"><li>Stock</li><li class="ours">Aristotle</li></ul>
+      <div class="multiples">
+      <figure>
+        <figcaption>Page turn, from release <span>seconds</span></figcaption>
+        <svg viewBox="0 0 300 62" role="img" aria-label="Page turn, from release: stock 0.57 s, Aristotle 0.44 s">
+          <text class="label" x="0" y="20">Stock</text>
+          <rect class="stock" x="72" y="6" width="170" height="20"/>
+          <text class="value" x="249" y="20">0.57 s</text>
+          <text class="label" x="0" y="50">Aristotle</text>
+          <rect class="ours" x="72" y="36" width="131" height="20"/>
+          <text class="value" x="210" y="50">0.44 s</text>
+          <line class="axis" x1="72" y1="0" x2="72" y2="62"/>
+        </svg>
+      </figure>
+      <figure>
+        <figcaption>Opening a book <span>seconds</span></figcaption>
+        <svg viewBox="0 0 300 62" role="img" aria-label="Opening a book: stock 0.8 s, Aristotle 0.56 s">
+          <text class="label" x="0" y="20">Stock</text>
+          <rect class="stock" x="72" y="6" width="170" height="20"/>
+          <text class="value" x="249" y="20">0.8 s</text>
+          <text class="label" x="0" y="50">Aristotle</text>
+          <rect class="ours" x="72" y="36" width="119" height="20"/>
+          <text class="value" x="198" y="50">0.56 s</text>
+          <line class="axis" x1="72" y1="0" x2="72" y2="62"/>
+        </svg>
+      </figure>
+      <figure>
+        <figcaption>Memory used by the interface <span>MB, approximate</span></figcaption>
+        <svg viewBox="0 0 300 62" role="img" aria-label="Memory used by the interface: stock about 200 MB, Aristotle about 20 MB">
+          <text class="label" x="0" y="20">Stock</text>
+          <rect class="stock" x="72" y="6" width="170" height="20"/>
+          <text class="value" x="249" y="20">200 MB</text>
+          <text class="label" x="0" y="50">Aristotle</text>
+          <rect class="ours" x="72" y="36" width="17" height="20"/>
+          <text class="value" x="96" y="50">20 MB</text>
+          <line class="axis" x1="72" y1="0" x2="72" y2="62"/>
+        </svg>
+      </figure>
+      </div>
+      <p class="chart-note">Shorter is better.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Interaction</th><th scope="col" class="num">Stock</th><th scope="col" class="num">Aristotle</th><th scope="col">Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Page turn, page shown</th><td class="num" data-label="Stock">564–588 ms</td><td class="num ours" data-label="Aristotle">440 ms</td><td class="notes" data-label="Notes">One full mode-9 update, the stock reader's own request; the next page is prerendered</td></tr>
+          <tr><th scope="row">Page turn, screen settled</th><td class="num" data-label="Stock">826–890 ms</td><td class="num ours" data-label="Aristotle">440 ms</td><td class="notes" data-label="Notes">Stock sends a second update for its footer; ours draws the footer in the same frame</td></tr>
+          <tr><th scope="row">Open a book</th><td class="num" data-label="Stock">0.8 s</td><td class="num ours" data-label="Aristotle">0.56 s</td><td class="notes" data-label="Notes">The page left last time, from a snapshot, in one mode-8 flash</td></tr>
+          <tr><th scope="row">Back to the library</th><td class="num dim" data-label="Stock">not measured</td><td class="num ours" data-label="Aristotle">52 ms / 765 ms</td><td class="notes" data-label="Notes">Tap mark, then the library in one flash (acknowledged / settled)</td></tr>
+          <tr><th scope="row">Reader menu</th><td class="num" data-label="Stock">239–264 ms / 748–780 ms</td><td class="num ours" data-label="Aristotle">513–577 ms</td><td class="notes" data-label="Notes">Stock toolbar: first update / settled. Ours: one update, nothing before it; to be fixed</td></tr>
+          <tr><th scope="row">Touch acknowledged</th><td class="num dim" data-label="Stock">none before the result</td><td class="num ours" data-label="Aristotle">51–67 ms</td><td class="notes" data-label="Notes">Library controls invert (A2) on touch-down</td></tr>
+          <tr><th scope="row">Wake from the screensaver</th><td class="num dim" data-label="Stock">not measured</td><td class="num dim" data-label="Aristotle">about 570 ms, expected</td><td class="notes" data-label="Notes">One full mode-8 update; not yet measured</td></tr>
+          <tr><th scope="row">Memory used by the interface</th><td class="num" data-label="Stock">about 200 MB</td><td class="num ours" data-label="Aristotle">about 20 MB</td><td class="notes" data-label="Notes">Stock: the GUI stack, of 490 MB; <code>cvm</code> alone 125 MB</td></tr>
+          <tr><th scope="row">Memory available</th><td class="num" data-label="Stock">236 MB</td><td class="num ours" data-label="Aristotle">392 MB</td><td class="notes" data-label="Notes">With the stock interface stopped</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench" aria-labelledby="transitions">
+    <h2 id="transitions">Transitions in Aristotle</h2>
+    <p>Each action should end in exactly one update of its final state. What the driver log showed, per interaction:</p>
+    <div class="method">
+      <p><strong>How:</strong> <code>aristotle-observe</code> with the scenario <code>aristotle-transitions.txt</code>, injected taps, times from the finger lifting. Page turns then fired on touch-down; they now fire on release, so a turn costs the panel's 440 ms after the release.</p>
+      <p><strong>When:</strong> 2026-10-17, on the device.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Interaction</th><th scope="col" class="num">Acknowledged</th><th scope="col" class="num">Settled</th><th scope="col" class="num">Updates</th><th scope="col">Flash</th><th scope="col">Waveforms</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Page turn</th><td class="num" data-label="Acknowledged">440 ms</td><td class="num" data-label="Settled">440 ms</td><td class="num" data-label="Updates">1</td><td data-label="Flash">no</td><td data-label="Waveforms">glkw16 full</td></tr>
+          <tr><th scope="row">Reader menu open</th><td class="num" data-label="Acknowledged">513–577 ms</td><td class="num" data-label="Settled">513–577 ms</td><td class="num" data-label="Updates">1</td><td data-label="Flash">no</td><td data-label="Waveforms">gl16, 95 % of the screen</td></tr>
+          <tr><th scope="row">Reader menu close</th><td class="num" data-label="Acknowledged">497 ms</td><td class="num" data-label="Settled">497 ms</td><td class="num" data-label="Updates">1</td><td data-label="Flash">no</td><td data-label="Waveforms">glkw16 full</td></tr>
+          <tr><th scope="row">Book to library</th><td class="num" data-label="Acknowledged">52 ms</td><td class="num" data-label="Settled">765 ms</td><td class="num" data-label="Updates">2</td><td data-label="Flash">yes</td><td data-label="Waveforms">a2 tap mark, gck16 full</td></tr>
+          <tr><th scope="row">Library filter tab</th><td class="num" data-label="Acknowledged">60–64 ms</td><td class="num" data-label="Settled">552–741 ms</td><td class="num" data-label="Updates">2</td><td data-label="Flash">no</td><td data-label="Waveforms">a2, gl16</td></tr>
+          <tr><th scope="row">Shelf page</th><td class="num" data-label="Acknowledged">51–53 ms</td><td class="num" data-label="Settled">516–535 ms</td><td class="num" data-label="Updates">2</td><td data-label="Flash">every 5th</td><td data-label="Waveforms">a2, gl16</td></tr>
+          <tr><th scope="row">Sort</th><td class="num" data-label="Acknowledged">59–61 ms</td><td class="num" data-label="Settled">743–749 ms</td><td class="num" data-label="Updates">2</td><td data-label="Flash">no</td><td data-label="Waveforms">a2, gl16</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench" aria-labelledby="turns">
+    <h2 id="turns">Page-turn strategies</h2>
+    <p>Fast is not enough: a page must also be clean. Two-step turns looked fast in a short demo but left visible ghosting in real reading, so Aristotle turns pages exactly as the stock reader does, with the next page rendered while the panel refreshes.</p>
+    <div class="method">
+      <p><strong>How:</strong> <code>aristotle-bench --bin pageturn</code> alternates two full-screen pages of real text, with the stock interface stopped. Median of 6 turns; two runs agreed within 5 ms. "Visible" is the first update showing the new page finished.</p>
+      <p><strong>When:</strong> 2026-10-17, on the device.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Strategy</th><th scope="col" class="num">Visible</th><th scope="col" class="num">Settled</th><th scope="col">Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Stock reader</th><td class="num" data-label="Visible">565 ms</td><td class="num" data-label="Settled">830 ms</td><td class="notes" data-label="Result">Reference</td></tr>
+          <tr><th scope="row">GL16, one update</th><td class="num" data-label="Visible">479 ms</td><td class="num" data-label="Settled">479 ms</td><td class="notes" data-label="Result"></td></tr>
+          <tr><th scope="row">GLR16 (REAGL), one update</th><td class="num" data-label="Visible">495 ms</td><td class="num" data-label="Settled">495 ms</td><td class="notes" data-label="Result"></td></tr>
+          <tr><th scope="row">DU, black and white only</th><td class="num" data-label="Visible">291 ms</td><td class="num" data-label="Settled">291 ms</td><td class="notes" data-label="Result"></td></tr>
+          <tr><th scope="row">DU, then GL16</th><td class="num" data-label="Visible">291 ms</td><td class="num" data-label="Settled">771 ms</td><td class="notes" data-label="Result"></td></tr>
+          <tr><th scope="row">A2, then GL16</th><td class="num" data-label="Visible">150 ms</td><td class="num" data-label="Settled">630 ms</td><td class="notes" data-label="Result">Rejected: ghosting in real reading</td></tr>
+          <tr><th scope="row">Aristotle: mode 9, full screen</th><td class="num ours" data-label="Visible">503 ms</td><td class="num ours" data-label="Settled">503 ms</td><td class="notes" data-label="Result">Default, tap to page; as clean as stock</td></tr>
+          <tr><th scope="row">Aristotle: DU4 (mode 7), full screen</th><td class="num" data-label="Visible">317 ms</td><td class="num" data-label="Settled">317 ms</td><td class="notes" data-label="Result">A setting, at some cost in grays</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="font-family:var(--sans);font-size:.88rem;color:var(--muted)">Rendering the next page takes about 106 ms on the device and fits inside the panel time.</p>
+  </section>
+
+  <section class="bench" aria-labelledby="dictionary">
+    <h2 id="dictionary">Dictionary and footnotes</h2>
+    <div class="method">
+      <p><strong>How:</strong> the app's timing log on the device: <code>hold: "word" looked up in N ms</code> and <code>hold: shown N ms after the long press</code>, and the time to resolve a tapped link.</p>
+      <p><strong>When:</strong> 2026-10-17, on the device, with Wiktionary StarDict dictionaries.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Lookup</th><th scope="col" class="num">Lookup</th><th scope="col" class="num">Popup handed to the panel</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Polish word, pl-pl (1.4 million forms)</th><td class="num ours" data-label="Lookup">89 ms</td><td class="num ours" data-label="Popup handed to the panel">239 ms</td></tr>
+          <tr><th scope="row">Ancient Greek word</th><td class="num ours" data-label="Lookup">10.5 ms</td><td class="num ours" data-label="Popup handed to the panel">71 ms</td></tr>
+          <tr><th scope="row">Footnote</th><td class="num ours" data-label="Lookup">2 ms</td><td class="num dim" data-label="Popup handed to the panel">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Popup times run from the long press being recognised, which itself takes 500 ms of holding.</p>
+  </section>
+
+  <section class="bench" aria-labelledby="size">
+    <h2 id="size">Binary size</h2>
+    <p>The first build linked fonts and formats a reader of Polish, English, Greek and Latin books never uses. They were cut one measured step at a time, and every page of a set of test books was rendered before and after each step to compare.</p>
+    <div class="method">
+      <p><strong>How:</strong> stripped ARM binaries, MB (10<sup>6</sup> bytes), built with <code>tools/build-plato.sh</code> and <code>tools/build-render.sh device</code>.</p>
+      <p><strong>When:</strong> 2026-10-17.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Build</th><th scope="col" class="num">Reader app</th><th scope="col" class="num">Renderer CLI</th><th scope="col" class="num">Data</th><th scope="col" class="num">App tarball</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Before</th><td class="num" data-label="Reader app">29.52 MB</td><td class="num" data-label="Renderer CLI">26.04 MB</td><td class="num" data-label="Data">5.04 MB</td><td class="num" data-label="App tarball">19.4 MB</td></tr>
+          <tr><th scope="row">After the cuts</th><td class="num ours" data-label="Reader app">8.36 MB</td><td class="num ours" data-label="Renderer CLI">6.60 MB</td><td class="num ours" data-label="Data">2.68 MB</td><td class="num dim" data-label="App tarball">–</td></tr>
+          <tr><th scope="row">With night mode, settings, series, screensaver and page snapshots</th><td class="num ours" data-label="Reader app">9.15 MB</td><td class="num ours" data-label="Renderer CLI">6.63 MB</td><td class="num ours" data-label="Data">2.68 MB</td><td class="num ours" data-label="App tarball">6.0 MB</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench" aria-labelledby="host">
+    <h2 id="host">Host measurements <span class="tag host">Host</span></h2>
+    <p>These ran on a PC (x86_64, release build) against the same code and library versions as the device build. On the device, layout is about 8 times slower. They are design measurements, not device results.</p>
+
+    <h3 style="margin:2rem 0 .4rem">Opening a book from a snapshot <span class="tag host">Host</span></h3>
+    <div class="method">
+      <p><strong>How:</strong> <code>aristotle --bench-open</code> on a 379-page stand-in novel in one spine item, one CPU, page numbers cached, 6 runs.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Step</th><th scope="col" class="num">Old path</th><th scope="col" class="num">New path</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Tap to submit</th><td class="num" data-label="Old path">250–400 ms, median 278</td><td class="num ours" data-label="New path">1.0–1.2 ms</td></tr>
+          <tr><th scope="row">Real page ready</th><td class="num" data-label="Old path">the same</td><td class="num" data-label="New path">257–372 ms after the tap, nothing sent</td></tr>
+          <tr><th scope="row">Snapshot</th><td class="num dim" data-label="Old path">–</td><td class="num" data-label="New path">126 KB for two pages; 6.6 ms to encode and write</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:2rem 0 .4rem">Typesetting <span class="tag host">Host</span></h3>
+    <div class="method">
+      <p><strong>How:</strong> <code>aristotle-render bench</code>, Literata 10 pt.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Book</th><th scope="col" class="num">Open</th><th scope="col" class="num">First page</th><th scope="col" class="num">Render per page, median / p90</th><th scope="col" class="num">Paginate all</th><th scope="col" class="num">Max RSS</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Plato, <i>Phaedo</i>, EPUB, 341 pages</th><td class="num" data-label="Open">1.1 ms</td><td class="num" data-label="First page">0.6 ms</td><td class="num" data-label="Render per page, median / p90">2.1 / 2.4 ms</td><td class="num" data-label="Paginate all">211 ms</td><td class="num" data-label="Max RSS">32 MiB</td></tr>
+          <tr><th scope="row">Polish non-fiction, EPUB, 269 pages</th><td class="num" data-label="Open">10 ms</td><td class="num" data-label="First page">1.9 ms</td><td class="num" data-label="Render per page, median / p90">4.6 / 5.2 ms</td><td class="num" data-label="Paginate all">241 ms</td><td class="num" data-label="Max RSS">26 MiB</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:2rem 0 .4rem">Dictionary indexes <span class="tag host">Host</span></h3>
+    <div class="method">
+      <p><strong>How:</strong> the fold index is built once per dictionary; warm lookups on these dictionaries take 0.03 to 1.3 ms on the host.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr><th scope="col">Dictionary</th><th scope="col" class="num">Words</th><th scope="col" class="num">Forms</th><th scope="col" class="num">Index</th><th scope="col" class="num">Build</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">grc-pl</th><td class="num" data-label="Words">2,108</td><td class="num" data-label="Forms">5,472</td><td class="num" data-label="Index">81 KB</td><td class="num" data-label="Build">13 ms</td></tr>
+          <tr><th scope="row">la-pl</th><td class="num" data-label="Words">15,814</td><td class="num" data-label="Forms">83,969</td><td class="num" data-label="Index">0.9 MB</td><td class="num" data-label="Build">44 ms</td></tr>
+          <tr><th scope="row">en-pl</th><td class="num" data-label="Words">92,605</td><td class="num" data-label="Forms">222,731</td><td class="num" data-label="Index">2.0 MB</td><td class="num" data-label="Build">88 ms</td></tr>
+          <tr><th scope="row">pl-pl</th><td class="num" data-label="Words">123,535</td><td class="num" data-label="Forms">1,369,720</td><td class="num" data-label="Index">21 MB</td><td class="num" data-label="Build">846 ms</td></tr>
+          <tr><th scope="row">grc-en</th><td class="num" data-label="Words">21,819</td><td class="num" data-label="Forms">1,789,814</td><td class="num" data-label="Index">23.6 MB</td><td class="num" data-label="Build">1462 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bench prose" aria-labelledby="repeat">
+    <h2 id="repeat">Check them yourself</h2>
+    <p>The tools that produced these numbers are in the repository. The full write-ups: <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/native-vs-aristotle.md">Stock Kindle vs Aristotle</a>, <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/reader.md">The reader</a> and <a href="https://github.com/piotrkowski/aristotle/blob/main/docs/eink-rendering.md">E-ink rendering</a>.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <p>Aristotle is free software under the GNU AGPL 3.0 or later. It stands on <a href="https://github.com/baskerville/plato">Plato</a> by Bastien Dejean, and on MuPDF, FreeType and HarfBuzz.</p>
+    <p>Not affiliated with Amazon. Kindle and Paperwhite are trademarks of Amazon.com, Inc.</p>
+  </div>
+</footer>
+</body>
+</html>
