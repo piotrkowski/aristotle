@@ -40,8 +40,6 @@ pub fn whole_word(words: &[Word], i: usize) -> (usize, usize) {
     (start, end)
 }
 
-/// The text of words `start..=end`: pieces of a hyphenated word joined,
-/// other words separated by a space.
 /// Punctuation and quotes a selection leaves out at its ends: "dusza,"
 /// selects and looks up "dusza".
 fn edge_mark(c: char) -> bool {
@@ -78,21 +76,57 @@ pub fn letters_x(w: &Word) -> (i32, i32) {
     )
 }
 
-/// The text of words `start..=end`, without punctuation at its two ends.
+/// The text of words `start..=end`, without punctuation at its two ends:
+/// the word to look up.
 pub fn text(words: &[Word], start: usize, end: usize) -> String {
     joined(words, start, end)
         .trim_matches(edge_mark)
         .to_string()
 }
 
+/// The text a highlight of words `start..=end` covers: what
+/// [`line_boxes`] shades, so the punctuation at the ends of the first and
+/// last words is left out, but a word of punctuation alone (Plato makes
+/// "," of "art," a word of its own in a hyphenated paragraph) stays.
+pub fn quote(words: &[Word], start: usize, end: usize) -> String {
+    let end = end.min(words.len().saturating_sub(1));
+    if start > end {
+        return String::new();
+    }
+    let has_letters = |w: &Word| w.text.chars().any(|c| !edge_mark(c));
+    let mut s = joined(words, start, end);
+    if has_letters(&words[end]) {
+        s.truncate(s.trim_end_matches(edge_mark).len());
+    }
+    if has_letters(&words[start]) {
+        s = s.trim_start_matches(edge_mark).to_string();
+    }
+    s.trim().to_string()
+}
+
+/// Whether `b` follows `a` with no space between them: the next byte of
+/// the book's text (Plato splits "many:" into "many" and ":" when it
+/// hyphenates a paragraph, and breaks "ship-building" after the hyphen), or
+/// touching it on the same line (a word continued in another element, as
+/// in `<i>art</i>,`).
+fn glued(a: &Word, b: &Word) -> bool {
+    if a.offset + a.text.len() == b.offset {
+        return true;
+    }
+    let same_line = a.rect.y0 < b.rect.y1 && b.rect.y0 < a.rect.y1;
+    same_line && b.rect.x0 >= a.rect.x0 && b.rect.x0 - a.rect.x1 <= 1
+}
+
+/// Words `start..=end` as the book spells them: pieces of a hyphenated
+/// word joined, a space only where the book has one.
 fn joined(words: &[Word], start: usize, end: usize) -> String {
     let mut s = String::new();
-    for w in &words[start..=end.min(words.len().saturating_sub(1))] {
-        if !s.is_empty() && !s.ends_with('\u{00AD}') {
-            s.push(' ');
-        }
+    let end = end.min(words.len().saturating_sub(1));
+    for (i, w) in words.iter().enumerate().take(end + 1).skip(start) {
         if s.ends_with('\u{00AD}') {
             s.pop();
+        } else if i > start && !glued(&words[i - 1], w) {
+            s.push(' ');
         }
         s.push_str(&w.text);
     }
@@ -135,6 +169,11 @@ impl Selection {
 
     pub fn text(&self, words: &[Word]) -> String {
         text(words, self.start, self.end)
+    }
+
+    /// The text to save as a highlight; see [`quote`].
+    pub fn quote(&self, words: &[Word]) -> String {
+        quote(words, self.start, self.end)
     }
 }
 
@@ -280,6 +319,78 @@ pub(crate) mod tests {
         // Text only of punctuation keeps its box.
         let dash = page(&[&["—"]]);
         assert_eq!(letters_x(&dash[0]), (dash[0].rect.x0, dash[0].rect.x1));
+    }
+
+    /// Words with their offsets in the book's text. A `+` before a word
+    /// means no space before it in the book, and no gap on the page.
+    fn spelled(lines: &[&[&str]]) -> Vec<Word> {
+        let mut out = Vec::new();
+        let mut offset = 1000;
+        for (n, line) in lines.iter().enumerate() {
+            let y0 = 104 + 54 * n as i32;
+            let mut x = 59;
+            for t in *line {
+                let (glue, t) = match t.strip_prefix('+') {
+                    Some(t) => (true, t),
+                    None => (false, *t),
+                };
+                if !glue {
+                    offset += 1;
+                    if x > 59 {
+                        x += 14;
+                    }
+                }
+                let w = 24 * t.chars().count() as i32;
+                out.push(Word {
+                    text: t.to_string(),
+                    rect: Bounds {
+                        x0: x,
+                        y0,
+                        x1: x + w,
+                        y1: y0 + 44,
+                    },
+                    offset,
+                });
+                offset += t.len();
+                x += w;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn punctuation_split_off_by_plato_takes_no_space() {
+        // As Plato reports a hyphenated paragraph of Chase's translation.
+        let w = spelled(&[
+            &["many", "+:", "of", "the", "heal\u{AD}"],
+            &["+ing", "art", "+,", "for", "instance", "+,"],
+            &["health", "+;", "of", "the", "ship", "+-"],
+            &["+building", "art"],
+        ]);
+        let last = w.len() - 1;
+        assert_eq!(
+            quote(&w, 0, last),
+            "many: of the healing art, for instance, health; of the ship-building art"
+        );
+        assert_eq!(text(&w, 2, 6), "of the healing art");
+        // The comma is a word of its own: shaded, so in the highlight.
+        assert_eq!(quote(&w, 6, 7), "art,");
+        assert_eq!(quote(&w, 6, 6), "art");
+        // A word continued in another element touches the one before it,
+        // though the offsets skip the markup between them.
+        let mut tag = spelled(&[&["art", "+,", "for"]]);
+        tag[1].offset += "</i>".len();
+        tag[2].offset += "</i>".len();
+        assert_eq!(quote(&tag, 0, 2), "art, for");
+    }
+
+    #[test]
+    fn quote_keeps_what_is_shaded() {
+        let w = page(&[&["„Dusza,”", "jest", "(nieśmiertelna)."]]);
+        assert_eq!(quote(&w, 0, 2), "Dusza,” jest (nieśmiertelna");
+        assert_eq!(quote(&w, 0, 0), "Dusza");
+        let dash = page(&[&["—"]]);
+        assert_eq!(quote(&dash, 0, 0), "—");
     }
 
     #[test]

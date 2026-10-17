@@ -144,7 +144,7 @@ The header and footer stay in Literata (`style::CHROME_FAMILY`). MuPDF's reflow 
 
 ### Hyphenation
 
-Plato uses language patterns, including Polish with minima of 2 letters on either side of a break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements can override it with `lang` or `xml:lang`. Text without matching patterns is not hyphenated.
+Plato uses language patterns, including Polish with minima of 2 letters on either side of a break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements below `body` can override it with `lang` or `xml:lang`; `lang` on `html` or `body` is ignored. Greek words in a non-Greek language use the Ancient Greek patterns. Other text without matching patterns is not hyphenated.
 
 For books declaring several languages, `lang.rs` samples 192 KiB of text and compares marker letters. `aristotle-render --lang TAG` overrides the result. `aristotle-render info BOOK` reports the language and pattern availability.
 
@@ -160,7 +160,7 @@ Page numbers require full pagination. Until `set_pagination` supplies them, the 
 
 ### Snapshots
 
-At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with zstd. A snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, and progress.
+At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with zstd. A snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, UI language, and progress. A snapshot saved before a language change is not shown.
 
 The main thread copies pixels. `snapshot-writer` compresses and writes them, keeping slow filesystem syncs off the input path. Scans remove snapshots for missing books.
 

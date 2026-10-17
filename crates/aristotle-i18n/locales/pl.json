@@ -4,6 +4,7 @@
     "decimal": ",",
     "months": ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"],
     "weekdays": ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"],
+    "quotes": ["„", "”"],
     "date": "{weekday}, {day} {month} {year}",
     "time": "{hh}:{mm}"
   },

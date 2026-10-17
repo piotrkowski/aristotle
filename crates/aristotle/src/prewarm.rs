@@ -11,7 +11,7 @@
 //! - **Which books:** the book to continue and the next few by recency
 //!   ([`CANDIDATES`] in all), each with a saved position and without a
 //!   valid snapshot for the current style. Each is tried once per run,
-//!   position and style, so the work is bounded and then stops.
+//!   position, style and UI language, so the work is bounded and then stops.
 //! - **When:** after [`QUIET`] without input, with the library on screen and
 //!   no book opening. Any touch cancels the job; the thread runs at
 //!   `SCHED_IDLE`, so on the single core of the PW4 it only gets the CPU
@@ -49,7 +49,7 @@ pub const QUIET: Duration = Duration::from_secs(2);
 
 pub struct Prewarm {
     job: Option<Job>,
-    /// Books tried in this run, by id, style and position.
+    /// Books tried in this run, by id, style, UI language and position.
     tried: HashSet<String>,
     quiet_since: Instant,
     /// Set when no candidate was left; cleared by input.
@@ -113,10 +113,10 @@ impl Prewarm {
             let Some((src, key)) = job_for(lib, rec, style, mobi_cache, secs_per_page) else {
                 continue;
             };
-            if !self
-                .tried
-                .insert(format!("{} {} {:?}", rec.id, key.look, key.locator))
-            {
+            if !self.tried.insert(format!(
+                "{} {} {} {:?}",
+                rec.id, key.look, key.language, key.locator
+            )) {
                 continue;
             }
             if snapshot::is_valid(lib.data_dir(), &key, style) {

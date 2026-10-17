@@ -62,6 +62,19 @@ fn epub(
     chapters: &[&str],
     images: &[(&str, Vec<u8>)],
 ) -> PathBuf {
+    epub_langs(name, lang, lang, css, chapters, images)
+}
+
+/// [`epub`] with `dc:language` `lang` and `html_lang` on each chapter's
+/// `html` element.
+fn epub_langs(
+    name: &str,
+    lang: &str,
+    html_lang: &str,
+    css: &str,
+    chapters: &[&str],
+    images: &[(&str, Vec<u8>)],
+) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "aristotle-render-typesetting-{}-{}",
         std::process::id(),
@@ -99,7 +112,7 @@ fn epub(
             &file,
             format!(
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" \
-                 lang=\"{lang}\" xml:lang=\"{lang}\"><head><title>{n}</title>\
+                 lang=\"{html_lang}\" xml:lang=\"{html_lang}\"><head><title>{n}</title>\
                  <link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"/></head>\
                  <body>{body}</body></html>\n"
             )
@@ -228,10 +241,40 @@ fn element_lang_selects_hyphenation_patterns() {
         let mut book = Book::open(&path, &style, None).unwrap();
         greek_breaks(&words(&mut book))
     };
-    // English patterns have nothing for Greek letters.
-    assert_eq!(greek(""), 0);
     assert!(greek(" lang=\"grc\"") > 2, "lang");
     assert!(greek(" xml:lang=\"grc\"") > 2, "xml:lang");
+    // English patterns have nothing for Greek letters: Greek words without
+    // a language of their own take the Ancient Greek patterns.
+    assert!(greek("") > 2, "no lang");
+    // The other way round: an English word in Greek text stays whole.
+    let body = format!("<p lang=\"grc\">{GREEK} {ENGLISH}</p>");
+    let path = epub("greek-english", "en", "", &[&body], &[]);
+    let mut book = Book::open(&path, &style, None).unwrap();
+    let words = words(&mut book);
+    assert!(greek_breaks(&words) > 2);
+    let latin_breaks = words
+        .iter()
+        .filter(|w| w.text.ends_with('\u{AD}') && w.text.is_ascii())
+        .count();
+    assert_eq!(latin_breaks, 0);
+}
+
+/// The demo library's Greek chapter: `lang="grc"` only on `html`, in a
+/// book whose `dc:language` is English.
+#[test]
+fn greek_chapter_of_an_english_book_is_hyphenated() {
+    if !use_data() {
+        return;
+    }
+    let style = Style {
+        font_size: 15.0,
+        ..Style::pw4()
+    };
+    let body = format!("<p>{GREEK}</p><p>{GREEK}</p>");
+    let path = epub_langs("ethics-grc", "en", "grc", "", &[&body], &[]);
+    let mut book = Book::open(&path, &style, None).unwrap();
+    assert_eq!(book.language(), Some("en"));
+    assert!(greek_breaks(&words(&mut book)) > 2);
 }
 
 #[test]

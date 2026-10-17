@@ -17,11 +17,11 @@
 //! - **Key:** book id, the book file's size and mtime (from the file
 //!   itself, not the index), a hash of the look (every [`Style`] field, the
 //!   layout version, the app build and the runtime data: fonts, stylesheets,
-//!   hyphenation patterns) and the progress locator saved with the page. A
-//!   snapshot is shown only if all of these equal what the file, the index
-//!   and the preferences say now; a style change, a new build or data, a
-//!   replaced file or a position imported from the stock reader all make it
-//!   stale, and it is simply overwritten at the next save. Snapshots of
+//!   hyphenation patterns), the UI language (the footer's words) and the
+//!   progress locator saved with the page. A snapshot is shown only if all
+//!   of these equal what the file, the index and the preferences say now; a
+//!   style or language change, a new build or data, a replaced file or a
+//!   position imported from the stock reader all make it stale, and it is simply overwritten at the next save. Snapshots of
 //!   books that left the library are deleted at the next scan.
 //! - **Integrity:** each page carries zstd's content checksum, and the file
 //!   is written to a temporary name and renamed. The directory is not
@@ -64,7 +64,7 @@ pub const DIR: &str = "snapshots";
 const MAGIC: &[u8; 8] = b"ARSNAP01";
 
 /// Bump when the file layout changes.
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 3;
 
 /// zstd level: 1 is the fastest to compress and decodes as fast as any;
 /// higher levels gain little on anti-aliased text.
@@ -78,17 +78,23 @@ pub struct Key {
     pub mtime: i64,
     /// [`look`] of the style the page was rendered with.
     pub look: u64,
+    /// The UI language the chrome was drawn in ("Rozdz. 2/2" or "Ch. 2/2"):
+    /// a page saved before a language change must not come back as
+    /// current with the old footer.
+    pub language: String,
     /// The progress locator stored with the page.
     pub locator: Locator,
 }
 
 impl Key {
+    /// The key for pages drawn now: in the UI language in use.
     pub fn new(book: &str, stamp: (u64, i64), style: &Style, locator: Locator) -> Key {
         Key {
             book: book.to_string(),
             size: stamp.0,
             mtime: stamp.1,
             look: look(style),
+            language: aristotle_i18n::language().to_string(),
             locator,
         }
     }
@@ -480,7 +486,7 @@ mod tests {
     const AT: Locator = Locator::Kindle { position: 7510 };
 
     fn key(style: &Style) -> Key {
-        Key::new("0123abcd", (1000, 42), style, AT)
+        aristotle_i18n::with_language("en", || Key::new("0123abcd", (1000, 42), style, AT))
     }
 
     fn info(location: usize, locator: Locator) -> PageInfo {
@@ -563,6 +569,11 @@ mod tests {
             },
             Key::new("0123abcd", (1000, 42), &bigger, AT),
             Key::new("0123abcd", (1000, 42), &german, AT),
+            // Saved with Polish chrome, opened after a switch to English.
+            Key {
+                language: "pl".into(),
+                ..k.clone()
+            },
         ];
         for other in &others {
             assert_ne!(*other, k);

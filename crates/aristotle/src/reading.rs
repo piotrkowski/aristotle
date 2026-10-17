@@ -945,7 +945,7 @@ impl App {
         };
         let fixed = book.engine() != Engine::Plato;
         let a = marks::highlight(marks::NewHighlight {
-            text: sel.text(&words),
+            text: sel.quote(&words),
             start_bytes: bytes(&start, s),
             end_bytes: bytes(&end, e) + words[sel.end].text.len() as u64,
             start,
@@ -1144,7 +1144,7 @@ impl App {
                 .collect();
                 let text = match a.kind {
                     AnnotationKind::Bookmark => tr(Msg::ReaderBookmark).to_string(),
-                    _ => format!("„{}”", a.text.clone().unwrap_or_default()),
+                    _ => aristotle_i18n::quoted(a.text.as_deref().unwrap_or_default()),
                 };
                 rows.push(MarkRow {
                     text,
