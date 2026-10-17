@@ -1,0 +1,156 @@
+# The Wi-Fi screen and the keyboard, with the updates each action must cause
+# (docs/ui-framework.md, "Transitions" and "Text input"). Run it with the app
+# started with --wifi-read-only, in English, on the library home, Wi-Fi off:
+#   /var/tmp/aristotle-observe run /var/tmp/aristotle-wifi.txt
+# --wifi-read-only makes connecting and forgetting fail before any LIPC call,
+# so tapping a network of someone else's is harmless; the scenario still
+# never submits a valid password. It switches Wi-Fi on, scans and switches
+# it off again. Networks come from the real scan, so the row tapped below
+# may be an open one (then the screen says the connection failed) instead of
+# a secured one (then the keyboard opens): check the snaps.
+# "A2" is the touch-down acknowledgement; "quiet" one partial DU/GL16 update;
+# "flash" one full mode-8 update of the whole screen.
+
+wait 2000
+snap uikb-start
+
+# --- Settings, page 2, the Wi-Fi row (A2 + flash) ---
+label settings-open
+tap 948 118
+wait 3000
+label settings-page-2
+tap 948 1377
+wait 2500
+snap uikb-settings-2
+label wifi-open
+tap 536 1088
+wait 3000
+snap uikb-wifi
+
+# --- Wi-Fi on: A2 + quiet ("Turning on..."), then quiet updates as the
+# radio comes up and the scan ends (about 6 s) ---
+label wifi-on
+tap 536 240
+wait 9000
+snap uikb-wifi-on
+label scan-again
+tap 880 574
+wait 4000
+snap uikb-wifi-scanned
+
+# --- A network: the fourth row (A2 + flash to the keyboard if secured) ---
+label network-4
+tap 536 1057
+wait 3000
+snap uikb-password
+
+# --- Typing, one key a second: A2 on the key, then one DU update ---
+label key-t
+tap 482 1012
+wait 1000
+label key-a
+tap 110 1132
+wait 1000
+label key-d
+tap 323 1132
+wait 1000
+label key-e
+tap 269 1012
+wait 1000
+label key-u
+tap 695 1012
+wait 1000
+label key-s
+tap 216 1132
+wait 1000
+label key-z
+tap 216 1252
+wait 1000
+
+# --- Typing fast, a key every 210 ms ---
+label fast-s
+tap 216 1132
+wait 150
+label fast-o
+tap 908 1012
+wait 150
+label fast-p
+tap 1014 1012
+wait 150
+label fast-l
+tap 961 1132
+wait 150
+label fast-i
+tap 801 1012
+wait 150
+label fast-c
+tap 429 1252
+wait 150
+label fast-a
+tap 110 1132
+wait 1500
+
+# --- Polish letters: hold z for ż, or the ąę layer then e for ę ---
+label hold-z
+hold 216 1252 700
+wait 1000
+label polish-layer
+tap 216 1372
+wait 1000
+snap uikb-polish
+label polish-e
+tap 269 1012
+wait 1000
+
+# --- Shift, then the symbol layers ---
+label shift
+tap 83 1252
+wait 1000
+label shift-a
+tap 110 1132
+wait 1000
+label symbols
+tap 83 1372
+wait 1000
+snap uikb-symbols
+label digit-1
+tap 57 1012
+wait 1000
+label more-symbols
+tap 83 1252
+wait 1000
+label bracket
+tap 57 1012
+wait 1000
+label letters
+tap 83 1372
+wait 1000
+
+# --- Show the password, then delete the word and try an empty one ---
+label reveal
+tap 927 268
+wait 1500
+snap uikb-revealed
+label delete-word
+hold 988 1252 700
+wait 1000
+label enter-empty
+tap 961 1372
+wait 1500
+snap uikb-too-short
+
+# --- Back to Wi-Fi (flash), Wi-Fi off, back to the library ---
+label keyboard-back
+tap 98 118
+wait 3000
+label wifi-off
+tap 536 240
+wait 5000
+snap uikb-wifi-off
+label wifi-back
+tap 98 118
+wait 3000
+label settings-back
+tap 98 118
+wait 3000
+snap uikb-end

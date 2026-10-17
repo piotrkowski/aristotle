@@ -30,7 +30,8 @@ Ui::render ── layout ─► candidate rects ─► repaint into Canvas ─�
 | `tree` | The node tree: layout, painting, hit testing, and mutators that record damage. |
 | `ui` | `Ui` holds the tree, the canvas and a copy of what the panel shows. It computes damage and dispatches gestures. |
 | `icons`, `widgets`, `theme` | The icon set, custom leaves (cover card, battery, busy mark, toggle, slider, size steps) and the design tokens. |
-| `screens` | `library`, `settings`, `sleep` and `reader`. |
+| `keyboard` | The on-screen keyboard and the text field (see [Text input](#text-input)). |
+| `screens` | `library`, `settings`, `wifi`, `text_input`, `sleep` and `reader`. |
 
 ### Tree and layout
 
@@ -104,6 +105,32 @@ Nothing may look broken. Each user action becomes one coherent update of its fin
 
 The times come from [E-ink rendering](#e-ink-rendering) and [Benchmarks](benchmarks.md). The scenario has yet to confirm them for the newer screens.
 
+## Text input
+
+`keyboard.rs` is the on-screen keyboard and `screens/text_input.rs` the screen around it: a title, an optional hint, one field with the cursor at the end, a message line and the keyboard. Any feature that needs a line of text (a Wi-Fi password, a server URL, a user name) asks for it through the app's `ask_text` (`crates/aristotle/src/ask.rs`):
+
+```rust
+self.ask_text(TextRequest {
+    hint: Some(tr(Msg::WifiPasswordHint).into()),
+    password: true,                       // dots, with a Show/Hide button
+    submit: tr(Msg::WifiConnect).into(),  // the word on the enter key
+    max_chars: 63,
+    validate: Some(wifi::check_password), // Err(message) keeps the keyboard open
+    ..TextRequest::new(title, Box::new(move |app, text| match text {
+        Some(psk) => app.wifi_connect(net, Some(psk), Refresh::Full),
+        None => app.show_wifi(Refresh::Full), // back arrow or screensaver
+    }))
+})?;
+```
+
+The keyboard opens with one flash. `done` is called once, with the text after enter or `None` after the back arrow, and must show the next screen. The screensaver cancels a request, so a half-typed password is not kept. Without the app, `TextInput::build` and `TextInput::handle` (which returns `Outcome::{Editing, Submit, Cancel}`) do the same on any `Ui`.
+
+Layout: QWERTY in four rows on a grid of tenths of the screen width, the same in every layer, so a layer switch only relabels keys. `?123` and `#+=` hold the digits and symbols; every printable ASCII character is on some layer (a test checks it). Shift is one-shot; a second tap is caps lock. Polish letters come without a popup, which would be one more panel update: hold a letter for half a second (`a` → `ą`, `z` → `ż`, `x` → `ź`, as AltGr on the Polish programmer's layout), or tap `ąę`, which relabels the nine letters for one letter. Holding backspace deletes a word.
+
+E-ink: keys and the field are drawn pure black and white (glyphs are thresholded after anti-aliasing, `Painter::threshold`). Touch-down inverts the key alone with A2; the release restores it and draws the character as one DU update of the changed pixels (minimal damage: the key and one glyph of the field). Nothing flashes while typing. While the panel is busy the display thread merges keys typed meanwhile, so fast typing does not queue up.
+
+Measured on the device [dev] with `tools/scenarios/aristotle-wifi.txt` (injected taps held 60 ms): the key's A2 inversion finished 60–62 ms after the release, about 120 ms after touch-down; the character was on the panel 323–378 ms after the release. Typing a key every 210 ms gave one merged DU update per 1–2 keys, 250–410 ms after each release, with no backlog.
+
 ## Night mode
 
 Night mode shows the library, the reader page, the menu and the settings as white on black. It is one switch, in the reader menu and in the settings, stored in `reader.json`. Screens are drawn in day colours and the final pixels are inverted. Anti-aliasing stays correct, and no screen needs a night variant.
@@ -155,7 +182,7 @@ Spacing comes in multiples of 8 px (`Space::XS` 8 to `XXL` 64). Grays are panel 
 
 Light grays wash out under the frontlight, so hierarchy comes from size, weight and space. Controls and progress fills are pure black and white and change with DU.
 
-`icons::Icon::ALL` lists 38 outline icons on a 24-unit grid. `icons::stroke_px` picks a whole-pixel stroke per size. At the standard 48 px one unit is 2 px, so straight strokes cover whole pixels and stay pure black under A2 and DU. Icons sit in 9 mm buttons (`screens::icon_button`).
+`icons::Icon::ALL` lists 47 outline icons on a 24-unit grid. `icons::stroke_px` picks a whole-pixel stroke per size. At the standard 48 px one unit is 2 px, so straight strokes cover whole pixels and stay pure black under A2 and DU. Icons sit in 9 mm buttons (`screens::icon_button`).
 
 ## Adding a screen
 
