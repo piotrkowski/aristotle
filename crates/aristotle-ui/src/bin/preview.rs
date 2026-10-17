@@ -848,6 +848,62 @@ fn targets(out: &Path) {
     dump_targets(&mut ui, "settings-1", &mut s);
     ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
     dump_targets(&mut ui, "settings-2", &mut s);
+    ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+    dump_targets(&mut ui, "settings-3", &mut s);
+    // The network screens, with a sync account and two catalogs.
+    let styles = Styles::new(FamilyId(0));
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = SyncView {
+        status: STATUS,
+        server: Some("http://192.168.15.201:17200"),
+        username: Some("anna"),
+        has_key: true,
+        auto: true,
+        message: "",
+        import_path: "/mnt/us/aristotle/sync.json",
+    };
+    let (tree, _) = network::build_sync(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "sync", &mut s);
+    let cats = network::sample::catalogs();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = CatalogsView {
+        status: STATUS,
+        catalogs: &cats,
+        message: "",
+        import_path: "/mnt/us/aristotle/catalogs.json",
+    };
+    let (tree, _) = network::build_catalogs(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalogs", &mut s);
+    let rows = network::sample::feed_rows();
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = FeedView {
+        status: STATUS,
+        title: "Feed",
+        rows: &rows,
+        searchable: true,
+        more_before: false,
+        more_after: true,
+        message: "",
+    };
+    let (tree, _) = network::build_feed(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalog-feed", &mut s);
+    let formats = vec!["EPUB · 1.2 MB".to_string(), "PDF".to_string()];
+    let mut text = TextEngine::new(Fonts::embedded());
+    let v = EntryView {
+        status: STATUS,
+        title: "Apology",
+        authors: "Plato",
+        summary: "A public-domain test book.",
+        formats: &formats,
+        downloaded: false,
+        message: "",
+    };
+    let (tree, _) = network::build_entry(&mut text, &styles, &v);
+    let mut ui = Ui::new(tree, text, W, H);
+    dump_targets(&mut ui, "catalog-entry", &mut s);
     let mut t = Tree::new();
     let page = t.spacer(1);
     let spec = MenuSpec {
