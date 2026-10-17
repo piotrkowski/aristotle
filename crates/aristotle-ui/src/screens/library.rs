@@ -18,7 +18,7 @@
 //! Covers are optional ([`CoverMode`]): none by default, a clean list of
 //! titles; typographic cards (`widgets::Cover`); or the books' own covers.
 //!
-//! Labels are Polish: this is the text the owner reads on the device.
+//! Labels are Polish for now; an English catalog comes with the i18n crate.
 
 use super::icon_button;
 use crate::geom::{mm, Insets, MIN_TARGET};
@@ -103,8 +103,8 @@ impl Book {
     }
 }
 
-/// A plausible library, most recently opened first: author folders and
-/// topic folders like the owner's, one series.
+/// A plausible library of public-domain books, most recently opened first:
+/// author folders and topic folders, one series.
 pub fn sample_books() -> Vec<Book> {
     let mut lalka = Book::new("Lalka", "Bolesław Prus", 0.43).in_folder("Prus, Bolesław");
     lalka.chapter = "Rozdział VII · Idylla".into();
@@ -122,7 +122,7 @@ pub fn sample_books() -> Vec<Book> {
         Book::new("Potop", "Henryk Sienkiewicz", 0.0)
             .in_series("Trylogia", 2.0)
             .in_folder("Sienkiewicz, Henryk"),
-        Book::new("Medytacje", "Marek Aureliusz", 0.0).in_folder("Filozofia"),
+        Book::new("Rozmyślania", "Marek Aureliusz", 0.0).in_folder("Filozofia"),
         Book::new("Fedon", "Platon", 0.18).in_folder("Platon"),
         Book::new("Moby Dick", "Herman Melville", 0.0),
     ]
