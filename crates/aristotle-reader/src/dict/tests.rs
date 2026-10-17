@@ -175,6 +175,34 @@ fn shown<'a>(d: &'a Dictionaries, l: &Lookup) -> &'a str {
 }
 
 #[test]
+fn senses_only_by_default() {
+    use aristotle_render::richtext::from_html;
+    // Polish Wiktionary: senses, then labelled sections.
+    let pl = from_html(
+        "<p><i>rzeczownik</i></p><dl><dd>IPA: [ˈduʃa]</dd></dl><dl><dd>(1.1) dusza</dd><dd>(1.2) duch</dd></dl>\
+         <dl><dt>przykłady<span>:</span></dt><dd>(1.1) Przykład.</dd></dl>\
+         <dl><dt>etymologia:</dt><dd>prasł.</dd></dl>",
+    );
+    assert_eq!(senses(&pl).text(), "rzeczownik\n(1.1) dusza\n(1.2) duch");
+    // English Wiktionary: part of speech headings stay, sections go.
+    let en = from_html(
+        "<h4>Noun</h4><ol><li>word</li><li>reason</li></ol><section><h4>Etymology 1</h4><p>From PIE.</p></section>\
+         <h4>Verb</h4><ol><li>to say</li></ol><h4>Declension</h4><p>table</p>",
+    );
+    assert_eq!(senses(&en).text(), "Noun\nword\nreason\nVerb\nto say");
+    let found = Found {
+        entries: vec![Entry {
+            headword: "dusza".into(),
+            form: None,
+            definition: pl,
+        }],
+        approximate: false,
+    };
+    assert!(has_more(&found));
+    assert!(as_rich_text(&found, true).text().contains("Przykład."));
+}
+
+#[test]
 fn languages_from_names() {
     assert_eq!(langs_of("grc-pl"), (Some("grc".into()), Some("pl".into())));
     assert_eq!(langs_of("x-la-pl"), (Some("la".into()), Some("pl".into())));
@@ -247,7 +275,7 @@ fn greek_goes_to_greek_polish_first_accent_insensitive() {
     assert!(!f.approximate);
     assert_eq!(f.entries[0].form.as_deref(), Some("ψυχῆς"));
     // Definition text.
-    let rt = as_rich_text(l.found.as_ref().unwrap());
+    let rt = as_rich_text(l.found.as_ref().unwrap(), false);
     assert!(
         rt.text().starts_with("rzeczownik\n(1.1) dusza"),
         "{}",

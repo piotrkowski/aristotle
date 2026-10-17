@@ -89,6 +89,14 @@ impl Service {
                             .map(|w| {
                                 let l = d.lookup(w, book_lang.as_deref());
                                 let g = l.found.as_ref().map(super::gloss).unwrap_or_default();
+                                // "mori  morior — umierać", but "memento
+                                // przypomnienie", not "memento — memento — …".
+                                let same = format!("{} — ", l.word.to_lowercase());
+                                let g = if g.to_lowercase().starts_with(&same) {
+                                    g.chars().skip(same.chars().count()).collect()
+                                } else {
+                                    g
+                                };
                                 (l.word, if g.is_empty() { "—".into() } else { g })
                             })
                             .collect(),

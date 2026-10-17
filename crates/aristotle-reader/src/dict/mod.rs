@@ -643,44 +643,135 @@ pub fn build_indexes(missing: &[(PathBuf, PathBuf)]) {
     }
 }
 
+/// Section headings of Wiktionary entries that are not senses: examples,
+/// syntax, related words, etymology, translations, inflection, references
+/// (Polish and English Wiktionary, lower case, without the colon).
+const NOT_SENSES: &[&str] = &[
+    // Polish Wiktionary.
+    "przykłady",
+    "składnia",
+    "kolokacje",
+    "synonimy",
+    "antonimy",
+    "hiperonimy",
+    "hiponimy",
+    "holonimy",
+    "meronimy",
+    "wyrazy pokrewne",
+    "związki frazeologiczne",
+    "etymologia",
+    "uwagi",
+    "tłumaczenia",
+    "źródła",
+    "odmiana",
+    "wymowa",
+    "zobacz też",
+    "kognaty",
+    "przysłowia",
+    "pochodne",
+    "zapożyczenia",
+    "warianty",
+    "skrót",
+    "temat",
+    // English Wiktionary.
+    "etymology",
+    "pronunciation",
+    "declension",
+    "inflection",
+    "conjugation",
+    "derived terms",
+    "related terms",
+    "descendants",
+    "references",
+    "further reading",
+    "synonyms",
+    "antonyms",
+    "see also",
+    "usage notes",
+    "quotations",
+    "alternative forms",
+    "anagrams",
+    "coordinate terms",
+    "hypernyms",
+    "hyponyms",
+    "translations",
+];
+
+fn not_senses(heading: &str) -> bool {
+    let h = heading.trim().trim_end_matches(':').trim().to_lowercase();
+    // "Etymology 2", "Declension 1".
+    let h = h.trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ');
+    NOT_SENSES.contains(&h)
+}
+
+/// The senses of a definition: what comes before and between the
+/// sections [`NOT_SENSES`] names, without pronunciation lines.
+pub fn senses(def: &RichText) -> RichText {
+    let mut out = RichText::default();
+    let mut keep = true;
+    for b in &def.blocks {
+        let text = b.text();
+        if b.heading {
+            keep = !not_senses(&text);
+            if !keep {
+                continue;
+            }
+        }
+        if keep && !text.trim_start().starts_with("IPA:") {
+            out.blocks.push(b.clone());
+        }
+    }
+    out
+}
+
 /// A result as rich text for the popup: each article's headword (with the
-/// matched form), then its definition.
-pub fn as_rich_text(found: &Found) -> RichText {
+/// matched form) when there are several, then its senses, or with `full`
+/// the whole entry.
+pub fn as_rich_text(found: &Found, full: bool) -> RichText {
     let mut out = RichText::default();
     // One article: the popup's title already names it.
     let headings = found.entries.len() > 1;
     for e in &found.entries {
-        // Pronunciation lines are IPA the reading fonts lack, and noise
-        // in a reading popup.
-        let defs = e
-            .definition
-            .blocks
-            .iter()
-            .filter(|b| !b.text().trim_start().starts_with("IPA:"))
-            .cloned();
-        if !headings {
-            out.blocks.extend(defs);
-            continue;
-        }
-        let mut head = vec![Run {
-            text: e.headword.clone(),
-            bold: true,
-            italic: false,
-        }];
-        if let Some(f) = &e.form {
-            head.push(Run {
-                text: format!("  ({f})"),
-                bold: false,
-                italic: true,
+        let defs = if full {
+            // Pronunciation lines are IPA the reading fonts lack.
+            RichText {
+                blocks: e
+                    .definition
+                    .blocks
+                    .iter()
+                    .filter(|b| !b.text().trim_start().starts_with("IPA:"))
+                    .cloned()
+                    .collect(),
+            }
+        } else {
+            senses(&e.definition)
+        };
+        if headings {
+            let mut head = vec![Run {
+                text: e.headword.clone(),
+                bold: true,
+                italic: false,
+            }];
+            if let Some(f) = &e.form {
+                head.push(Run {
+                    text: format!("  ({f})"),
+                    bold: false,
+                    italic: true,
+                });
+            }
+            out.blocks.push(Block {
+                runs: head,
+                heading: true,
             });
         }
-        out.blocks.push(Block {
-            runs: head,
-            heading: true,
-        });
-        out.blocks.extend(defs);
+        out.blocks.extend(defs.blocks);
     }
     out
+}
+
+/// Whether the full entry says more than its senses ("Więcej").
+pub fn has_more(found: &Found) -> bool {
+    as_rich_text(found, true).blocks.len() > as_rich_text(found, false).blocks.len()
 }
 
 /// The first sense of the first article, short: for a word-by-word gloss.
