@@ -215,6 +215,22 @@ impl<'a> Painter<'a> {
         self.fill_rect(Rect::new(x, y, thickness, h), gray);
     }
 
+    /// Copies 8-bit gray pixels (rows `stride` bytes apart) with their
+    /// top-left corner at `(x, y)`, clipped. For pictures: cover thumbnails
+    /// and book pages rendered by another engine.
+    pub fn blit_gray(&mut self, x: i32, y: i32, w: u32, h: u32, stride: usize, pixels: &[u8]) {
+        let area = Rect::new(x, y, w as i32, h as i32);
+        let Some(r) = area.intersect(&self.clip) else {
+            return;
+        };
+        for row in r.y..r.bottom() {
+            let s = (row - y) as usize * stride + (r.x - x) as usize;
+            let d = self.canvas.index(r.x, row);
+            let n = r.w as usize;
+            self.canvas.pixels[d..d + n].copy_from_slice(&pixels[s..s + n]);
+        }
+    }
+
     /// Blends an 8-bit coverage mask whose top-left corner is at `(x, y)`
     /// towards `gray`. Used for glyphs and rasterized paths.
     pub fn blend_mask(&mut self, x: i32, y: i32, w: u32, h: u32, mask: &[u8], gray: u8) {

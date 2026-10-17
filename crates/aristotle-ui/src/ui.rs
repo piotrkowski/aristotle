@@ -42,7 +42,7 @@
 
 use crate::canvas::{Canvas, Painter};
 use crate::geom::{Point, Rect};
-use crate::input::{Direction, Gesture, GestureRecognizer, TouchEvent};
+use crate::input::{Direction, Gesture, GestureConfig, GestureRecognizer, TouchEvent};
 use crate::text::TextEngine;
 use crate::tree::{ActionId, Feedback, Hit, NodeId, Refresh, Tree};
 use crate::waveform::Waveform;
@@ -313,6 +313,20 @@ impl Ui {
         if self.night {
             p.invert_rect(r);
         }
+    }
+
+    /// Gesture thresholds. A screen whose long press does something drastic
+    /// (quitting the app) can ask for a longer hold here.
+    pub fn gesture_config_mut(&mut self) -> &mut GestureConfig {
+        &mut self.gestures.config
+    }
+
+    /// Forget any touch in progress, e.g. after the app handled the raw
+    /// events itself for a while and hands them back to the UI.
+    pub fn reset_gestures(&mut self) {
+        let config = self.gestures.config;
+        self.gestures = GestureRecognizer::new(config);
+        self.release();
     }
 
     /// Microseconds until [`Ui::tick`] has work (a pending long press).

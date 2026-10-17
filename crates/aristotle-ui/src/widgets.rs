@@ -12,8 +12,83 @@ use crate::text::{
 };
 use crate::theme::{INK, RULE};
 use crate::tree::{Constraints, PaintCx, Widget};
+use std::rc::Rc;
 
-/// A typographic stand-in for a missing cover.
+/// An 8-bit gray picture (0 black, 255 white), shared cheaply between the
+/// screen model and the tree. Cover thumbnails arrive this way from the
+/// library's cover cache, already dithered to the panel's 16 levels.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrayImage {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Rc<Vec<u8>>,
+}
+
+impl GrayImage {
+    pub fn new(width: u32, height: u32, pixels: Vec<u8>) -> Self {
+        assert_eq!(pixels.len(), width as usize * height as usize);
+        Self {
+            width,
+            height,
+            pixels: Rc::new(pixels),
+        }
+    }
+
+    /// The largest size with this aspect ratio that fits in `w` × `h`.
+    pub fn fit(&self, w: i32, h: i32) -> Size {
+        if self.width == 0 || self.height == 0 || w <= 0 || h <= 0 {
+            return Size::default();
+        }
+        let sx = w as f32 / self.width as f32;
+        let sy = h as f32 / self.height as f32;
+        let s = sx.min(sy);
+        Size::new(
+            ((self.width as f32 * s).round() as i32).clamp(1, w),
+            ((self.height as f32 * s).round() as i32).clamp(1, h),
+        )
+    }
+
+    /// Scaled to `w` × `h` by area averaging: every source pixel counts in
+    /// proportion to its overlap, so thin type on a cover does not alias
+    /// away the way nearest-neighbour sampling would make it.
+    pub fn resized(&self, w: u32, h: u32) -> GrayImage {
+        if (w, h) == (self.width, self.height) || self.width == 0 || self.height == 0 {
+            return self.clone();
+        }
+        let (sw, sh) = (self.width as f32, self.height as f32);
+        let fx = sw / w as f32;
+        let fy = sh / h as f32;
+        let mut out = Vec::with_capacity(w as usize * h as usize);
+        for y in 0..h {
+            let y0 = y as f32 * fy;
+            let y1 = (y0 + fy).min(sh);
+            for x in 0..w {
+                let x0 = x as f32 * fx;
+                let x1 = (x0 + fx).min(sw);
+                let (mut sum, mut area) = (0.0f32, 0.0f32);
+                let mut yy = y0.floor();
+                while yy < y1 {
+                    let wy = (yy + 1.0).min(y1) - yy.max(y0);
+                    let row = (yy as usize).min(self.height as usize - 1) * self.width as usize;
+                    let mut xx = x0.floor();
+                    while xx < x1 {
+                        let wx = (xx + 1.0).min(x1) - xx.max(x0);
+                        let px = self.pixels[row + (xx as usize).min(self.width as usize - 1)];
+                        sum += px as f32 * wx * wy;
+                        area += wx * wy;
+                        xx += 1.0;
+                    }
+                    yy += 1.0;
+                }
+                out.push((sum / area.max(f32::EPSILON)).round().clamp(0.0, 255.0) as u8);
+            }
+        }
+        GrayImage::new(w, h, out)
+    }
+}
+
+/// A book cover: the real one when the library has a thumbnail, otherwise a
+/// typographic stand-in.
 ///
 /// Most sideloaded EPUBs have poor or no covers, and e-ink renders photo
 /// covers as muddy gray. A set-in-type cover is crisp, instantly legible,
@@ -24,7 +99,10 @@ pub struct Cover {
     pub title: String,
     pub author: String,
     pub family: FamilyId,
+    /// The real cover, scaled to the widget once per size.
+    pub image: Option<GrayImage>,
     size: Size,
+    scaled: Option<GrayImage>,
     title_layout: Option<ParagraphLayout>,
     author_layout: Option<ParagraphLayout>,
 }
@@ -35,10 +113,17 @@ impl Cover {
             title: title.to_string(),
             author: author.to_string(),
             family,
+            image: None,
             size: Size::default(),
+            scaled: None,
             title_layout: None,
             author_layout: None,
         }
+    }
+
+    pub fn with_image(mut self, image: Option<GrayImage>) -> Self {
+        self.image = image;
+        self
     }
 
     /// Background and ink of the cover's variant.
@@ -64,6 +149,11 @@ impl Widget for Cover {
         let s = c.constrain(c.max);
         if s != self.size {
             self.size = s;
+            if let Some(img) = &self.image {
+                let fit = img.fit(s.w, s.h);
+                self.scaled = Some(img.resized(fit.w as u32, fit.h as u32));
+                return s;
+            }
             let (_, ink) = self.palette();
             let w = s.w as f32;
             if self.large() {
@@ -103,6 +193,20 @@ impl Widget for Cover {
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        if let Some(img) = &self.scaled {
+            // Bottom-aligned and centred, like a book standing on a shelf;
+            // a hairline keeps white covers from dissolving into the page.
+            let x = r.x + (r.w - img.width as i32) / 2;
+            let y = r.bottom() - img.height as i32;
+            let p = &mut *cx.painter;
+            p.blit_gray(x, y, img.width, img.height, img.width as usize, &img.pixels);
+            p.stroke_rect(
+                Rect::new(x, y, img.width as i32, img.height as i32),
+                1,
+                RULE,
+            );
+            return;
+        }
         let (bg, ink) = self.palette();
         let p = &mut *cx.painter;
         p.fill_rect(r, bg);
