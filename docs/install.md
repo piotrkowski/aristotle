@@ -1,56 +1,65 @@
 # Installing Aristotle
 
-> [!WARNING]
-> Changing a Kindle's software can brick it, and no recovery method has been verified for the Paperwhite 4. Try Aristotle only on a device you can afford to lose.
+Aristotle is experimental. A mistake can brick the Kindle, and no recovery method is verified for the Paperwhite 4. Use only a device you can afford to lose.
 
 ## What you need
 
-- A Kindle Paperwhite 4 (2018, PQ94WIF) on firmware 5.13.x, jailbroken. Other models and firmware are not supported, and the scripts that change the system refuse to run on them (developers can override this with `ARISTOTLE_FORCE=1`).
-- KUAL, the launcher that holds Aristotle's menu. MRPI installs it. [kindlemodding.org](https://kindlemodding.org) explains both.
-- A computer and a USB cable.
-- For the optional agent only: KOReader, whose SSH server it uses, and your SSH public key.
+- A jailbroken Kindle Paperwhite 4, 2018 model PQ94WIF, on firmware 5.13.x. Other models and firmware are unsupported.
+- KUAL and MRPI. [kindlemodding.org](https://kindlemodding.org) explains their setup.
+- A computer and USB cable.
+- For the optional agent, KOReader and your SSH public key.
+
+Aristotle contains no exploit or DRM-removal code. It opens only DRM-free books. It uses the Kindle's existing waveforms and firmware, never ships them, and never copies them off the device.
 
 ## Install
 
-1. Download `aristotle-X.Y.Z.zip` from the latest [release](https://github.com/piotrkowski/aristotle/releases).
-2. Connect the Kindle over USB. Unzip the file to the root of its drive, next to `documents/`, and eject the Kindle.
-3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
+1. Download `aristotle-X.Y.Z.zip` from [Releases](https://github.com/piotrkowski/aristotle/releases).
+2. Connect the Kindle over USB.
+3. Unzip the archive to the drive root, next to `documents/`.
+4. Eject the Kindle.
+5. Open **KUAL > Aristotle > Start Aristotle**.
 
-The zip adds two folders: `aristotle/` (the app, the licences of everything in it, and `SOURCE.txt`, which names the source it was built from) and `extensions/aristotle/` (the KUAL menu). To check the download, compare it with `SHA256SUMS` from the release, or run `gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle`.
+The zip contains `aristotle/`, the app and licenses, and `extensions/aristotle/`, the menu. `SOURCE.txt` identifies the source build. Verify the download with `SHA256SUMS` or:
 
-To quit, hold the "Library" title for a second, or open KUAL › Aristotle › Return to the Kindle interface. The stock interface comes back after its boot splash, in 30 to 60 seconds. A reboot also brings it back. To update, unzip a newer release over the old one.
+```sh
+gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle
+```
 
-Aristotle contains no exploit or DRM-removal code, and it opens only DRM-free books. It uses the e-ink waveforms and firmware already on the Kindle and never ships them or copies them off it.
+Hold **Library** for one second to quit. The stock interface returns after 30 to 60 seconds of boot splash. A reboot also restores it. To update, unpack a newer release over the old one.
 
 ## The agent (optional)
 
-KUAL › Aristotle › Install agent adds a small service that starts with the Kindle. Before you install it, save your public key, such as `~/.ssh/id_ed25519.pub`, as `extensions/aristotle/authorized_keys` on the Kindle's drive. The agent:
+The agent provides USB SSH at `192.168.15.244`, drive-mode switching from settings, and an update block. See [Host setup](../device/README.md).
 
-- keeps SSH available over the USB cable, at `192.168.15.244` ([device/README.md](../device/README.md) describes the computer's side);
-- lets Aristotle's settings switch the USB port to drive mode for copying books;
-- keeps Amazon's update daemons from running, so a firmware update does not undo the setup. To update the firmware on purpose, remove the agent first, and keep the `update.bin.tmp.partial` folder on the drive.
+1. Copy your SSH public key to `extensions/aristotle/authorized_keys` on the Kindle drive.
+2. Open **KUAL > Aristotle > Install agent**.
 
-The agent writes three files to the root filesystem (`/etc/upstart/aristotle-agent.conf`, `aristotle-ui.conf` and `aristotle-ota.conf`) and changes no stock file. Everything else goes to the drive and `/var/local`.
+The agent adds three root-filesystem jobs: `/etc/upstart/aristotle-agent.conf`, `/etc/upstart/aristotle-ui.conf`, and `/etc/upstart/aristotle-ota.conf`. It changes no stock file. Other files go to the drive and `/var/local`.
+
+Before a deliberate firmware update, remove the agent. Keep the `update.bin.tmp.partial` folder on the drive.
 
 ## Start Aristotle at boot
 
-With the agent installed, KUAL › Aristotle › Start Aristotle at boot: on makes the Kindle start Aristotle instead of the stock interface, about 41 seconds after power-on. It copies the app to the Kindle's internal storage, so turn it on again after an update. Start Aristotle at boot: off undoes it.
+With the agent installed, select **Start Aristotle at boot: on**. This copies the app to internal storage and starts it about 41 seconds after power-on [dev]. Select it again after updating the app. **Start Aristotle at boot: off** disables it.
 
-The Kindle starts the stock interface instead when `aristotle-disable` exists on the drive, after three failed launches in a row (until you turn it on again), and for the rest of the boot after you quit Aristotle.
+The stock interface starts instead if `aristotle-disable` exists on the drive or after three failed launches. Quitting Aristotle keeps the stock interface for the rest of that boot.
 
 ## Uninstall
 
-1. On the Kindle, open KUAL › Aristotle › Remove agent completely. This removes the three jobs, Aristotle at boot with its copy of the app, the update block and the SSH key. The agent's log is saved to the drive as `aristotle-agent.log`.
-2. Delete `aristotle/`, `.aristotle/` (the index, page cache and snapshots) and `extensions/aristotle/` from the drive, and `extensions/aristotle-probe/` if you installed a developer build. Older installs have `extensions/aristotle-usbnet/` instead of `extensions/aristotle/`.
+1. Select **KUAL > Aristotle > Remove agent completely**. This removes its jobs, internal app copy, update block, and SSH key. It saves `aristotle-agent.log` to the drive.
+2. Delete `aristotle/`, `.aristotle/`, and `extensions/aristotle/` from the drive.
+3. If present, delete `extensions/aristotle-probe/` or the older `extensions/aristotle-usbnet/`.
 
-Your books, `My Clippings.txt` and the exported notes stay.
+Books, `My Clippings.txt`, and exported notes remain.
 
 ## If something goes wrong
 
-Without SSH, open KUAL › Aristotle › USB drive mode for 10 minutes and connect the Kindle to a computer. Create an empty file named `aristotle-disable` at the root of the drive, then restart the Kindle. The agent and Aristotle at boot do not start, and the Kindle runs the stock system. If Aristotle starts at boot, quit it first (hold the "Library" title), so the stock interface offers USB drive mode.
+Without SSH, select **KUAL > Aristotle > USB drive mode for 10 minutes**. Connect the Kindle, create an empty `aristotle-disable` file at the drive root, and restart. The stock system starts without the agent or Aristotle at boot.
 
-Without KUAL or the agent, the Kindle still runs a script named `emergency.sh` from the root of the drive as root once the stock interface has started (this comes with the community's hotfix; we checked it on our Kindle). [device/README.md](../device/README.md#recovery-without-ssh) says what to put in it. Delete it afterwards.
+If Aristotle starts at boot, quit it first so the stock interface can offer drive mode.
+
+Without KUAL or the agent, the community hotfix can run `emergency.sh` from the drive root after the stock interface starts [dev]. Follow [Recovery without SSH](../device/README.md#recovery-without-ssh), then delete the script.
 
 ## Build it yourself
 
-Developers can build the same zip from source on Linux. [CONTRIBUTING.md](../.github/CONTRIBUTING.md#building) lists the tools and commands.
+See [Building](../.github/CONTRIBUTING.md#building) for Linux tools and commands.
