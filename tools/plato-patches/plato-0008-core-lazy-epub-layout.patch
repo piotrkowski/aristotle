@@ -1,0 +1,475 @@
+Lay out EPUB spine items lazily: only up to the pages asked for, resuming
+later where the layout stopped. Plato lays out a whole spine item before it
+can place a position in it or draw any of its pages; a MOBI converted to one
+huge spine item ("Pan Tadeusz", 420 KB) costs 2 to 3 s on the PW4 for every open,
+placement and font change, wherever the reader is in it.
+
+The engine's block loop can now stop between two children of a block (never
+inside a paragraph or a table) once enough complete pages exist after the
+location asked for, and leaves one frame per nesting level: the next child,
+the loop context and the rectangles so far. Resuming replays exactly the
+operations a full layout performs (the work done before the stop is not
+repeated), so page breaks are identical: checked by comparing every page
+start, 20 placements in fresh documents and rendered pages of 38 books
+against an unpatched build.
+
+EpubDocument keeps a partly laid out spine item (its document, styles and
+layout state) next to its complete pages in the page cache, and continues it
+when a location past them is asked for: 2 pages ahead on the first layout,
+8 ahead when continuing. Going back into a previous spine item still lays it
+out whole (its last page is needed). HtmlDocument is unchanged.
+
+--- a/crates/core/src/document/epub/mod.rs
++++ b/crates/core/src/document/epub/mod.rs
+@@ -13,7 +13,7 @@
+ use crate::geom::{Boundary, CycleDir};
+ use super::pdf::PdfOpener;
+ use super::html::dom::{XmlTree, NodeRef};
+-use super::html::engine::{Page, Engine, ResourceFetcher};
++use super::html::engine::{Page, Engine, ResourceFetcher, ResumeFrame, StopRule};
+ use super::html::layout::{StyleData, LoopContext};
+ use super::html::layout::{RootData, DrawState, DrawCommand, TextCommand, ImageCommand};
+ use super::html::layout::TextAlign;
+@@ -42,10 +42,33 @@
+     engine: Engine,
+     spine: Vec<Chunk>,
+     cache: FxHashMap<usize, Vec<Page>>,
++    // Spine items laid out only partly (aristotle): their pages so far are in
++    // `cache`, and what is needed to go on is here.
++    partial: FxHashMap<usize, Partial>,
+     ignore_document_css: bool,
+     language_override: Option<String>,
+ }
+ 
++// A spine item laid out up to some page: its document, its styles and the
++// layout state where the engine stopped.
++struct Partial {
++    tree: XmlTree,
++    stylesheet: StyleSheet,
++    style: StyleData,
++    root_data: RootData,
++    draw_state: DrawState,
++    // The page being filled.
++    display_list: Vec<Page>,
++    resume: Vec<ResumeFrame>,
++    body_offset: usize,
++    runs: usize,
++}
++
++// Pages laid out past the one asked for: on the first layout of a spine
++// item, and when continuing it.
++const FIRST_LOOKAHEAD: usize = 2;
++const LOOKAHEAD: usize = 8;
++
+ #[derive(Debug)]
+ struct Chunk {
+     path: String,
+@@ -124,6 +147,7 @@
+             engine: Engine::new(),
+             spine,
+             cache: FxHashMap::default(),
++            partial: FxHashMap::default(),
+             ignore_document_css: false,
+             language_override: None,
+         })
+@@ -134,6 +158,7 @@
+     pub fn set_language(&mut self, language: Option<String>) {
+         self.language_override = language;
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn offset(&self, index: usize) -> usize {
+@@ -264,10 +289,7 @@
+ 
+     #[inline]
+     fn page_index(&mut self, offset: usize, index: usize, start_offset: usize) -> Option<usize> {
+-        if !self.cache.contains_key(&index) {
+-            let display_list = self.build_display_list(index, start_offset);
+-            self.cache.insert(index, display_list);
+-        }
++        self.ensure(index, start_offset, Some(offset));
+         self.cache.get(&index).map(|display_list| {
+             if display_list.len() < 2 || display_list[1].first().map(|dc| offset < dc.offset()) == Some(true) {
+                 return 0;
+@@ -320,7 +342,79 @@
+         }
+     }
+ 
+-    fn build_display_list(&mut self, index: usize, start_offset: usize) -> Vec<Page> {
++    // Lay out the pages of spine item `index` up to the one holding
++    // `offset` and a few after it, or all of them without an offset.
++    // Continues where an earlier call stopped.
++    fn ensure(&mut self, index: usize, start_offset: usize, offset: Option<usize>) {
++        if self.cache.contains_key(&index) && !self.partial.contains_key(&index) {
++            return;
++        }
++        let mut p = match self.partial.remove(&index) {
++            Some(p) => p,
++            None => match self.start_layout(index, start_offset) {
++                Ok(p) => {
++                    self.cache.insert(index, Vec::new());
++                    p
++                },
++                Err(pages) => {
++                    self.cache.insert(index, pages);
++                    return;
++                },
++            },
++        };
++        let stop = match offset {
++            Some(offset) => {
++                let after = self.cache.get(&index).map_or(0, |pages| {
++                    pages.iter().filter(|page| page.first().map_or(false, |dc| dc.offset() > offset)).count()
++                });
++                if after >= FIRST_LOOKAHEAD {
++                    self.partial.insert(index, p);
++                    return;
++                }
++                let want = if p.runs == 0 { FIRST_LOOKAHEAD } else { LOOKAHEAD };
++                Some(StopRule { offset, pages_after: want - after })
++            },
++            None => None,
++        };
++        let done = self.continue_layout(&mut p, stop);
++        p.runs += 1;
++        // Every page but the one being filled is complete.
++        let current = p.display_list.pop().unwrap_or_default();
++        let complete = std::mem::replace(&mut p.display_list, vec![current]);
++        let cached = self.cache.entry(index).or_default();
++        cached.extend(complete.into_iter().filter(|page| !page.is_empty()));
++        if done {
++            if let Some(last) = p.display_list.pop().filter(|page| !page.is_empty()) {
++                cached.push(last);
++            }
++            if cached.is_empty() {
++                cached.push(vec![DrawCommand::Marker(p.root_data.start_offset + p.body_offset)]);
++            }
++        } else {
++            self.partial.insert(index, p);
++        }
++    }
++
++    // Go on laying out a partly laid out spine item, until `stop` says
++    // enough. Returns whether it is complete.
++    fn continue_layout(&mut self, p: &mut Partial, stop: Option<StopRule>) -> bool {
++        let body = match p.tree.root().find("body") {
++            Some(body) => body,
++            None => return true,
++        };
++        self.engine.stop = stop;
++        self.engine.stopped.clear();
++        self.engine.resume = std::mem::take(&mut p.resume);
++        self.engine.build_display_list(body, &p.style, &LoopContext::default(), &p.stylesheet, &p.root_data, &mut self.archive, &mut p.draw_state, &mut p.display_list);
++        self.engine.stop = None;
++        self.engine.resume.clear();
++        p.resume = std::mem::take(&mut self.engine.stopped);
++        p.resume.is_empty()
++    }
++
++    // Parse spine item `index` and set up its layout; its pages directly
++    // when it has no body.
++    fn start_layout(&mut self, index: usize, start_offset: usize) -> Result<Partial, Vec<Page>> {
+         let mut text = String::new();
+         let mut spine_dir = PathBuf::default();
+ 
+@@ -375,9 +469,7 @@
+             stylesheet.append(&mut inner_css, true);
+         }
+ 
+-        let mut display_list = Vec::new();
+-
+-        if let Some(body) = root.root().find("body") {
++        if let Some(body_offset) = root.root().find("body").map(|body| body.offset()) {
+             let mut rect = self.engine.rect();
+             rect.shrink(&self.engine.margin);
+ 
+@@ -398,8 +490,7 @@
+                 .. Default::default()
+             };
+ 
+-            let loop_context = LoopContext::default();
+-            let mut draw_state = DrawState {
++            let draw_state = DrawState {
+                 position: rect.min,
+                 .. Default::default()
+             };
+@@ -410,20 +501,20 @@
+                 rect,
+             };
+ 
+-            display_list.push(Vec::new());
+-
+-            self.engine.build_display_list(body, &style, &loop_context, &stylesheet, &root_data, &mut self.archive, &mut draw_state, &mut display_list);
+-
+-            display_list.retain(|page| !page.is_empty());
+-
+-            if display_list.is_empty() {
+-                display_list.push(vec![DrawCommand::Marker(start_offset + body.offset())]);
+-            }
++            Ok(Partial {
++                tree: root,
++                stylesheet,
++                style,
++                root_data,
++                draw_state,
++                display_list: vec![Vec::new()],
++                resume: Vec::new(),
++                body_offset,
++                runs: 0,
++            })
+         } else {
+-            display_list.push(vec![DrawCommand::Marker(start_offset)]);
++            Err(vec![vec![DrawCommand::Marker(start_offset)]])
+         }
+-
+-        display_list
+     }
+ 
+     pub fn categories(&self) -> BTreeSet<String> {
+@@ -742,10 +833,7 @@
+                         return None;
+                     }
+                     let (index, start_offset) = (index - 1, start_offset - self.spine[index-1].size);
+-                    if !self.cache.contains_key(&index) {
+-                        let display_list = self.build_display_list(index, start_offset);
+-                        self.cache.insert(index, display_list);
+-                    }
++                    self.ensure(index, start_offset, None);
+                     self.cache.get(&index)
+                         .and_then(|display_list| display_list.last().and_then(|page| page.first()).map(DrawCommand::offset))
+                 }
+@@ -760,10 +848,7 @@
+                         return None;
+                     }
+                     let (index, start_offset) = (index + 1, start_offset + self.spine[index].size);
+-                    if !self.cache.contains_key(&index) {
+-                        let display_list = self.build_display_list(index, start_offset);
+-                        self.cache.insert(index, display_list);
+-                    }
++                    self.ensure(index, start_offset, Some(start_offset));
+                     self.cache.get(&index)
+                         .and_then(|display_list| display_list.first().and_then(|page| page.first()).map(|dc| dc.offset()))
+                 }
+@@ -884,41 +969,49 @@
+     fn layout(&mut self, width: u32, height: u32, font_size: f32, dpi: u16) {
+         self.engine.layout(width, height, font_size, dpi);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_text_align(&mut self, text_align: TextAlign) {
+         self.engine.set_text_align(text_align);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_font_family(&mut self, family_name: &str, search_path: &str) {
+         self.engine.set_font_family(family_name, search_path);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_margin_width(&mut self, width: i32) {
+         self.engine.set_margin_width(width);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_line_height(&mut self, line_height: f32) {
+         self.engine.set_line_height(line_height);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
+         self.engine.set_hyphen_penalty(hyphen_penalty);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
+         self.engine.set_stretch_tolerance(stretch_tolerance);
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn set_ignore_document_css(&mut self, ignore: bool) {
+         self.ignore_document_css = ignore;
+         self.cache.clear();
++        self.partial.clear();
+     }
+ 
+     fn title(&self) -> Option<String> {
+--- a/crates/core/src/document/html/engine.rs
++++ b/crates/core/src/document/html/engine.rs
+@@ -38,6 +38,40 @@
+ 
+ pub type Page = Vec<DrawCommand>;
+ 
++// Interruptible layout (aristotle): a long spine item can be laid out only up
++// to the pages needed, and resumed later from where it stopped. The layout
++// stops only between two children of a block (never inside a paragraph or a
++// table), and resuming replays exactly the operations a full layout would
++// have done, so page breaks are identical.
++
++/// When to stop: once `pages_after` complete pages start after `offset`.
++#[derive(Debug, Clone, Copy)]
++pub struct StopRule {
++    pub offset: usize,
++    pub pages_after: usize,
++}
++
++/// The state of one block loop at the point the layout stopped.
++#[derive(Debug, Clone)]
++pub struct ResumeFrame {
++    // Index of the element child to continue with (which has a frame of
++    // its own if it was interrupted inside).
++    next: usize,
++    // The loop context to continue with.
++    loop_context: LoopContext,
++    // The rectangles of the block so far.
++    rects: Vec<Option<Rectangle>>,
++}
++
++/// Whether `display_list` holds enough complete pages for `rule`: every
++/// page but the last one, which may still grow, is complete.
++fn enough_pages(display_list: &[Page], rule: StopRule) -> bool {
++    let complete = display_list.len().saturating_sub(1);
++    display_list[..complete].iter()
++        .filter(|page| page.first().map_or(false, |dc| dc.offset() > rule.offset))
++        .count() >= rule.pages_after
++}
++
+ pub trait ResourceFetcher {
+     fn fetch(&mut self, name: &str) -> Result<Vec<u8>, Error>;
+ }
+@@ -62,6 +96,12 @@
+     pub dims: (u32, u32),
+     // Device DPI.
+     pub dpi: u16,
++    // Interruptible layout: when to stop, the frames left by the last stop
++    // (innermost first), and the frames to resume from (popped as the
++    // layout descends, outermost last).
++    pub stop: Option<StopRule>,
++    pub stopped: Vec<ResumeFrame>,
++    pub resume: Vec<ResumeFrame>,
+ }
+ 
+ impl Engine {
+@@ -79,6 +119,9 @@
+             line_height,
+             dims: (DEFAULT_WIDTH, DEFAULT_HEIGHT),
+             dpi: DEFAULT_DPI,
++            stop: None,
++            stopped: Vec::new(),
++            resume: Vec::new(),
+         }
+     }
+ 
+@@ -139,10 +182,27 @@
+         rect![0, 0, width as i32, height as i32]
+     }
+ 
++    // Whether an interruptible layout may stop in the block loop of `node`
++    // now: never inside a table, whose cells are merged afterwards.
++    fn stop_now(&self, node: NodeRef, display_list: &[Page]) -> bool {
++        match self.stop {
++            Some(rule) => enough_pages(display_list, rule) &&
++                          node.tag_name() != Some("table") &&
++                          !node.ancestor_elements().any(|n| n.tag_name() == Some("table")),
++            None => false,
++        }
++    }
++
+     pub fn build_display_list(&mut self, node: NodeRef, parent_style: &StyleData, loop_context: &LoopContext, stylesheet: &StyleSheet, root_data: &RootData, resource_fetcher: &mut dyn ResourceFetcher, draw_state: &mut DrawState, display_list: &mut Vec<Page>) -> ChildArtifact {
+         // TODO: border, background, text-transform, tab-size, text-decoration.
++        // A call on the path of an interrupted layout continues it: what it
++        // did before the interruption is not done again.
++        let mut resumed = self.resume.pop();
+         let mut style = StyleData::default();
+-        let mut rects: Vec<Option<Rectangle>> = vec![None];
++        let mut rects: Vec<Option<Rectangle>> = match resumed.as_mut() {
++            Some(frame) => std::mem::take(&mut frame.rects),
++            None => vec![None],
++        };
+ 
+         let props = specified_values(node, stylesheet);
+ 
+@@ -307,17 +367,19 @@
+ 
+         style.width = width;
+ 
+-        if props.get("page-break-before").map(String::as_str) == Some("always") {
++        if resumed.is_none() && props.get("page-break-before").map(String::as_str) == Some("always") {
+             display_list.push(Vec::new());
+             draw_state.position.y = root_data.rect.min.y;
+         }
+ 
+-        draw_state.position.y += style.padding.top;
++        if resumed.is_none() {
++            draw_state.position.y += style.padding.top;
++        }
+ 
+         let has_blocks = node.children().any(|n| n.is_block());
+ 
+         if has_blocks {
+-            if node.id().is_some() {
++            if resumed.is_none() && node.id().is_some() {
+                 display_list.last_mut().unwrap()
+                             .push(DrawCommand::Marker(root_data.start_offset + node.offset()));
+             }
+@@ -434,6 +496,14 @@
+                     let is_list_item = node.tag_name() == Some("li");
+                     let mut index = 0;
+ 
++                    if let Some(frame) = resumed.take() {
++                        for _ in 0..frame.next {
++                            iter.next();
++                        }
++                        index = frame.next;
++                        inner_loop_context = frame.loop_context;
++                    }
++
+                     while let Some(child) = iter.next() {
+                         if iter.peek().is_none() {
+                             inner_loop_context.is_last = true;
+@@ -445,7 +515,19 @@
+                             inner_loop_context.index = loop_context.index;
+                         }
+ 
++                        let passed = if self.stop.is_some() { Some(inner_loop_context.clone()) } else { None };
+                         let artifact = self.build_display_list(child, &style, &inner_loop_context, stylesheet, root_data, resource_fetcher, draw_state, display_list);
++
++                        // The child stopped inside: continue into it later.
++                        if !self.stopped.is_empty() {
++                            self.stopped.push(ResumeFrame {
++                                next: index,
++                                loop_context: passed.unwrap_or_default(),
++                                rects,
++                            });
++                            return ChildArtifact { sibling_style: SiblingStyle::default(), rects: Vec::new() };
++                        }
++
+                         inner_loop_context.sibling_style = artifact.sibling_style;
+                         inner_loop_context.is_first = false;
+ 
+@@ -469,7 +551,17 @@
+                             }
+                         }
+ 
+-                        index += 1
++                        index += 1;
++
++                        // Enough pages: stop before the next child.
++                        if iter.peek().is_some() && self.stop_now(node, display_list) {
++                            self.stopped.push(ResumeFrame {
++                                next: index,
++                                loop_context: inner_loop_context.clone(),
++                                rects,
++                            });
++                            return ChildArtifact { sibling_style: SiblingStyle::default(), rects: Vec::new() };
++                        }
+                     }
+                 }
+             }

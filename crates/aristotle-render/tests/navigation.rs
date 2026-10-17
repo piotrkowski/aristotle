@@ -212,3 +212,92 @@ fn kindle_positions_reopen_on_the_same_page() {
         pages.len()
     );
 }
+
+/// Plato lays a spine item out only as far as needed and resumes later
+/// (tools/plato-patches/plato-0008). Placing a location in a fresh copy,
+/// turning from there both ways, and paginating everything must agree, also
+/// with nested blocks, lists, quotes and a table in one long chapter.
+/// (Against an unpatched build: `aristotle-render pages BOOK 20`.)
+#[test]
+fn lazy_layout_agrees_with_a_full_walk() {
+    let Some(data) = data_dir() else {
+        eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
+        return;
+    };
+    let mut html = String::from("<html><body><h1>Jeden rozdział</h1>");
+    for s in 0..30 {
+        html.push_str(&format!("<h2>Część {s}</h2><div class=\"sekcja\">"));
+        for p in 0..8 {
+            html.push_str(&format!(
+                "<p>Akapit {s}-{p}. Zażółć gęślą jaźń, a potem jeszcze raz to samo, \
+                 żeby tekst wypełnił kilka stron i podzielił się na wiersze.</p>"
+            ));
+        }
+        html.push_str("<div><blockquote><p>Cytat w środku, dwa poziomy niżej.</p></blockquote>");
+        html.push_str("<ul><li>pierwszy punkt listy</li><li>drugi punkt listy</li></ul></div>");
+        if s % 10 == 5 {
+            html.push_str(
+                "<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>",
+            );
+        }
+        html.push_str("</div>");
+    }
+    html.push_str("</body></html>");
+    let mobi = Mobi {
+        info: MobiInfo {
+            encoding: 65001,
+            language: Some("pl".into()),
+            title: Some("Jeden".into()),
+            ..Default::default()
+        },
+        html,
+        images: Vec::new(),
+    };
+    let dir = std::env::temp_dir().join(format!(
+        "aristotle-render-lazy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("jeden.epub");
+    write_epub(&mobi, &path).unwrap();
+    aristotle_render::use_data_dir(&data).unwrap();
+    let style = Style::pw4();
+
+    let mut full = Book::open(&path, &style, None).unwrap();
+    full.paginate();
+    let pages = full.pagination().unwrap().to_vec();
+    assert!(pages.len() > 30, "{} pages", pages.len());
+    for (i, &start) in pages.iter().enumerate().step_by(7) {
+        // Mid-page, in a fresh copy, as a reader opening the book.
+        let loc = match pages.get(i + 1) {
+            Some(&next) => start + (next - start) / 2,
+            None => start,
+        };
+        let mut book = Book::open(&path, &style, None).unwrap();
+        assert_eq!(book.page_start(loc), Some(start), "placing {loc}");
+        assert_eq!(
+            book.next_page(start),
+            pages.get(i + 1).copied(),
+            "after {start}"
+        );
+        if i > 0 {
+            assert_eq!(
+                book.previous_page(start),
+                Some(pages[i - 1]),
+                "before {start}"
+            );
+        }
+        // Then on to the end, page by page, as a reader turning.
+        let mut at = start;
+        let mut walked = vec![at];
+        while let Some(n) = book.next_page(at) {
+            walked.push(n);
+            at = n;
+        }
+        assert_eq!(walked, pages[i..], "walking on from {start}");
+    }
+}

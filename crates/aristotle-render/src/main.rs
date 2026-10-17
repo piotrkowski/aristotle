@@ -6,6 +6,8 @@
 //! aristotle-render [OPTIONS] show   BOOK PAGE
 //! aristotle-render [OPTIONS] bench  BOOK [PAGE] [COUNT]
 //! aristotle-render [OPTIONS] turn   BOOK START COUNT PAUSE_MS
+//! aristotle-render [OPTIONS] pages  BOOK [CHECKS]
+//! aristotle-render [OPTIONS] place  BOOK FRACTION...
 //!
 //! OPTIONS
 //!   --data DIR         runtime data (fonts/, css/, hyphenation-patterns/,
@@ -120,7 +122,9 @@ fn usage() -> &'static str {
      \x20 render BOOK PAGE OUT.raw\n\
      \x20 show   BOOK PAGE\n\
      \x20 bench  BOOK [PAGE] [COUNT]\n\
-     \x20 turn   BOOK START COUNT PAUSE_MS"
+     \x20 turn   BOOK START COUNT PAUSE_MS\n\
+     \x20 pages  BOOK [CHECKS]\n\
+     \x20 place  BOOK FRACTION..."
 }
 
 fn ms(d: Duration) -> f64 {
@@ -202,8 +206,96 @@ fn run() -> Result<(), Error> {
         "show" => show(&args, &book_path),
         "bench" => bench(&args, &book_path),
         "turn" => turn(&args, &book_path),
+        "pages" => pages(&args, &book_path),
+        "place" => place(&args, &book_path),
         other => bail!("unknown command {other}\n{}", usage()),
     }
+}
+
+/// Print the start of every page, one per line, then place CHECKS locations
+/// spread over the book, each in a fresh copy as a reader does when it
+/// opens a book, and print `@location page next` for each. Comparing the
+/// output of two builds shows whether a layout change moved any page break
+/// or placement. Placements that disagree with the pagination are reported:
+/// Plato places a location between a spine item's start and its first text
+/// on that item's first page.
+fn pages(args: &Args, path: &Path) -> Result<(), Error> {
+    let checks: usize = if args.positional.len() > 1 {
+        arg(args, 1, "CHECKS")?
+    } else {
+        0
+    };
+    let (mut book, _) = open(args, path)?;
+    let (_, t) = timed(|| book.paginate());
+    let starts = book.pagination().map(<[usize]>::to_vec).unwrap_or_default();
+    for s in &starts {
+        println!("{s}");
+    }
+    eprintln!("{} pages, paginated in {:.0} ms", starts.len(), ms(t));
+    let mut wrong = 0;
+    let mut slowest = Duration::ZERO;
+    for i in 0..checks {
+        // Spread over the book, not on page starts.
+        let loc = (book.len() as u64 * (2 * i as u64 + 1) / (2 * checks as u64)) as usize;
+        let (mut fresh, _) = open(args, path)?;
+        let (found, t) = timed(|| fresh.page_start(loc));
+        slowest = slowest.max(t);
+        let expected = starts[starts.partition_point(|&s| s <= loc).saturating_sub(1)];
+        let next = found.and_then(|f| fresh.next_page(f));
+        let expected_next = starts.iter().copied().find(|&s| s > expected);
+        println!(
+            "@{loc} {} {}",
+            found.map_or(-1, |f| f as i64),
+            next.map_or(-1, |n| n as i64)
+        );
+        if found != Some(expected) || next != expected_next {
+            wrong += 1;
+        }
+    }
+    if checks > 0 {
+        eprintln!(
+            "{checks} placements in fresh copies, {wrong} off the pagination, slowest {:.0} ms",
+            ms(slowest)
+        );
+    }
+    Ok(())
+}
+
+/// Time what opening a book at a saved position costs, for each FRACTION of
+/// the book (0 to 1), in a fresh copy: open, place, render that page, then
+/// the next page (as the reader prerenders it) and a restyle at that place.
+fn place(args: &Args, path: &Path) -> Result<(), Error> {
+    for f in args.positional.iter().skip(1) {
+        let f: f32 = f.parse().context("FRACTION")?;
+        let (mut book, mut chrome) = open(args, path)?;
+        let loc = book
+            .location_of(&aristotle_render::book::Position::Fraction(f))
+            .unwrap_or(0);
+        let (start, t_place) = timed(|| book.page_start(loc));
+        let start = start.ok_or_else(|| format_err!("no page at {loc}"))?;
+        let (_, t_render) = timed(|| book.render_location(start, &mut chrome));
+        let (next, t_next) = timed(|| {
+            book.next_page(start)
+                .map(|n| book.render_location(n, &mut chrome))
+        });
+        let mut bigger = args.style.clone();
+        bigger.font_size += 1.0;
+        let (_, t_restyle) = timed(|| -> Result<_, Error> {
+            let mut b = Book::open(path, &bigger, args.cache.as_deref())?;
+            let at = b.location_of(&book.position_at(start)).unwrap_or(0);
+            Ok(b.page_start(at))
+        });
+        println!(
+            "{:4.0}%: place {:7.1} ms, render {:5.1} ms, next page {:5.1} ms{}, restyle (+1 pt) and place {:7.1} ms",
+            f * 100.0,
+            ms(t_place),
+            ms(t_render),
+            ms(t_next),
+            if next.is_some() { "" } else { " (none)" },
+            ms(t_restyle)
+        );
+    }
+    Ok(())
 }
 
 fn open(args: &Args, path: &Path) -> Result<(Book, Chrome), Error> {
