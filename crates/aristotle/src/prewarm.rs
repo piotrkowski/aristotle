@@ -113,10 +113,10 @@ impl Prewarm {
             let Some((src, key)) = job_for(lib, rec, style, mobi_cache, secs_per_page) else {
                 continue;
             };
-            if !self
-                .tried
-                .insert(format!("{} {} {} {:?}", rec.id, key.look, key.language, key.locator))
-            {
+            if !self.tried.insert(format!(
+                "{} {} {} {:?}",
+                rec.id, key.look, key.language, key.locator
+            )) {
                 continue;
             }
             if snapshot::is_valid(lib.data_dir(), &key, style) {
