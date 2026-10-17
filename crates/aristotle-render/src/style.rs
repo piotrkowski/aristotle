@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Page geometry and typesetting defaults for the Kindle Paperwhite 4.
 
+/// The header and footer font, the UI's Literata, and its directory in the
+/// data directory (`<dir>/<family>-{Regular,Italic}.ttf`).
+pub const CHROME_FAMILY: &str = "Literata";
+pub const CHROME_DIR: &str = "serif";
+
 /// Everything that decides how a page looks. [`Style::pw4`] holds the
 /// defaults; the CLI can override the typographic ones.
 #[derive(Clone, Debug)]
@@ -17,9 +22,11 @@ pub struct Style {
     pub dpi: u16,
     /// Font family for body text, looked up by name in [`Style::font_dir`].
     pub font_family: String,
-    /// Directory (relative to the data directory) holding the body font.
-    /// Kept apart from Plato's `fonts/` because Plato opens every file in
-    /// the search path to compare family names, which costs time per book.
+    /// Directory (relative to the data directory, or absolute) holding the
+    /// body font. Kept apart from Plato's `fonts/` because Plato opens every
+    /// file in the search path to compare family names, which costs time
+    /// per book. The header and footer stay in [`CHROME_FAMILY`] whatever
+    /// the body font.
     pub font_dir: String,
     /// Body font size in points.
     pub font_size: f32,

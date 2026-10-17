@@ -191,11 +191,13 @@ pub struct Chrome {
 }
 
 impl Chrome {
-    /// Load the chrome fonts from `<font_dir>/<family>-{Regular,Italic}.ttf`
-    /// (relative to the data directory).
+    /// Load the chrome fonts from `serif/Literata-{Regular,Italic}.ttf`
+    /// (relative to the data directory; [`crate::style::CHROME_FAMILY`]),
+    /// whatever the body font.
     pub fn load(style: &Style) -> Result<Chrome, Error> {
+        use crate::style::{CHROME_DIR, CHROME_FAMILY};
         let opener = FontOpener::new()?;
-        let path = |face: &str| format!("{}/{}-{}.ttf", style.font_dir, style.font_family, face);
+        let path = |face: &str| format!("{CHROME_DIR}/{CHROME_FAMILY}-{face}.ttf");
         let mut regular = opener.open(path("Regular"))?;
         let mut italic = opener.open(path("Italic"))?;
         let size = style.chrome_size_26_6();
