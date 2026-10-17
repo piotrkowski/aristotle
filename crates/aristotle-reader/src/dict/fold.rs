@@ -281,7 +281,7 @@ pub fn build(index: &Index, out: &Path) -> io::Result<BuildStats> {
         let mut pos = 0u64;
         for (i, &(o, r, _)) in recs.iter().enumerate() {
             let k = key(o);
-            if i as u32 % EVERY == 0 {
+            if (i as u32).is_multiple_of(EVERY) {
                 checks.push((pos as u32, k));
             }
             w.write_all(k)?;

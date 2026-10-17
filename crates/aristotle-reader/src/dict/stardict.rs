@@ -315,7 +315,7 @@ impl Data {
             self.file.read_exact_at(&mut packed, a)?;
             let mut out = Vec::with_capacity(zip.chunk_len);
             let mut d = Decompress::new(false);
-            d.decompress_vec(&mut packed, &mut out, FlushDecompress::Sync)
+            d.decompress_vec(&packed, &mut out, FlushDecompress::Sync)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             self.cache = Some((n, out));
         }

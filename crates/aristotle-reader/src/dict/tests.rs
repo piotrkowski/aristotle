@@ -249,8 +249,7 @@ fn greek_goes_to_greek_polish_first_accent_insensitive() {
     // Definition text.
     let rt = as_rich_text(l.found.as_ref().unwrap());
     assert!(
-        rt.text()
-            .starts_with("ψυχή  (ψυχῆς)\nrzeczownik\n(1.1) dusza"),
+        rt.text().starts_with("rzeczownik\n(1.1) dusza"),
         "{}",
         rt.text()
     );

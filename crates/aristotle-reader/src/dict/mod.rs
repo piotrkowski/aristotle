@@ -18,6 +18,7 @@
 
 pub mod fold;
 pub mod lemma;
+pub mod service;
 pub mod stardict;
 
 use std::collections::BTreeMap;
@@ -141,13 +142,6 @@ impl Dictionary {
         self.fold.is_some()
     }
 
-    /// Build the fold index now (the host prebuild, tests).
-    pub fn build_index(&mut self) -> io::Result<fold::BuildStats> {
-        let stats = fold::build(&self.index, &self.fold_path)?;
-        self.fold = Some(FoldIndex::open(&self.fold_path)?);
-        Ok(stats)
-    }
-
     pub fn ifo(&self) -> &Path {
         &self.paths.ifo
     }
@@ -200,6 +194,11 @@ impl Dictionary {
             }
         }
         hits.sort_by_key(|h| h.0);
+        // A word spelled as the book spells it beats words that only fold
+        // to the same letters (ψυχή the noun, not a form of ψύχω).
+        if hits.first().is_some_and(|h| h.0 <= 1) {
+            hits.retain(|h| h.0 <= 1);
+        }
         hits.truncate(MAX_ENTRIES);
         let mut out = Vec::new();
         for (_, e, _) in hits {
@@ -308,7 +307,7 @@ impl Dictionary {
             }
             scored.push((common(&k), e.word));
         }
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        scored.sort_by_key(|s| std::cmp::Reverse(s.0));
         scored
             .into_iter()
             .filter(|(c, _)| *c >= 2)
@@ -320,9 +319,14 @@ impl Dictionary {
 
 /// Greek oxytone words take a grave accent inside a sentence; dictionaries
 /// list the acute.
+///
+/// Also drops vowel length marks (macron, breve): the Greek-English
+/// dictionary writes them in headwords (ψῡχή), books do not. So this key
+/// tells ψυχή from ψῡ́χη (a form of ψύχω) where the fold key cannot.
 fn grave_to_acute(s: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     s.nfd()
+        .filter(|&c| c != '\u{0304}' && c != '\u{0306}')
         .map(|c| if c == '\u{0300}' { '\u{0301}' } else { c })
         .nfc()
         .collect()
@@ -425,10 +429,6 @@ impl Dictionaries {
             remembered,
             state_file,
         }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.dicts.is_empty()
     }
 
     /// Dictionaries without a fold index yet: (`.ifo`, index file).
@@ -647,7 +647,21 @@ pub fn build_indexes(missing: &[(PathBuf, PathBuf)]) {
 /// matched form), then its definition.
 pub fn as_rich_text(found: &Found) -> RichText {
     let mut out = RichText::default();
+    // One article: the popup's title already names it.
+    let headings = found.entries.len() > 1;
     for e in &found.entries {
+        // Pronunciation lines are IPA the reading fonts lack, and noise
+        // in a reading popup.
+        let defs = e
+            .definition
+            .blocks
+            .iter()
+            .filter(|b| !b.text().trim_start().starts_with("IPA:"))
+            .cloned();
+        if !headings {
+            out.blocks.extend(defs);
+            continue;
+        }
         let mut head = vec![Run {
             text: e.headword.clone(),
             bold: true,
@@ -664,9 +678,48 @@ pub fn as_rich_text(found: &Found) -> RichText {
             runs: head,
             heading: true,
         });
-        out.blocks.extend(e.definition.blocks.iter().cloned());
+        out.blocks.extend(defs);
     }
     out
+}
+
+/// The first sense of the first article, short: for a word-by-word gloss.
+/// Skips part-of-speech lines (all italic) and sense numbers like "(1.1)".
+pub fn gloss(found: &Found) -> String {
+    let Some(e) = found.entries.first() else {
+        return String::new();
+    };
+    let line = e
+        .definition
+        .blocks
+        .iter()
+        .find(|b| {
+            !b.heading
+                && !b.runs.iter().all(|r| r.italic)
+                && !b.text().trim_start().starts_with("IPA:")
+        })
+        .map(Block::text)
+        .unwrap_or_default();
+    let line = line.trim();
+    let line = match line.strip_prefix('(') {
+        Some(rest)
+            if rest.split(')').next().is_some_and(|n| {
+                n.chars()
+                    .all(|c| c.is_ascii_digit() || c == '.' || c == '-')
+            }) =>
+        {
+            rest.split_once(')').map_or(rest, |(_, r)| r).trim()
+        }
+        _ => line,
+    };
+    let mut g: String = line.chars().take(60).collect();
+    if line.chars().count() > 60 {
+        g.push('…');
+    }
+    if found.approximate {
+        g = format!("≈ {g}");
+    }
+    format!("{} — {g}", e.headword)
 }
 
 #[cfg(test)]
