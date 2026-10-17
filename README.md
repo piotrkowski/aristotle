@@ -31,8 +31,10 @@ Early bring-up. Our Rust code draws on the panel and reads touch on the real dev
 | `docs/pw4-reference.md` | Detailed hardware, kernel and stock-userspace reference |
 | `docs/eink-rendering.md` | How the EPDC driver behaves, the display-thread design, and how stroke latency is measured |
 | `docs/library.md` | Book library: formats, metadata precedence, index, cover pipeline, stock Kindle sidecars and clippings |
+| `docs/ui-framework.md` | The UI toolkit: architecture, e-ink UX rules, font engine choice, damage and waveform hints, preview |
 | `docs/prior-art.md` | Survey of existing Kindle, e-ink and Plato-related projects |
 | `crates/aristotle-hal` | Hardware layer: e-ink framebuffer (Rex update ABI, pipelined `Presenter`), touch input |
+| `crates/aristotle-ui` | Retained UI toolkit for e-ink: shaped and justified text, widgets, damage with waveform hints, gestures, desktop PNG preview |
 | `crates/aristotle-pen` | Stroke rendering plus record/replay latency tooling |
 | `crates/aristotle-library` | Book library: format detection, metadata, e-ink cover thumbnails, JSON index, Kindle/KOReader import, `aristotle-library-cli` |
 | `crates/aristotle-hello`, `aristotle-touch`, `aristotle-bench` | On-device tests and the EPDC waveform benchmark |
