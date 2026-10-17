@@ -122,6 +122,32 @@ Tests, docs and screenshots use public-domain books (Prus, Mickiewicz, Plato
 in Witwicki's translation, Aristotle in Chase's translation, Austen, Melville)
 or text written for the test, never copyrighted books.
 
+## What this project will never include
+
+Allowed:
+
+- Our own userspace, UI, reader and sync, with no Amazon services.
+- A kernel built from Lab126's published GPL sources.
+- E-ink waveforms and Wi-Fi or touch firmware read from the user's own
+  device at install or run time, never shipped (as postmarketOS's
+  `kobo-epdc-extractor` does).
+- Descriptions of file formats and ABIs, in our own words.
+- StarDict or Wiktionary dictionaries that the user supplies.
+
+Never:
+
+- Shipping, downloading or scripting a jailbreak, exploits, keys or OTA
+  blockers.
+- Anything that touches DRM: keys, KFX, books from the Kindle Store.
+- Committing firmware, waveforms (`/mnt/wfm`), Amazon binaries or libraries,
+  Amazon fonts (Bookerly, Ember) or Kindle Store dictionaries.
+- Decompiled code or Ghidra or JADX output, and copied Amazon configuration
+  files or upstart jobs.
+- Amazon cloud APIs: Whispersync, accounts, device tokens.
+- Writing the boot partitions, U-Boot, IDME or diags before a recovery path
+  is verified, or breaking secure boot.
+- Amazon logos or trade dress, or "Kindle-X" names.
+
 ## AI-assisted contributions
 
 You may use AI tools, but:

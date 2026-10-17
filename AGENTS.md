@@ -6,6 +6,7 @@
 
 - Work on a real device can brick it, and **no recovery path has been verified yet**. Until one exists, do not write to the root filesystem, boot partitions, bootloader, `/mnt/wfm` or `/var/local` without the user's explicit go-ahead.
 - Run device-side experiments as reversible overlays: bind mounts, `/var/tmp` copies, stopped services. A reboot must bring back the stock system.
+- Never add jailbreak, exploit or DRM code, firmware, waveforms, Amazon binaries, fonts or decompiled code, or calls to Amazon's cloud: the full list is "What this project will never include" in `.github/CONTRIBUTING.md`.
 - Everything in this repo is in English: code, comments, docs, commits.
 - `third_party/plato` is our Plato fork ([piotrkowski/plato](https://github.com/piotrkowski/plato), branch `aristotle`): upstream Plato plus one commit per change. Changes to Plato go there as commits on `aristotle`, followed by a submodule bump here (`docs/reader.md`, "Plato fork"); keep each one small and described. When you borrow other code, copy it into our crates and keep the AGPL notice and attribution, and list it in `THIRD_PARTY.md`.
 - Test data and docs use public-domain books (Prus, Mickiewicz, Plato in Witwicki's translation, Austen, Melville) or text written for the test, never copyrighted books or anyone's own library.
