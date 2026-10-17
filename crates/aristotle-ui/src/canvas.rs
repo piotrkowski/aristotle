@@ -277,6 +277,20 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// Snaps every pixel of `rect` to black or white at `level` (darker
+    /// becomes black). For controls that must stay pure black and white,
+    /// such as keyboard keys, so A2 shows them exactly and DU restores
+    /// them; see `keyboard`.
+    pub fn threshold(&mut self, rect: Rect, level: u8) {
+        if let Some(r) = rect.intersect(&self.clip) {
+            for y in r.y..r.bottom() {
+                for p in self.canvas.row_mut(&r, y) {
+                    *p = if *p < level { 0 } else { 255 };
+                }
+            }
+        }
+    }
+
     /// Inverts a rectangle: the pressed-state feedback.
     pub fn invert_rect(&mut self, rect: Rect) {
         if let Some(r) = rect.intersect(&self.clip) {

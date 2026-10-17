@@ -69,11 +69,28 @@ pub enum Icon {
     MarginsWide,
     /// The UI language: a globe.
     Language,
+    /// Wi-Fi: three arcs over a dot.
+    Wifi,
+    /// A secured network.
+    Lock,
+    /// Show a password.
+    Eye,
+    /// Hide a password.
+    EyeOff,
+    /// Keyboard shift, off.
+    Shift,
+    /// Shift for the next letter.
+    ShiftOn,
+    /// Caps lock.
+    ShiftLock,
+    Backspace,
+    /// The keyboard's enter key.
+    Return,
 }
 
 impl Icon {
     /// Every icon, in the order of the preview sheet.
-    pub const ALL: [Icon; 38] = [
+    pub const ALL: [Icon; 47] = [
         Icon::Library,
         Icon::ArrowLeft,
         Icon::Menu,
@@ -112,6 +129,15 @@ impl Icon {
         Icon::MarginsNormal,
         Icon::MarginsWide,
         Icon::Language,
+        Icon::Wifi,
+        Icon::Lock,
+        Icon::Eye,
+        Icon::EyeOff,
+        Icon::Shift,
+        Icon::ShiftOn,
+        Icon::ShiftLock,
+        Icon::Backspace,
+        Icon::Return,
     ];
 
     /// The English name, for the preview sheet and debugging.
@@ -155,6 +181,15 @@ impl Icon {
             Icon::MarginsNormal => "margins-2",
             Icon::MarginsWide => "margins-3",
             Icon::Language => "language",
+            Icon::Wifi => "wifi",
+            Icon::Lock => "lock",
+            Icon::Eye => "show",
+            Icon::EyeOff => "hide",
+            Icon::Shift => "shift",
+            Icon::ShiftOn => "shift-on",
+            Icon::ShiftLock => "caps-lock",
+            Icon::Backspace => "backspace",
+            Icon::Return => "return",
         }
     }
 }
@@ -257,6 +292,29 @@ fn def(icon: Icon) -> Def {
             "M21 12A9 9 0 1 1 3 12A9 9 0 1 1 21 12ZM3 12H21M12 3A4 9 0 0 1 12 21A4 9 0 0 1 12 3Z",
             NONE,
         ),
+        Icon::Wifi => (
+            "M2 9A15 15 0 0 1 22 9M5.5 12.5A10 10 0 0 1 18.5 12.5M9 16A5 5 0 0 1 15 16",
+            "M13.5 19.5A1.5 1.5 0 1 1 10.5 19.5A1.5 1.5 0 1 1 13.5 19.5Z",
+        ),
+        Icon::Lock => ("M5 11H19V21H5ZM8 11V7A4 4 0 0 1 16 7V11", NONE),
+        Icon::Eye => (
+            "M2 12C5 6.5 8.5 5 12 5C15.5 5 19 6.5 22 12C19 17.5 15.5 19 12 19C8.5 19 5 17.5 2 12Z\
+             M15 12A3 3 0 1 1 9 12A3 3 0 1 1 15 12Z",
+            NONE,
+        ),
+        Icon::EyeOff => (
+            "M2 12C5 6.5 8.5 5 12 5C15.5 5 19 6.5 22 12C19 17.5 15.5 19 12 19C8.5 19 5 17.5 2 12Z\
+             M15 12A3 3 0 1 1 9 12A3 3 0 1 1 15 12ZM4 3L20 21",
+            NONE,
+        ),
+        Icon::Shift => ("M12 3L3 12H8V20H16V12H21Z", NONE),
+        Icon::ShiftOn => ("M12 3L3 12H8V20H16V12H21Z", "M12 3L3 12H8V20H16V12H21Z"),
+        Icon::ShiftLock => (
+            "M12 2L3 11H8V16H16V11H21ZM8 21H16",
+            "M12 2L3 11H8V16H16V11H21Z",
+        ),
+        Icon::Backspace => ("M8 5H21V19H8L2 12ZM11.5 9L16.5 15M16.5 9L11.5 15", NONE),
+        Icon::Return => ("M20 5V13H5M9 9L5 13L9 17", NONE),
     };
     Def { stroke, fill }
 }

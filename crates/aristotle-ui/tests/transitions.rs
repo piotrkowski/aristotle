@@ -73,6 +73,7 @@ fn settings_tree(text: &mut TextEngine, night: bool, light: u32) -> (Tree, set_u
         time: "21:38",
         usb: Some(Usb::Network),
         about: &about,
+        wifi: Some("Wyłączone"),
     };
     set_ui::Settings::build(text, &styles(), &v)
 }

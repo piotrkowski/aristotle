@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Settings: light, night mode, covers, sleep, the UI language, whether
-//! highlights go to `My Clippings.txt`, and what the device knows about
-//! itself. Offline only: there is no Wi-Fi, account or
-//! store section, because Aristotle has none of those.
+//! Settings: light, night mode, covers, sleep, the UI language, the way to
+//! the Wi-Fi screen (`super::wifi`), whether highlights go to
+//! `My Clippings.txt`, and what the device knows about itself. There is no
+//! account or store section, because Aristotle has neither.
 //!
 //! Sections are whole blocks in a paged list, so the screen turns pages like
 //! every other list. Every control is a 9 mm target and answers on
@@ -40,6 +40,8 @@ pub mod action {
     pub const LANGUAGE: ActionId = 70;
     /// Toggles "Save highlights to My Clippings.txt".
     pub const CLIPPINGS: ActionId = 80;
+    /// Opens the Wi-Fi screen.
+    pub const WIFI: ActionId = 90;
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
@@ -96,6 +98,9 @@ pub struct SystemView<'a> {
     pub usb: Option<Usb>,
     /// "About" lines: a label and a value.
     pub about: &'a [(&'a str, String)],
+    /// The Wi-Fi state for the row that opens the Wi-Fi screen ("Off",
+    /// "Connected to Home"); `None` hides the row.
+    pub wifi: Option<&'a str>,
 }
 
 /// Handles to the nodes the app updates in place.
@@ -392,6 +397,32 @@ impl Settings {
         rows.push(t.add(Node::column(0), [head, c]));
         sections.extend(section(&mut t, s, tr(Msg::SettingsSectionDevice), rows));
 
+        // Network: the row that opens the Wi-Fi screen. After the device
+        // section for the same reason as the reading section below.
+        if let Some(state) = v.wifi {
+            let chevron = t.icon(Icon::ChevronRight, IconSize::STANDARD, INK);
+            let wifi = row(
+                &mut t,
+                s,
+                Icon::Wifi,
+                tr(Msg::SettingsWifi),
+                Some(state),
+                Some(chevron),
+            );
+            let wifi = t.add(
+                Node::new(Kind::Padding(Insets::all(0)))
+                    .action(action::WIFI)
+                    .feedback(Feedback::Outline),
+                [wifi],
+            );
+            sections.extend(section(
+                &mut t,
+                s,
+                tr(Msg::SettingsSectionNetwork),
+                vec![wifi],
+            ));
+        }
+
         // Reading. After the device section, so the rows before it keep
         // their places on the first two pages (the device scenarios tap
         // them by coordinates).
@@ -543,6 +574,7 @@ mod tests {
             time: "21:38",
             usb: Some(Usb::Network),
             about,
+            wifi: Some("Off"),
         }
     }
 

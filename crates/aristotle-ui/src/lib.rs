@@ -7,6 +7,7 @@ pub mod canvas;
 pub mod geom;
 pub mod icons;
 pub mod input;
+pub mod keyboard;
 pub mod screens;
 pub mod text;
 pub mod theme;

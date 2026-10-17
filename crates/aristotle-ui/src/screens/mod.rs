@@ -10,6 +10,8 @@ pub mod library;
 pub mod reader;
 pub mod settings;
 pub mod sleep;
+pub mod text_input;
+pub mod wifi;
 
 use crate::geom::Insets;
 use crate::icons::Icon;
