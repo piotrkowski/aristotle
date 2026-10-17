@@ -6,10 +6,13 @@ pub mod canvas;
 pub mod geom;
 pub mod icons;
 pub mod input;
+pub mod screens;
 pub mod text;
+pub mod theme;
 pub mod tree;
 pub mod ui;
 pub mod waveform;
+pub mod widgets;
 
 pub use canvas::{Canvas, Painter};
 pub use geom::{mm, pt, Insets, Point, Rect, Size};
