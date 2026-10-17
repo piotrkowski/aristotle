@@ -23,8 +23,10 @@ libc = "0.2"
 # Same version as plato-core, to decode spine hrefs exactly as it does.
 percent-encoding = "2.3.2"
 plato-core = { path = "../../third_party/plato-patched/crates/core" }
-# Same version as plato-core uses, to read EPUB metadata it does not expose.
-zip = "7.0.0"
+# Same version as plato-core uses, to read EPUB metadata it does not expose
+# and to write converted MOBI books (stored). Deflate only, as in plato-core
+# (patch 0007): EPUBs use no other codec.
+zip = { version = "7.0.0", default-features = false, features = ["deflate-flate2"] }
 
 [profile.release]
 # Page layout and glyph rasterisation are CPU-bound on a single Cortex-A9

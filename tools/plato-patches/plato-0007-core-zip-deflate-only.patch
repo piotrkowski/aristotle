@@ -1,0 +1,17 @@
+Build zip with deflate only. EPUB containers hold stored and deflated
+entries, and the zip crate's default features add bzip2, LZMA, XZ, PPMd,
+Zstandard, Deflate64, AES and a second deflate backend: about 0.9 MB of a
+static ARM binary for codecs no EPUB uses. flate2 keeps its default
+(miniz_oxide) backend.
+
+--- a/crates/core/Cargo.toml
++++ b/crates/core/Cargo.toml
+@@ -19,7 +19,7 @@
+ titlecase = "3.6.0"
+ unicode-normalization = "0.1.25"
+ toml = "0.9.11"
+-zip = "7.0.0"
++zip = { version = "7.0.0", default-features = false, features = ["deflate-flate2"] }
+ kl-hyphenate = "0.7.3"
+ entities = "1.0.1"
+ paragraph-breaker = "0.4.4"
