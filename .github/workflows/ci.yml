@@ -35,7 +35,9 @@ jobs:
       - run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - run: cargo test --all-features --locked
       - name: Shell scripts parse
-        run: git ls-files -z '*.sh' | xargs -0 -n1 sh -n
+        run: |
+          git ls-files -z '*.sh' | xargs -0 -n1 sh -n
+          sh -n device/extension/agent/aristotlectl
       - name: Device agent tests (host-side, stubbed)
         run: sh device/tests/net.sh && sh device/tests/agent.sh
 
