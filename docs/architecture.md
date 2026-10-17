@@ -1,149 +1,130 @@
 # Architecture
 
-This is the target structure of Aristotle and the plan for getting there. Parts of it already exist; the rest lands in small steps (see [Migration](#migration)). Where the code and this document disagree, the code is the current truth and this document the direction.
+Aristotle is one Rust workspace that builds static binaries for the PW4, plus shell scripts that run on the device. This document maps the crates, the processes and threads on the device, and the places meant for extension. The last section lists planned changes. Where this document and the code disagree, the code is right.
 
 ## Principles
 
-- **One static binary per device.** Extensions are Rust traits with compile-time registries (`const` slices), selected by Cargo features. There is no runtime plugin system: static musl binaries can't `dlopen`, and Rust has no stable ABI. Code from outside the binary comes in as data (dashboard documents, books, dictionaries) or as a separate program (external apps).
-- **Pure-Rust crates build and test on any host.** Only `aristotle-render` (Plato's engine and its C libraries) and the app link C code.
-- **Device facts live in one place, the device profile.** Everything else speaks in semantic update kinds ("page turn", "flash", "gray chrome"), never in raw waveform numbers.
-- **Offline first.** Every network feature is optional, off by default, and switched on per use. Wi-Fi is either left to the stock system or scoped to an allowlist of hosts ([Network](network.md)).
-- **English is the source language.** Other languages are catalogs checked at compile time.
+- One static binary per device. Static musl binaries cannot `dlopen`, and Rust has no stable ABI, so there is no runtime plugin system. Extensions are Rust code chosen at compile time. Code from outside comes in as data, such as books and dictionaries, or as a separate program.
+- Pure-Rust crates build and test on any host. Only `aristotle-render` and the reader app link C code.
+- Offline first. Network features are optional and off by default. Wi-Fi stays with the stock system or is limited to an allowlist of hosts ([Network](network.md)).
+- English is the source language. Other languages are catalogs checked at compile time.
+- Refresh rules come from measurements on the panel and are tested on the host.
 
 ## Repository
 
 ```
-Cargo.toml          the workspace: every crate and xtask; the default members leave out the two that link C
-.cargo/config.toml  the `cargo xtask` alias and the armv7 musl target settings
-crates/             every Rust crate, flat; the directory name is the package name
-xtask/              build, check, run, screenshot, scenario and release commands, in Rust
-device/             what runs on the Kindle, as busybox shell: KUAL extensions, the upstart agent, launch scripts
-tools/              host-side tools that aren't Rust: the C cross-build, emulator setup, firmware unpacking, ssh_config
-docs/               developer documents; docs/guide/ is the user guide
-third_party/plato   our Plato fork (git submodule, branch aristotle): upstream plus one commit per change
+Cargo.toml          the workspace; default-members leave out the two crates that link C
+.cargo/config.toml  static musl targets: armv7 for the device, x86_64 for host previews
+crates/             the Rust crates, flat; the directory name is the package name
+devloop/            env.sh, host scripts, device scripts and the agent, the emulator setup, scenarios
+probe/              the read-only device probe (a KUAL extension) and firmware unpackers
+tools/              the C cross-build, MuPDF patches, licence bundling, screenshots, RE tools
+third_party/plato   our Plato fork (git submodule, branch aristotle)
+docs/, site/        developer documents and the project site
 ```
 
-```
-crates/
-  aristotle-core      shared types: geometry, Wave, formats, locators, rich text, Lang, perf!
-  aristotle-hal       the Device trait: pw4 and headless; display thread, touch, light, battery, RTC, network
-  aristotle-ui        the e-ink toolkit: canvas, text, layout tree, widgets, gestures, icons, theme, refresh policy
-  aristotle-i18n      message catalogs, plurals, date, number, size and duration formatting
-  aristotle-screens   view builders for every built-in screen; the preview binary
-  aristotle-library   scanning, index, metadata, covers, importers, export, inbox folders; aristotle-library-cli
-  aristotle-dict      the Dictionary trait, the per-language router, StarDict
-  aristotle-dash      dashboard documents: schema, validation, layout into a Tree, image dithering; host preview CLI
-  aristotle-devtools  bring-up and measurement binaries: hello, touch, waveform and page-turn benches, pen, observe; device scenarios
-  aristotle-testkit   test-only (publish = false): sample books, libraries and dictionaries, headless device, image comparison
-  aristotle-render    [native] Engine, Layout and Converter traits over Plato and MuPDF; the render CLI
-  aristotle           [native] the app: event loop, navigation, controllers, jobs, snapshots, settings, dashboards
-device/
-  kual/aristotle/     KUAL extension: start Aristotle, USB network on and off
-  kual/probe/         KUAL extension: the read-only device probe
-  agent/              the upstart job and aristotlectl, with install and uninstall scripts
-  bin/                run-aristotle.sh, takeover.sh
-tools/
-  build-plato.sh      cross-builds MuPDF and the other C libraries; called by xtask
-  mupdf-patches/      our MuPDF patches, applied by build-plato.sh
-  emulator/           the PW4 QEMU setup and its patch
-  re/                 fetch-tools.sh (Ghidra, JADX), firmware unpackers in Python
-```
+## Crates
 
-**One workspace, two kinds of members.** Every crate is a member, with one lock file and one release profile (`opt-level = "s"`, 3 for the layout crates). The two crates that link C, `aristotle-render` and the app, are left out of `default-members`, so a plain `cargo build`, `cargo test` or `cargo clippy` stays pure Rust and works on a fresh `git clone --recursive` without the C libraries; Cargo reads `plato-core`'s manifest from the submodule but builds nothing from it. `cargo xtask check` runs fmt, clippy and the tests on the default members, then on the native ones after the C build.
+| Crate | Role |
+| --- | --- |
+| `aristotle-hal` | Framebuffer and EPDC updates, the display thread, touch, battery and frontlight, system facts, the agent's USB mode |
+| `aristotle-ui` | The e-ink toolkit and the screens, with the `aristotle-ui-preview` binary ([UI framework](ui-framework.md)) |
+| `aristotle-i18n` | Message catalogs, plurals, dates and numbers |
+| `aristotle-library` | Finds, indexes and describes EPUB, MOBI/AZW3, PDF, TXT and CBZ files. Covers, clippings, export, and `aristotle-library-cli` ([Library](library.md)) |
+| `aristotle-render` | Plato's document engine and MuPDF: opening, pagination, page rendering, footnotes ([Reader](reader.md)) |
+| `aristotle-reader` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
+| `aristotle-app` | An earlier device driver for the `aristotle-ui` screens, without books |
+| `aristotle-hello`, `aristotle-touch` | First on-device tests: drawing and refresh, touch marks |
+| `aristotle-bench` | EPDC latency per waveform, parallel updates, page turns |
+| `aristotle-pen` | Stroke rendering, with record and replay in `aristotle-pen-live` and `aristotle-pen-bench` |
+| `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches |
 
-**xtask, not shell, for host tooling.** Host commands are one Rust binary with std and `xshell` only: `check`, `build [--device]` (runs `tools/build-plato.sh` when the C libraries are stale, assembles `data/`), `dist` (the bundle and the size report against the budget), `run PKG[:BIN]` (copy over USB network, run, screenshot), `screenshot`, `scenario NAME`, `preview` (screens and dashboards to PNG, compared with the last accepted images) and `install` (copy `device/` to a mounted userstore). Shell stays where it is the native tongue: the C cross-build, the QEMU setup, and everything under `device/`, which runs on the Kindle's busybox.
+`aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The reader depends on all of them, and takes `aristotle-ui` without its embedded fonts.
 
-**Examples and benches.** `examples/` belong to the crate they demonstrate and double as templates: `aristotle-ui` (a screen, render timing), `aristotle-dash` (a weather and calendar dashboard). There is no `benches/` and no criterion: host timings come from examples and the `perf!` macro; device timings come from `aristotle-devtools` and the scenarios, because only the panel tells the truth.
+The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle-reader`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
 
-**Docs.** `docs/` holds developer documents, flat, one per subsystem. `docs/guide/` is for users: installing, reading, dictionaries, dashboards, building a frontend. `README.md` points at both; `AGENTS.md` stays the short list of device traps.
+## On the device
 
-**Size.** Cargo features trim the binary: formats (`render/djvu` is off), MuPDF's font set, dictionary formats, device profiles, and app modules (`reader`, `dict`, `notes`, `dash`, `net`). A wall-display build is `--no-default-features --features dash`, without Plato. Night mode and languages aren't features: they cost a few kilobytes.
+### Processes
+
+The app bundle unpacks into `/mnt/us/aristotle/`: the `aristotle` binary, `data/` with fonts, stylesheets and hyphenation patterns, and the launch scripts. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the stock GUI with `takeover.sh stop` when the app exits. The script does not freeze the stock GUI with SIGSTOP. On our firmware the watchdog killed the frozen framework, and the GUI came back only after a reboot.
+
+`powerd`, `volumd`, `wifid` and `lipcd` keep running. The app sets `preventScreenSaver` so `powerd` does not draw the stock screensaver, and draws its own.
+
+The device agent is a separate upstart job (`aristotle-agent.conf`), installed from `devloop/kindle/aristotle-usbnet/agent/`. It brings up the USB network and SSH at boot. `aristotlectl` switches between network and drive mode, and the settings screen calls it through `aristotle_hal::system::set_usb_mode`.
+
+Books are read from `/mnt/us/documents`. The app keeps its index, covers, page cache, snapshots and `reader.json` in `/mnt/us/.aristotle`.
+
+### Threads
+
+| Thread | Work |
+| --- | --- |
+| main | Polls touch with a timeout from the nearest deadline, runs gestures and the UI, renders, submits page turns, adopts results from the workers |
+| `epdc-display` | The HAL display thread: merges UI damage and submits it |
+| `epdc-completions`, `page-completions` | Wait for update markers, for latency logs and the next page blit |
+| `panel-sequence` | The second step of the menu overlay |
+| `open` | Opens a book while its snapshot is on screen |
+| `paginate`, `prewarm`, `warm-up`, `dict-index` | Low-priority work: page numbers, snapshots ahead of time, hyphenation patterns, dictionary indexes |
+| `dict` | Dictionary lookups |
+| `snapshot-writer`, `index-saver` | Disk writes of snapshots and the library index |
+
+The main thread waits for the panel in one place. The driver reads the framebuffer when it processes an update, so a new book page is blitted only after the previous page update has finished.
 
 ## Extension points
 
-| Point | Shape |
+Today these are code paths in the workspace. None is a stable API yet.
+
+| Point | Where |
 | --- | --- |
-| **Document engines** | `Engine { id, accepts(Format), open(path, &Style, &Cx) -> Box<dyn Layout> }`. `Layout` locates a position, steps pages, renders a page, and reports the table of contents, position and capabilities (lazy or eager pagination, word boxes, links). A `Converter` turns one format into another, e.g. MOBI into EPUB. `render::ENGINES` lists the compiled-in engines in order of preference. |
-| **Dictionaries** | `Dictionary { info() -> {id, name, from, to}, lookup(word) -> Vec<Entry> }`, plus `DictFormat { discover(dir) }`. The router orders results by the book's language. |
-| **Content sources** | The device is offline, so a source is a file protocol, not code. Anything on the computer (Calibre's folder driver, a script, a future `aristotle push`) copies books into `documents/<Name>/` over USB; a folder may carry `.aristotle-source.json` with `{kind: periodical, series or inbox; title; keep}`, which the library will show as a collection with retention. [Fun use cases](fun-use-cases.md) has examples. |
-| **Screens and apps** | `Screen { build(&mut Cx) -> Tree, on_event(UiEvent) -> Nav, on_touch_raw(...) -> Option<Nav>, tick, transition() }`. `Nav` is `Stay`, `Push`, `Pop`, `Replace` or `Quit`. An `APPS` registry (id, title, icon, constructor) builds the apps menu. Each screen has a typed action enum. |
-| **Dashboards** | Data, not code: a document in `/mnt/us/dashboards/<name>/` or behind a URL, rendered by `aristotle-dash`. See [Frontends](#frontends). |
-| **External apps** | `/mnt/us/apps/<id>/app.json` with `{title, icon, exec, args}`: a static binary or script listed in the apps menu. Aristotle stops its display thread, releases the touchscreen grab, runs it, and redraws with a flash when it exits. |
-| **Settings** | `Setting<T> { key, label, section, default, kind, scope, effect }`, where `kind` is a toggle, choice, steps or slider; `scope` is global or per book; and `effect` says whether the change is live, needs a re-layout, or a restart. The settings screen and the reader menu are rendered from the `SETTINGS` registry. Values are stored as a JSON map. |
-| **Themes** | Data, not a trait: `Theme { palette (day or night), fonts, scale }`. Night mode is a palette plus an inversion method (software, or the EPDC's hardware inversion). |
-| **Device profiles** | `Device { info() -> {model, size, stride, dpi, rotation}, panel, touch, frontlight, battery, rtc, network, waves() -> &WaveTable, paths() -> {books, state, dictionaries, dashboards, apps}, agent() }`. `hal::detect()` picks the profile from the board id. |
-| **Refresh policy** | `ui::refresh::plan(Transition, Content, night, &mut Counters) -> Update { wave, region, full }` for each transition: page turn, restyle, screen switch, menu open and close, chrome, press, shelf page, dashboard update, sleep, wake. The device's `WaveTable` maps each kind to a waveform mode; on the PW4, page turns use mode 9 and flashes mode 8 (see [the e-ink notes](eink-rendering.md)). All refresh rules live here and are tested on the host as a table. |
+| Screens | A builder in `crates/aristotle-ui/src/screens/` and a `Screen` variant in the reader ([Adding a screen](ui-framework.md#adding-a-screen)) |
+| Widgets | `aristotle_ui::tree::Widget` ([Adding a widget](ui-framework.md#adding-a-widget)) |
+| Languages | A JSON file in `crates/aristotle-i18n/locales/` ([Adding a language](ui-framework.md#adding-a-language)) |
+| Hyphenation | `aristotle_ui::text::Hyphenator` for the UI. Liang patterns in `data/hyphenation-patterns/` for books, chosen by `HYPH_LANGS` in `tools/build-render.sh` |
+| Book formats | `aristotle_library::format` detects a format by content. EPUB goes through Plato's HTML engine. MOBI 7 is converted to EPUB first (`aristotle-render/src/mobi.rs`). PDF and the rest go through MuPDF |
+| Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle-reader/src/dict/` picks them by script and the book's language |
+| Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source ([Fun use cases](fun-use-cases.md)) |
+| Refresh policy | The waveform hints in `aristotle_ui::ui` and `panel::plan` in the reader ([Transitions](ui-framework.md#transitions)) |
 
-## Frontends
-
-Four ways to put something of your own on the screen, cheapest first. Only the first two are planned for v1.
-
-1. **Image dashboards.** Any PNG or JPEG, made anywhere: Home Assistant, a script, a web page captured by a headless browser. Aristotle scales it to the screen, converts it to 16 grays (Floyd–Steinberg for photographs, none for images already in 16 grays) and shows it full screen. SVG is rasterised by whoever makes it; a vector renderer on the device isn't worth its size.
-2. **Document dashboards.** A small JSON document describes one screen out of the toolkit's nodes; the device lays it out with its own fonts and refresh policy, so text is as crisp as the reader's. An image dashboard is the same document with an image as its root.
-3. **External apps.** A program that takes the framebuffer itself: one built with another toolkit, an FBInk script, another reader. Aristotle only lends it the screen and input.
-4. **Native apps.** Rust code against `aristotle-sdk`, a facade that re-exports the stable parts (`Screen`, the tree builders and widgets, `Wave` kinds, `Setting`, the i18n catalog), compiled in through the `APPS` registry and a feature. It comes after the `Screen` trait and the settings registry have settled; until then, an app is a fork with a feature.
-
-A dashboard document, version 1:
-
-```json
-{
-  "version": 1,
-  "refresh": { "every": "30m", "sleep": true, "flash_every": 8 },
-  "source": "http://192.168.1.10:8080/kindle.json",
-  "root": { "column": { "gap": 2, "children": [
-    { "text": "Kraków · {date}", "style": "title" },
-    { "row": { "children": [ { "image": "weather.png", "width": "40%" },
-                             { "text": "12° / 4°\nrain after 15:00", "style": "large" } ] } },
-    { "rule": {} },
-    { "text": "09:00  Dentist\n13:30  Call with Ania", "style": "body" },
-    { "progress": 0.62, "label": "Week" }
-  ] } }
-}
-```
-
-- **Nodes:** `column`, `row`, `stack`, `text` (styles from the theme's type scale; `align`; hyphenated and justified like the UI), `image` (path relative to the document, or a URL), `icon` (the toolkit's set), `progress`, `rule`, `spacer`. Unknown nodes and fields are errors, reported on the screen and by the host preview.
-- **Placeholders** filled on the device at each render: `{date}`, `{time}`, `{battery}`, `{updated}`.
-- **Refresh:** each update is a page turn to the refresh policy (one full-screen mode-9 update) with a mode-8 flash every `flash_every`. With `sleep`, the device suspends between updates and wakes on the RTC alarm. A tap refreshes now; the usual gesture leaves.
-- **Delivery:** copied over USB or `scp` into the dashboard's folder, or fetched from `source` when the `net` feature is built and Wi-Fi is switched on for that dashboard. The fetch turns Wi-Fi on, gets the document and the images it names, and turns Wi-Fi off; on failure the last good copy stays with a stale mark. v1 speaks plain HTTP on the local network; HTTPS is a later `tls` feature.
-- **Host preview:** `aristotle-dash preview dashboard.json out.png` produces the device's pixels, and `aristotle-dash check` validates. Server code in Rust can build documents from `aristotle-dash`'s serde types.
-- A dashboard can be the sleep screen, or the start screen of a wall-display build.
-
-Web frameworks belong on the server. A Leptos, Topcoat or any other web app produces either the JSON document from a route (the server-rendered model maps onto it directly) or HTML that a headless browser captures as a PNG. The device never runs a browser.
-
-**v1 for a weather and calendar dashboard in an afternoon:** `aristotle-dash` with the nodes above and its host preview; the dashboards entry in the apps menu; folder delivery over USB and SSH; HTTP fetch and RTC sleep behind `net` and `sleep` features; one example in `crates/aristotle-dash/examples/` that turns a forecast API and an ICS calendar into a document; a page in `docs/guide/`. Buttons with actions (fetch another document, the next page of a dashboard) are v2.
-
-**Scripting.** Lua, Luau, Rhai and WASM were weighed and left out. Every extension point is either on a hot path and native (engines, dictionaries, refresh) or would need the whole UI bound into scripts (screens), and dashboards cover the "show my data" case without code on the device. A scripting layer would add an API to keep stable and save nothing in size: Lua 5.4 costs about 0.5 MB, Luau 1.5–2.5 MB. If user automations (tap zones, gesture maps, newspaper filters, dashboards that compute on the device) ever need it, Lua 5.4 through `mlua` behind a `lua` feature is the candidate, with scripts calling commands, never widgets.
+`aristotle-hal` knows only the PW4. There is no device profile yet.
 
 ### Why not a web framework or Slint
 
-Leptos and Topcoat render HTML for a browser, and Topcoat's interactivity runs as JavaScript there. On the device that means a browser engine, the WebKit we are removing or another one of tens of megabytes, with no say over waveforms, regions or the driver's one update at a time. Slint is the serious alternative: a software renderer, a PW4 backend under MIT or Apache, and GPLv3 terms that combine with the AGPL (GPLv3 §13). It still loses here. Its renderer reports dirty rectangles but not why they changed, so the refresh policy (mode-9 page turns, A2 press feedback, flash counters, night inversion) would become a backend guessing from rectangles; its text wraps greedily, without hyphenation or justification, where we need Knuth–Plass and the swash rasteriser tuned for 300 dpi grays; it adds a compiler and runtime to a binary we cut from 29.5 to 8.4 MB; and its royalty-free licence excludes embedded devices, so a closed third-party frontend would need a commercial licence. iced, egui and Xilem are GPU-first, RGBA, or redraw every frame, the opposite of what e-ink wants. Slint does offer third-party authors a nicer language and tooling than ours; they can use it as an external app.
+Leptos and Topcoat render HTML for a browser. On the device that means a browser engine of tens of megabytes with no control over waveforms, regions or the driver's one update at a time. Slint is the serious alternative. It has a software renderer, a PW4 backend under MIT or Apache, and GPLv3 terms compatible with the AGPL. Its renderer reports dirty rectangles without the reason for the change, so our refresh policy would have to guess from rectangles. Its text wraps greedily, without hyphenation or justification. It adds a compiler and a runtime to a binary we cut from 29.5 to 8.4 MB. Its royalty-free licence excludes embedded devices, so a closed third-party frontend would need a commercial licence. iced, egui and Xilem are GPU-first or redraw each frame. Third-party authors who prefer Slint can still ship a Slint program as an external app.
 
-## Languages
+## Planned
 
-- Messages are JSON files, one per language (`crates/aristotle-i18n/locales/<code>.json`), English the source of truth. JSON rather than Rust struct literals because translators should not need Rust: copying `en.json` and translating it is the whole job (`docs/ui-framework.md`, "Adding a language"), and the files diff and review as plain text.
-- The build script checks every locale against `en.json` (the same keys, the same `{placeholders}`, the plural forms the language needs) and generates the `Msg` and `Plural` enums and one string table per language, so a missing or misspelt key fails the build, the binary embeds every language, and there is no runtime parser. A locale may be marked incomplete; only then do its missing messages fall back to English.
-- Plurals: forms `one`, `few`, `many`, `other`, picked by a rule per language code in Rust. English uses `one` for 1 and `other` otherwise. Polish uses `one` for 1, `few` when n mod 10 is 2–4 and n mod 100 isn't 12–14 (2, 22 książki), and `many` otherwise (5, 12, 25 książek). Other languages fall back to the English rule until they get their own.
-- The locale data holds month and weekday names, the decimal separator, and the date and time patterns; the crate formats dates, numbers, sizes and durations with them.
-- The language is a setting (English by default, then every embedded language by its own name). The UI's hyphenation follows the UI language; a book's hyphenation follows the book. A dashboard's text follows the document's `lang`, or the UI language.
-- Text that must match the Kindle firmware's files (`My Clippings.txt`) or content inside books stays as it is in every language.
+None of this is in the code yet. Each step should land on its own and pass the same checks. The previews stay identical unless the step changes visuals on purpose. The device scenarios keep the same updates, modes and flashes, with latency within 10 %. The binary grows by at most 50 KB per step, and peak RAM is checked.
 
-## Migration
+### Workspace and xtask
 
-The steps land one at a time, each verified the same way: `cargo xtask check` (until it exists, fmt, clippy and the tests by hand, for the default members and the native ones), identical preview images unless the step changes visuals on purpose, the device scenarios (same updates, modes and flashes as before, latency within 10 %), the binary size (budget: +50 KB per step) and peak RAM.
+Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts that run on the Kindle's busybox. `devloop/` and `probe/` split into `device/` and `tools/`. The bring-up crates (`aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen`, `aristotle-observe`) merge into `aristotle-devtools`. `aristotle-reader` becomes `aristotle`, and `aristotle-app` goes away.
 
-1. **Merge the feature work in flight**, one branch at a time, then record the baselines.
-2. **Rename** the project to Aristotle: host scripts and docs, the cache directory (now `$ARISTOTLE_CACHE`, `devloop/env.sh`), the KUAL extension, and the device agent.
-3. **Repository**, mechanical moves with no behaviour change: `xtask` with `check`, `run` and `screenshot` first, then the rest of `devloop/host`; `devloop/` and `probe/` split into `device/` and `tools/`; `aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen` and `aristotle-observe` merged into `aristotle-devtools` (one binary each, the pen record format as a module, the scenarios beside them); `aristotle-reader` renamed `aristotle`; `aristotle-app` deleted, since the reader app runs the same screens on the device.
-4. **Structure**, in order: `aristotle-core`; then, in parallel, the hal `Device` trait and `WaveTable`, the i18n crate, `aristotle-dict` (out of the app's `dict` module), `aristotle-testkit`, and inbox folders; then the refresh policy, `aristotle-screens` with typed actions and translated strings (out of `aristotle-ui`, with the preview binary), the app shell with the `Screen` trait, the settings registry, and finally the render traits.
-5. **Frontends:** `aristotle-dash` and its host preview; the dashboards app with folder delivery; RTC sleep; Wi-Fi and HTTP fetch; external apps. `aristotle-sdk` follows once the `Screen` trait has gone a release without changes.
+### Structure
 
-Known shortcuts to remove along the way:
+The steps, in order:
 
-- The app changes its working directory so Plato finds its data; Plato should take an absolute data root.
-- Waveforms exist in four forms (a hal newtype, a ui enum, integer constants, `FLASH`); they become `core::Wave` and the `WaveTable`.
-- Screen geometry and device paths are literals in several crates; they come from the device profile.
+1. `aristotle-core` for shared types: geometry, waveform kinds, formats, locators.
+2. A hal `Device` trait with a `WaveTable`. The rest of the code then speaks of update kinds such as page turn, flash and gray chrome, and the device profile maps them to mode numbers.
+3. `aristotle-dict` out of the reader, `aristotle-testkit` for sample books and a headless device, and `aristotle-screens` out of `aristotle-ui`.
+4. A `Screen` trait with typed action enums and a `Nav` result, a settings registry that renders the settings screen and the reader menu, and `Engine`, `Layout` and `Converter` traits in `aristotle-render`.
+
+Shortcuts to remove along the way:
+
+- The app changes its working directory so Plato finds its data.
+- Waveforms exist in four forms: a hal newtype, a ui enum, integer constants and `FLASH`.
+- Screen geometry and device paths are literals in several crates.
 - Typography steps are defined twice, in points and in pixels.
-- Screens use integer action ranges instead of typed actions.
-- Rejected page-turn strategies (an A2 preview before the page, `render::screen` and `ARISTOTLE_TURN`) are still code; they move to the devtools as benchmarks.
-- Test books are made by Python scripts in `devloop/host`; they become builders in `aristotle-testkit`.
-- Quitting needs a one-second hold on the library title; it becomes a menu item.
+- Screens use integer action ranges.
+- Rejected page-turn strategies (`render::screen`, `ARISTOTLE_TURN`) are still code. They belong in the devtools as benchmarks.
+- Test books come from Python scripts in `devloop/host`.
+- Quitting needs a one-second hold on the library title.
+
+### Dashboards and the SDK
+
+Dashboards will put your own data on the screen without code on the device. The simplest is an image dashboard: a PNG or JPEG made anywhere, scaled to the screen and converted to 16 grays. A document dashboard is a small JSON file that describes one screen from the toolkit's nodes (`column`, `row`, `stack`, `text`, `image`, `icon`, `progress`, `rule`, `spacer`) with placeholders such as `{date}` and `{battery}`. The device lays it out with its own fonts and refresh policy. `aristotle-dash` will render documents, and `aristotle-dash preview` will produce the device's pixels on the host. Documents will arrive over USB or SSH, or by HTTP from one host behind a `net` feature. Between updates the device will be able to suspend and wake on an RTC alarm. A web app on a server can produce the JSON document or a captured PNG, so no browser runs on the device.
+
+External apps will live in `/mnt/us/apps/<id>/app.json`. Aristotle will stop its display thread, release the touchscreen, run the program and redraw with a flash when it exits.
+
+`aristotle-sdk` will re-export the stable parts for native apps: the `Screen` trait, the tree builders and widgets, waveform kinds, settings and the i18n catalog. It follows once the `Screen` trait has gone a release without changes.
+
+Scripting is not planned. Lua, Luau, Rhai and WASM were considered. Dashboards cover the "show my data" case, and the hot paths need native code. If on-device automation ever needs scripts, the candidate is Lua 5.4 through `mlua` behind a `lua` feature.
