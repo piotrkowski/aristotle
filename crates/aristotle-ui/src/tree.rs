@@ -408,7 +408,7 @@ impl Tree {
                 icon,
                 size,
                 gray,
-                weight: 1.8,
+                weight: 0.0,
             }),
             [],
         )

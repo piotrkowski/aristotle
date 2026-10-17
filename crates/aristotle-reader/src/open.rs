@@ -39,7 +39,7 @@ use aristotle_render::page::Page;
 use aristotle_render::plato_core::anyhow::{format_err, Error};
 use aristotle_render::plato_core::document::html::layout::HYPHENATION_PATTERNS;
 use aristotle_render::style::Style;
-use aristotle_ui::screens::library::{self as ui_lib, Filter};
+use aristotle_ui::screens::library as ui_lib;
 use aristotle_ui::screens::reader::{Menu, Settings};
 use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
 use aristotle_ui::theme::Styles;
@@ -48,7 +48,7 @@ use aristotle_ui::ui::Ui;
 
 use crate::prefs::Prefs;
 use crate::session::{Prepared, Session, Source, OPEN_GATE};
-use crate::shelf::{Covers, ShelfModel};
+use crate::shelf::{Covers, Nav, ShelfModel};
 use crate::snapshot::PageInfo;
 use crate::turns::TurnGestures;
 use crate::{ms, progress, snapshot};
@@ -488,13 +488,19 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
 
     println!("\nback to the library: building its frame before the flash");
     let mut covers = Covers::default();
+    let status = ui_lib::StatusLine {
+        clock: "12:00",
+        battery: None,
+        charging: false,
+    };
     for run in 1..=3 {
         let t = Instant::now();
-        let model = ShelfModel::build(&lib, Filter::All, 0, &mut covers);
+        let mode = prefs.covers.mode();
+        let model = ShelfModel::build(&lib, &Nav::default(), mode, &mut covers);
         let t_model = t.elapsed();
         let t = Instant::now();
         let (tree, _view) =
-            ui_lib::Library::build_shelf(&mut ui.text, &styles, &model.shelf("12:00", None));
+            ui_lib::Library::build_shelf(&mut ui.text, &styles, &model.shelf(status, mode));
         let t_tree = t.elapsed();
         let t = Instant::now();
         ui.set_tree_with(tree, Refresh::Full);

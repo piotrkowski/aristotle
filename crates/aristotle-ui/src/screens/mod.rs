@@ -1,11 +1,14 @@
-//! Prototype screens: the library, a reader page and the reader menu.
+//! The screens: library and shelves, settings, the screensaver, and the
+//! reader page and menu.
 //!
-//! These are real trees built from the toolkit, used by the desktop preview
-//! and the tests. They carry sample data; the reader app will feed them
-//! from the book database instead.
+//! These are real trees built from the toolkit. The reader app feeds them
+//! from the library index and the device; the desktop preview and the
+//! tests feed them sample data.
 
 pub mod library;
 pub mod reader;
+pub mod settings;
+pub mod sleep;
 
 use crate::geom::Insets;
 use crate::icons::Icon;
