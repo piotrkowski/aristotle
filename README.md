@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="#install">Install</a> ·
-  <a href="https://piotrkowski.github.io/aristotle/guides/">Guides</a> ·
-  <a href="https://piotrkowski.github.io/aristotle/benchmarks.html">Benchmarks</a> ·
+  <a href="https://piotrkowski.github.io/aristotle/">Demo</a> ·
+  <a href="docs/benchmarks.md">Benchmarks</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href=".github/CONTRIBUTING.md">Contributing</a>
 </p>
@@ -46,7 +46,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 | Page turn, from release | 0.57 s | 0.44 s |
 | Open a book (Aristotle: from its saved page) | 0.8 s | 0.56 s |
 
-The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method. The [benchmarks page](https://piotrkowski.github.io/aristotle/benchmarks.html) presents the same numbers.
+The speed, size and memory numbers here come from [docs/benchmarks.md](docs/benchmarks.md), which describes the method.
 
 ## Install
 
@@ -62,17 +62,16 @@ Aristotle is alpha software.
 | Kindle Paperwhite 4 (2018, PQ94WIF) | 5.13.x | Tested |
 | Other devices | | Not supported. The install scripts refuse to run unless `ARISTOTLE_FORCE=1` is set. |
 
-The Kindle also needs KUAL, MRPI and KOReader (for its SSH server). The [install guide](https://piotrkowski.github.io/aristotle/guides/install.html) covers building on Linux, copying over USB and uninstalling.
+The Kindle also needs KUAL, the launcher that holds Aristotle's menu. In short: download the zip from the latest [release](https://github.com/piotrkowski/aristotle/releases), unzip it to the root of the Kindle's USB drive, and open KUAL › Aristotle › Start Aristotle. **[docs/install.md](docs/install.md)** has every step, the optional agent, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
 
 The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
-Uninstalling removes everything Aristotle installed, including its SSH key. To disable Aristotle without SSH, choose KUAL › Aristotle › USB drive mode for 10 minutes, create an empty file named `aristotle-disable` at the root of the drive and restart the Kindle. The stock system then starts instead. [device/README.md](device/README.md#uninstall) lists what uninstalling removes.
-
 ## Documentation
 
-- [Guides](https://piotrkowski.github.io/aristotle/guides/) and [benchmarks](https://piotrkowski.github.io/aristotle/benchmarks.html)
+- [Project post and interactive demo](https://piotrkowski.github.io/aristotle/)
 - Design notes on the [architecture](docs/architecture.md) (with related projects), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
-- [Benchmarks](docs/benchmarks.md), the source of every number in this README and on the site
+- [Benchmarks](docs/benchmarks.md), the source of every number in this README
+- [Installing](docs/install.md)
 - [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
 - [Paperwhite 4 reference](docs/pw4-reference.md)
 

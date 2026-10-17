@@ -24,6 +24,9 @@ default-members = [
 exclude = ["third_party"]
 
 [workspace.package]
+# The one version of Aristotle: every crate, the release tag (v0.1.0), the
+# About screen and SOURCE.txt. CHANGELOG.md has a section per version.
+version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/piotrkowski/aristotle"

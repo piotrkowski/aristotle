@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T18:23:48Z",
+  "title": "Design System: Aristotle homepage",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "inline-demo-hint",
+        "value": "600px"
+      },
+      {
+        "name": "compact",
+        "value": "480px"
+      }
+    ],
+    "focusRings": [
+      {
+        "name": "page",
+        "value": "2px solid var(--focus)",
+        "offset": "5px"
+      },
+      {
+        "name": "hotspot",
+        "value": "2px solid #365c82",
+        "offset": "-2px"
+      }
+    ]
+  },
+  "narrative": {
+    "overview": "This document covers `index.html` and `assets/post.css`, not the native Kindle interface or repository documentation.\n\nThe homepage reads as a dated personal blog post about a weekend project. Keep the author's informal English and first-person account. Fix typos without turning it into release copy. Inter and the restrained writing layout take their cue from the article the user supplied on jjmaxwell4.com.",
+    "dos": [
+      "Keep the date and personal weekend-project story without a separate project label.",
+      "Preserve the author's wording except for typo and grammar fixes.",
+      "Keep light as the default and offer a manual dark theme.",
+      "Label the demo as a clickable screenshot preview, not a live device emulator.",
+      "Keep the site to one HTML page. Link to repository documentation instead of separate guide pages."
+    ],
+    "donts": [
+      "Do not add marketing cards, onboarding step counters, or red hotspot frames.",
+      "Do not apply this document to the native Kindle interface."
+    ]
+  }
+}

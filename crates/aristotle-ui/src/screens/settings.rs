@@ -529,7 +529,7 @@ pub fn sample_about() -> Vec<(&'static str, String)> {
     vec![
         (
             tr(Msg::SettingsAboutSoftware),
-            "Aristotle 0.1.0".to_string(),
+            format!("Aristotle {}", env!("CARGO_PKG_VERSION")),
         ),
         (
             tr(Msg::SettingsAboutReader),

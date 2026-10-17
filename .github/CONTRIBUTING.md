@@ -10,8 +10,9 @@ approach. Before you touch the display or input code, read
 The repository is one Cargo workspace. A plain `cargo build`, `cargo test` or
 `cargo clippy` covers the pure-Rust default members, which CI checks. The two
 native members, `crates/aristotle-render` and the reader app
-`crates/aristotle`, link Plato's engine and its C libraries. CI does not
-build them, so check them locally.
+`crates/aristotle`, link Plato's engine and its C libraries, which
+`tools/build-plato.sh` builds; CI checks them too, with those libraries
+cached.
 
 Plato comes from our fork in the `third_party/plato` submodule
 ([docs/reader.md](../docs/reader.md), "Plato fork"). Cargo needs it even for
@@ -43,13 +44,21 @@ cargo run --release -p aristotle-ui --bin aristotle-ui-preview   # every screen 
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
 CARGO_CMD=test tools/build-render.sh host
 
-# The device bundle
+# The device bundle, and the zip a release ships
 PLATO_LIBS_ONLY=1 tools/build-plato.sh
 tools/build-render.sh device
+tools/package.sh zip     # $ARISTOTLE_CACHE/dist/aristotle-VERSION.zip
 ```
 
 Everything that runs on the Kindle is a static
-`armv7-unknown-linux-musleabihf` binary.
+`armv7-unknown-linux-musleabihf` binary. `tools/package.sh` defines what goes
+on the Kindle's USB drive: `aristotle/` (the app bundle with its licences and
+`SOURCE.txt`) and `extensions/aristotle/` (the KUAL extension). Unzip the zip
+to the root of the drive, as users do, or, with the Kindle mounted, run
+`tools/host/install-extensions.sh`, which copies the same tree plus the
+read-only probe and your dev-loop SSH key and ejects the Kindle. Then
+`tools/host/setup-host-net.sh` once on the computer and KUAL › Aristotle ›
+Install agent give you SSH over USB; `device/README.md` has the details.
 
 ## Trying changes
 
@@ -71,7 +80,7 @@ the device and `[host]` for the PC.
 
 ## Checks
 
-CI runs the first five on every pull request:
+CI runs all of them on every pull request:
 
 ```sh
 cargo fmt --check        # every member, native ones included; not --all, which
@@ -80,14 +89,34 @@ cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo test --all-features --locked
 cargo build --release --locked --target armv7-unknown-linux-musleabihf
 cargo deny check         # deny.toml: licences, advisories, bans, sources
-# The native members, locally:
+# The native members (clippy with --all-targets and -D warnings):
 CARGO_CMD=clippy tools/build-render.sh host
 CARGO_CMD=test tools/build-render.sh host
 ```
 
+CI also builds the device bundle and keeps the zip from `tools/package.sh`
+as a workflow artifact for 14 days.
+
 `tools/screenshots/compose.sh` makes the screenshots for the README, the docs
 and the site from the device captures in its manifest
 (`tools/screenshots/README.md`).
+
+## Releases
+
+Aristotle has one version, `workspace.package.version` in `Cargo.toml`. The
+app shows it with the short commit in Settings › About, and `SOURCE.txt`
+names the version, commit and tag. To release:
+
+1. Set the version in `Cargo.toml` and move the "Unreleased" entries of
+   `CHANGELOG.md` into a section for it, with the date.
+2. Tag the commit on `main` as `vX.Y.Z` and push the tag.
+
+The release workflow (`.github/workflows/release.yml`) builds everything from
+source without caches, checks that the tag matches the version, and creates a
+draft release with the zip, a source tarball (`tools/package.sh source`:
+Aristotle and Plato at the tagged commits, with the URLs and SHA-256 sums of
+the C library sources), `SHA256SUMS`, build provenance attestations and the
+changelog section as notes. Read the draft, then publish it.
 
 ## Text and test data
 
