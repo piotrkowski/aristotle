@@ -8,8 +8,9 @@ built, and the device and firmware.
 
 ## What runs on the device
 
-The reader opens no ports. The attack surface is the device agent
-(`device/extension/`).
+The reader opens no ports. It parses untrusted books and dictionaries and can
+connect to configured sync servers and catalogs. The optional device agent
+(`device/extension/`) also exposes root SSH over USB.
 
 - The agent turns the USB port into a network link (`usb0`, with the Kindle at
   `192.168.15.244`) and starts KOReader's `dropbear` as root, with public-key
@@ -18,16 +19,20 @@ The reader opens no ports. The attack surface is the device agent
   reuse a key you use elsewhere.
 - `dropbear` listens on `192.168.15.244:22` only, and the agent opens only
   `usb0` in the stock firewall. SSH is not reachable over Wi-Fi.
-- The agent installs one file on the root filesystem,
-  `/etc/upstart/aristotle-agent.conf`. Everything it runs lives in
-  `/var/local/aristotle`. KUAL › Aristotle › Remove agent deletes both, and
-  removes the agent's key from KOReader's `settings/SSH/authorized_keys` and
+- The agent installs three jobs on the root filesystem:
+  `/etc/upstart/aristotle-agent.conf`, `/etc/upstart/aristotle-ui.conf`, and
+  `/etc/upstart/aristotle-ota.conf`. Its scripts, private account credentials,
+  and optional boot copy of the app live in `/var/local/aristotle`.
+  **KUAL > Aristotle > Remove agent completely** deletes the jobs and that
+  directory, and removes the agent's key from KOReader's `settings/SSH/authorized_keys` and
   from the extension. Only the log stays, as `aristotle-agent.log` on the USB
   drive.
 - A file named `aristotle-disable` at the root of the USB drive keeps the agent
   from starting at the next boot, which leaves USB to the stock system. To
   create the file while the agent runs, use KUAL › Aristotle › USB drive mode
-  for 10 minutes.
+  for 10 minutes. The file also disables app autostart, but does not disable
+  the separate OTA-blocking job. Remove the agent before a deliberate
+  firmware update.
 - The scripts that change the device outside the USB drive refuse to run on
   anything but a Kindle Paperwhite 4 (2018) on firmware 5.13.x, as read from
   `/proc/usid` and `/etc/prettyversion.txt`, unless `ARISTOTLE_FORCE=1` is

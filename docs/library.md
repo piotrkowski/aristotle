@@ -4,6 +4,8 @@
 
 Source marks: [fw] means firmware 5.13.6, [dev] means device files, [host] means host tests, and [KOReader] or [calibre] names an external source. [inference] means unconfirmed.
 
+For user procedures, see [Your first book](first-book.md), [Back up and update](maintenance.md), and [Set up network features](network.md). The [format support table](formats.md) distinguishes indexing from reading.
+
 <img src="images/library.png" width="325" alt="Library with continue-reading card, views, shelves, and books">
 
 ## What it indexes
@@ -146,13 +148,13 @@ These are host results, not PW4 timings.
 
 ## Network: progress sync and catalogs
 
-Both features are off until configured in **Settings > Network**. Worker threads connect only to configured servers and catalogs. The device's host allowlist applies to requests and redirects ([Network policy](../device/README.md#network)).
+Both features are off until configured in **Settings > Network**. Worker threads connect to configured endpoints and their catalog links, subject to the active network policy. The device's host allowlist applies to requests and redirects in `scoped` mode ([Network policy](../device/README.md#network)). Follow [Set up network features](network.md) for the configuration procedure.
 
 Saving a server adds a tagged entry to `net-allow` through `aristotlectl net allow add`. Removing it deletes that entry, not untagged entries. Code lives in `crates/aristotle-net` and the app's `net.rs`, `sync.rs`, and `catalogs.rs`.
 
 ### Settings files
 
-There is no on-screen keyboard. Edit `sync.json` and `catalogs.json` in the library data directory. Tapping an editable row names the file.
+There is no on-screen keyboard. The app imports `sync.json` and `catalogs.json` from the directory containing the running executable, not from the library data directory. For a manual KUAL launch, this is `/mnt/us/aristotle/`. The boot copy uses `/var/local/aristotle/app/`. Imports run at startup or through **Load sync.json** and **Load catalogs.json**. Tapping an editable row names the actual path. See [Choose the correct import location](network.md#choose-the-correct-import-location) for the autostart procedure.
 
 `sync.json`:
 
@@ -186,7 +188,7 @@ Automatic sync fetches progress on open with a 5-second timeout. A newer positio
 
 ### Catalogs (OPDS 1.2)
 
-Catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
+Catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
 
 Downloads go to `documents/<catalog name>/<title> - <author>.<ext>`. Each is limited to 200 MiB and leaves at least 20 MiB free. A hidden `.part` file is synced and renamed on success. Failure or cancellation removes it. Existing files are not replaced. The library scans after download.
 

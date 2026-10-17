@@ -4,6 +4,8 @@
 
 `crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens EPUB, DRM-free MOBI 7, PDF, and TXT. Measurements are from the host unless marked [dev]. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
 
+For daily use, start with [Your first book](first-book.md). See [Format support](formats.md) for the default bundle's capabilities and [Back up and update](maintenance.md) for state and cache handling.
+
 <p align="center">
   <img src="images/gallery/reading-light.png#gh-light-mode-only" alt="A page of Chase's English translation of the Nicomachean Ethics, and the opening of Book I in Bywater's Greek">
   <img src="images/gallery/reading-dark.png#gh-dark-mode-only" alt="The same English and Greek pages in night mode">
@@ -111,7 +113,7 @@ ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh
 
 The bundle lives in `/mnt/us/aristotle/`; `/var/tmp` is a 64 MB tmpfs [dev]. The launcher stops the stock GUI and restores it on exit, with 30 to 60 seconds of boot splash [dev]. It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
 
-Hold the **Library** title for one second to quit, or run `killall aristotle`. Logs go to `/var/tmp/aristotle.log`. The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
+Hold the **Library** title for one second to quit, or run `killall aristotle`. This SSH launch logs to `/var/tmp/aristotle.log`. KUAL and boot launches use different paths ([Log locations](troubleshooting.md#find-the-right-log)). The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
 
 ## Typesetting
 
@@ -240,11 +242,13 @@ Transient selection feedback uses A2. Completed popups with grays use a full-scr
 ### Dictionary
 
 <p align="center">
-  <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek–English dictionary, and science in an English–Polish dictionary">
+  <img src="images/gallery/dictionary-light.png#gh-light-mode-only" alt="Dictionary popups: ἀγαθοῦ found as ἀγαθός in a Greek-English dictionary, and science in an English-Polish dictionary">
   <img src="images/gallery/dictionary-dark.png#gh-dark-mode-only" alt="The same dictionary popups in night mode">
 </p>
 
 StarDict dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict`, or `--dict DIR`. File names such as `grc-pl.ifo` identify language pairs.
+
+See [Install offline dictionaries](dictionaries.md) for the required file set, folder layout, and a first lookup.
 
 `dict/fold.rs` builds indexes that ignore combining marks and case and normalize final sigma. Exact spelling wins over folded matches. Greek text selects Ancient Greek dictionaries; other text uses the book language. The selected dictionary is saved per language in `dictionaries.json`.
 
@@ -298,7 +302,7 @@ The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR
 
 ## Timing log
 
-The app writes `[perf <ms since start>]` lines to stderr. The launcher sends them to `/var/tmp/aristotle.log`.
+The app writes `[perf <ms since start>]` lines to stderr. Direct `run-aristotle.sh` launches use `/var/tmp/aristotle.log` by default. KUAL uses `/mnt/us/.aristotle/app.log`, and boot startup uses `/var/local/aristotle/app.log`. See [Log locations](troubleshooting.md#find-the-right-log) for launcher and agent logs.
 
 | Prefix | Measures |
 | --- | --- |

@@ -4,6 +4,9 @@ Everything here but the tests runs on the Kindle, under its busybox shell.
 The host-side tools that install and drive it are in [`tools/`](../tools/), and the app
 itself is the `aristotle` crate.
 
+For installation and daily use, start with the [user documentation](../docs/README.md).
+This page describes device scripts, host access, and measured behavior.
+
 | Path | What | Installed to |
 |------|------|--------------|
 | `extension/` | The KUAL extension: the menu, the manual USB network, the device guard | `/mnt/us/extensions/aristotle/` |
@@ -22,8 +25,59 @@ to `/mnt/us/extensions/aristotle-usbnet/`; the install script removes that
 folder.
 
 No recovery path is verified for the PW4, so these scripts write to the root
-filesystem once, for the upstart job, and keep everything else in
+filesystem during agent installation, for the three upstart jobs, and keep everything else in
 `/var/local/aristotle`, on `/mnt/us` or in runtime state that a reboot clears.
+
+## Host setup
+
+These steps use a Linux host with NetworkManager (`nmcli`) and OpenSSH 8.4
+or later. The Kindle needs KOReader's `dropbear` for agent installation or
+manual USB networking. Install the [release bundle](../docs/install.md) first.
+No internet connection is needed for the USB link.
+
+1. From the repository, create a dedicated key in the project cache:
+
+   ```sh
+   . tools/env.sh
+   mkdir -p "$ARISTOTLE_CACHE/ssh"
+   ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
+   ```
+
+   Keep an existing dedicated key if you have one. Do not overwrite it or
+   reuse a key for another machine.
+
+2. Connect the Kindle in USB drive mode. Copy
+   `$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub` to
+   `extensions/aristotle/authorized_keys` on the drive. Copy only the public
+   key, not `kindle_ed25519`.
+3. Eject the drive and choose **KUAL > Aristotle > Install agent** for
+   persistent access, or **Start USB network once (manual)** for this boot.
+4. Keep the cable connected. Configure the host profile:
+
+   ```sh
+   tools/host/setup-host-net.sh
+   ```
+
+5. Connect through the repository's SSH configuration:
+
+   ```sh
+   ssh -F tools/host/ssh_config kindle
+   ```
+
+The host uses `192.168.15.201/24`; the Kindle uses `192.168.15.244/24`.
+The connection has no gateway or DHCP. `ssh_config` uses the dedicated key
+and saves host keys in `$ARISTOTLE_CACHE/known_hosts`. Source `tools/env.sh`
+again in each new host shell before using that configuration.
+
+For a development build, `tools/host/install-extensions.sh` copies the same
+public key, the built app bundle, and the probe to a mounted Kindle. It uses
+`$KINDLE_MOUNT` if the drive is not mounted at its default location. Build the
+bundle first as described in [Contributing](../.github/CONTRIBUTING.md#building).
+
+For build, copy, run, and screen capture in one command, use
+`tools/host/run.sh PACKAGE[:BINARY] [ARGS]`. For a connection failure, check
+[USB and SSH troubleshooting](../docs/troubleshooting.md#usb-drive-mode-and-ssh)
+and [address conflicts](#the-usb-link).
 
 ## The device guard
 
@@ -309,10 +363,12 @@ the expected files.
 
 ## Network
 
-The reader listens on no port and opens connections only to the progress-sync server and the OPDS catalogs set up in its settings (`docs/library.md`, "Network"). Aristotle's only
-network is [the USB link](#the-usb-link) for development. Wi-Fi stays with the
-stock system unless you switch on the `scoped` policy, which lets the device
-reach a short list of hosts, such as a dashboard server.
+The reader listens on no port. Its outbound requests serve the configured
+progress-sync server, OPDS catalogs, and their acquisition links.
+[Network setup](../docs/network.md) covers account imports and a first
+connection. [The USB link](#the-usb-link) is separate, for development and SSH.
+Wi-Fi stays with the stock system unless you switch on the `scoped` policy,
+which restricts the device to an allowlist of destinations.
 
 ### The USB link
 

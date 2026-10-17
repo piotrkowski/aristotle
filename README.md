@@ -37,7 +37,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
 - Pages turn with one full-screen update and the stock reader's waveform, so they don't ghost.
 - The library shows `documents/` with shelves, folders, series and the current book. It opens EPUB, DRM-free MOBI, PDF and TXT.
-- Text is set in Literata with Knuth–Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
+- Text is set in Literata with Knuth-Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
 - Add your own fonts: copy TTF or OTF files into `fonts/` on the Kindle and pick one in the reader's menu ([how](docs/install.md#your-own-fonts)).
 - Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
 - It continues where the stock reader left off ([without changing its files](docs/library.md#stock-files-sidecars-and-my-clippingstxt)) and adds highlights to `My Clippings.txt` and Markdown. Footnotes open in a popup.
@@ -58,6 +58,8 @@ I'd recommend installing it with an AI agent like Claude Code or Codex. Just poi
 
 > [!WARNING]
 > Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4. Aristotle is alpha software.
+>
+> The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use is unverified. Quit to the stock interface when you finish reading.
 
 You need:
 
@@ -71,21 +73,24 @@ Then:
 2. Unzip it to the root of the Kindle's USB drive and eject the Kindle.
 3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
 
-**[docs/install.md](docs/install.md)** covers starting at boot, the optional agent, updates, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
+[Install](docs/install.md) covers the optional agent and starting at boot. Then follow [Your first book](docs/first-book.md) to read and export a highlight. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
 
 ## Documentation
 
-- [Project post and interactive demo](https://piotrkowski.github.io/aristotle/)
-- [Screenshots](docs/screenshots.md) of the main screens, in day and night mode
-- Design notes on the [architecture](docs/architecture.md), [reader](docs/reader.md), [UI framework](docs/ui-framework.md) (with e-ink rendering) and [library](docs/library.md)
-- [Benchmarks](docs/benchmarks.md), the source of every number in this README
-- [Installing](docs/install.md)
-- [Device-side code](device/README.md): the KUAL extension, the agent, the network policy, the kill switch and uninstalling
-- [Paperwhite 4 reference](docs/pw4-reference.md)
+| I want to... | Read |
+| --- | --- |
+| Start reading | [Your first book](docs/first-book.md) |
+| Add word lookups | [Install dictionaries](docs/dictionaries.md) |
+| Sync with KOReader or download from calibre | [Set up network features](docs/network.md) |
+| Preserve my data or install a new version | [Back up and update](docs/maintenance.md) |
+| Fix a problem or collect logs | [Troubleshooting](docs/troubleshooting.md) |
+| Check whether a book will work | [Format support](docs/formats.md) |
+
+The [documentation index](docs/README.md) also links the architecture, reader, library, UI framework, and device references. [Benchmarks](docs/benchmarks.md) describe the measurements behind the numbers above. [Screenshots](docs/screenshots.md) and the [interactive demo](https://piotrkowski.github.io/aristotle/) show the interface.
 
 ## Contributing
 
-Report bugs as [issues](https://github.com/piotrkowski/aristotle/issues) with the device, firmware version and app log. [CONTRIBUTING.md](.github/CONTRIBUTING.md) explains the build and the checks. Report vulnerabilities privately through the [security policy](.github/SECURITY.md).
+Report bugs as [issues](https://github.com/piotrkowski/aristotle/issues) with the details in [Report a bug](docs/troubleshooting.md#report-a-bug). [CONTRIBUTING.md](.github/CONTRIBUTING.md) explains the build and the checks. Report vulnerabilities privately through the [security policy](.github/SECURITY.md).
 
 ## Licence
 

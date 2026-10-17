@@ -2,6 +2,8 @@
 
 Aristotle is experimental. A mistake can brick the Kindle, and no recovery method is verified for the Paperwhite 4. Use only a device you can afford to lose.
 
+The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use is unverified. Quit to the stock interface when you finish reading. The alternative `ARISTOTLE_POWERD=1` path has host tests only, not verified device sleep or wake behavior.
+
 ## What you need
 
 - A jailbroken Kindle Paperwhite 4, 2018 model PQ94WIF, on firmware 5.13.x. Other models and firmware are unsupported.
@@ -25,13 +27,13 @@ The zip contains `aristotle/`, the app and licenses, and `extensions/aristotle/`
 gh attestation verify aristotle-X.Y.Z.zip --repo piotrkowski/aristotle
 ```
 
-Hold **Library** for one second to quit. The stock interface returns after 30 to 60 seconds of boot splash. A reboot also restores it. To update, unpack a newer release over the old one.
+In Aristotle's library, hold **Library** for one second to quit. The stock interface returns after 30 to 60 seconds of boot splash [dev]. A reboot restores stock unless you have enabled Aristotle at boot.
+
+Continue with [Your first book](first-book.md). For later releases, follow [Back up and update](maintenance.md#update-the-app), including the separate internal copy used by autostart.
 
 ## The agent (optional)
 
-Yes, you can use SSH over USB, without an internet connection. It is quite useful.
-
-The agent provides USB SSH at `192.168.15.244`, drive-mode switching from settings, and an update block. See [Host setup](../device/README.md).
+The agent provides USB SSH at `192.168.15.244`, drive-mode switching from settings, and an update block. The USB link needs no internet connection and provides no gateway. See [Host setup](../device/README.md#host-setup) for a dedicated SSH key and host network configuration.
 
 1. Copy your SSH public key to `extensions/aristotle/authorized_keys` on the Kindle drive.
 2. Open **KUAL > Aristotle > Install agent**.
@@ -52,6 +54,8 @@ Copy TTF or OTF files into a folder named `fonts` at the root of the Kindle's dr
 
 ## Uninstall
 
+If you want to preserve progress, annotations, preferences, or network credentials, [back up first](maintenance.md#back-up-reading-data). Deleting `.aristotle/` removes reading state, not just caches. Agent removal deletes saved network credentials.
+
 1. Select **KUAL > Aristotle > Remove agent completely**. This removes its jobs, internal app copy, update block, and SSH key. It saves `aristotle-agent.log` to the drive.
 2. Delete `aristotle/`, `.aristotle/`, and `extensions/aristotle/` from the drive.
 3. If present, delete `extensions/aristotle-probe/` or the older `extensions/aristotle-usbnet/`.
@@ -65,6 +69,8 @@ Without SSH, select **KUAL > Aristotle > USB drive mode for 10 minutes**. Connec
 If Aristotle starts at boot, quit it first so the stock interface can offer drive mode.
 
 Without KUAL or the agent, the community hotfix can run `emergency.sh` from the drive root after the stock interface starts [dev]. Follow [Recovery without SSH](../device/README.md#recovery-without-ssh), then delete the script.
+
+For startup, USB, book, and network symptoms, see [Troubleshooting](troubleshooting.md).
 
 ## Build it yourself
 
