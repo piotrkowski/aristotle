@@ -42,6 +42,9 @@ pub struct Session {
     /// Start of the page on the panel.
     pub current: usize,
     pages: Vec<(usize, Rc<Page>)>,
+    /// The location whose entry in `pages` is a kept snapshot page (see
+    /// [`Session::keep_page`]).
+    kept: Option<usize>,
     next_of: HashMap<usize, Option<usize>>,
     prev_of: HashMap<usize, Option<usize>>,
     paginator: Option<Paginator>,
@@ -294,6 +297,7 @@ impl Session {
                 .into_iter()
                 .map(|(l, pg)| (l, Rc::new(pg)))
                 .collect(),
+            kept: None,
             next_of: p.next_of,
             prev_of: p.prev_of,
             paginator: p.paginator,
@@ -376,19 +380,33 @@ impl Session {
             self.pages.remove(0);
         }
         self.pages.push((location, page.clone()));
+        if self.kept == Some(location) {
+            self.kept = None;
+        }
         Ok(page)
     }
 
     /// Use `page` as the rendered page at `location`: a snapshot's page that
     /// differs from a fresh render only in its header or footer, already on
-    /// the panel (see `App::adopt`). Rendering the location again, after
-    /// new page numbers or marks, replaces it.
+    /// the panel (see `App::adopt`). It stays while the reader is on that
+    /// page; once a turn or a jump leaves it ([`Session::prerender`]), or
+    /// new page numbers or marks redraw the pages, coming back renders the
+    /// page anew.
     pub fn keep_page(&mut self, location: usize, page: Rc<Page>) {
         self.pages.retain(|(l, _)| *l != location);
         if self.pages.len() >= KEEP_PAGES {
             self.pages.remove(0);
         }
         self.pages.push((location, page));
+        self.kept = Some(location);
+    }
+
+    /// Forget the kept snapshot page unless it is the current page.
+    fn drop_kept_page(&mut self) {
+        if let Some(l) = self.kept.filter(|&l| l != self.current) {
+            self.pages.retain(|(p, _)| *p != l);
+            self.kept = None;
+        }
     }
 
     pub fn is_rendered(&self, location: usize) -> bool {
@@ -428,6 +446,7 @@ impl Session {
     /// Render the pages on either side of the current one if they are not
     /// ready yet. Returns the time spent on each.
     pub fn prerender(&mut self) -> (Duration, Duration) {
+        self.drop_kept_page();
         let mut spent = [Duration::ZERO; 2];
         for (i, dir) in [Turn::Forward, Turn::Back].into_iter().enumerate() {
             let t = Instant::now();
