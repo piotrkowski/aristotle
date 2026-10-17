@@ -1,5 +1,5 @@
 #!/bin/sh
-# aristotle agent, started by /etc/upstart/aristotle.conf on every boot.
+# Aristotle agent, started by /etc/upstart/aristotle-agent.conf on every boot.
 #
 # Keeps the device reachable and healthy without anyone touching it:
 # - USB network (g_ether, usb0 at 192.168.15.244) and key-only SSH (KOReader's
@@ -8,7 +8,10 @@
 #   then back to net automatically;
 # - a watchdog that restarts the stock GUI if it stays dead for 5 minutes, and
 #   reboots at most once an hour if that does not help. It stays out of the
-#   way while Aristotle has taken over (/var/local/aristotle/takeover exists).
+#   way while Aristotle has taken over (/var/local/aristotle/takeover exists);
+# - the Wi-Fi policy (net.sh, docs/network.md): nothing in "off", the default;
+#   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
+#   address, the resolvers or the list change.
 #
 # State and logs live in /var/local/aristotle (persistent ext3). Nothing here
 # writes to the root filesystem.
@@ -20,6 +23,11 @@ LOG=$S/log
 KO=/mnt/us/koreader
 PIDFILE=/var/run/aristotle-dropbear.pid
 DEV_IP=192.168.15.244
+# Fixed MACs for both ends of the USB link, so the host's NetworkManager
+# profile (devloop/host/setup-host-net.sh) can match the interface. The bytes
+# are arbitrary: any unicast address with the locally administered bit set
+# (0x02 in the first byte) works. bin/start.sh and setup-host-net.sh repeat
+# them; change all three together.
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
 TICK=15
@@ -148,6 +156,9 @@ gui_check() {
 }
 
 log "agent: boot (uptime $(cut -d' ' -f1 /proc/uptime) s)"
+# iptables rules do not survive a reboot; make the first tick apply the
+# Wi-Fi policy again.
+rm -f "$S/net-sig"
 mode_was=""
 while true; do
     mode=$(usb_mode)
@@ -160,6 +171,7 @@ while true; do
     storage) storage_up ;;
     esac
     gui_check
+    [ -f "$S/net.sh" ] && sh "$S/net.sh" tick 2>> "$LOG"
     if [ "$gui_good" -gt 600 ]; then
         rm -f "$S/gui-restarted"
         gui_good=0

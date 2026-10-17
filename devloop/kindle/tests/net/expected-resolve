@@ -1,0 +1,7 @@
+allow 203.0.113.7 443 tcp dash.example.org
+allow 203.0.113.7 8080 tcp dash.example.org
+allow 192.168.1.10 8080 tcp 192.168.1.10
+allow 198.51.100.1 123 udp time.example.net
+allow 198.51.100.2 123 udp time.example.net
+allow 192.0.2.43 443 tcp cdn.example.com
+allow 192.0.2.44 443 tcp cdn.example.com

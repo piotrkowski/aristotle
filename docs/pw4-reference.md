@@ -141,14 +141,14 @@ KOReader's `koreader.sh` on our device shows the existing practice:
 
 ## Host-side artifacts
 
-Large artifacts stay out of git. The scripts expect them at these defaults:
+Large artifacts stay out of git. The scripts expect them at these defaults, in the cache directory `$ARISTOTLE_CACHE` (`devloop/env.sh`):
 
 | Path | What |
 | --- | --- |
-| `~/.cache/aristotle/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here. |
-| `~/.cache/aristotle/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
-| `~/.cache/aristotle/probe/static/` | Output of `probe/host/` (kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs) |
-| `~/.cache/aristotle/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |
+| `$ARISTOTLE_CACHE/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here. |
+| `$ARISTOTLE_CACHE/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
+| `$ARISTOTLE_CACHE/probe/static/` | Output of `probe/host/` (kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs) |
+| `$ARISTOTLE_CACHE/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |
 
 ## Measured e-ink timings
 

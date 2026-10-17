@@ -43,7 +43,7 @@
       <li><strong>KOReader</strong>, for its SSH server.</li>
     </ul>
     <p>Follow <a href="https://kindlemodding.org">kindlemodding.org</a> for all four. Aristotle reads DRM-free books only.</p>
-    <p>The stock system stays installed underneath. Installing the device agent writes one file to the root filesystem (<code>/etc/upstart/aristotle.conf</code>); everything else lives in the user storage and in <code>/var/local</code>.</p>
+    <p>The stock system stays installed underneath. Installing the device agent writes one file to the root filesystem (<code>/etc/upstart/aristotle-agent.conf</code>); everything else lives in the user storage and in <code>/var/local</code>.</p>
 
     <h2 id="build">Build</h2>
     <p>You need Rust through <a href="https://rustup.rs">rustup</a> with the <code>armv7-unknown-linux-musleabihf</code> target, and curl, tar, xz, openssl, xxd, make, cmake and a C compiler. The first script fetches a pinned Zig and builds Plato's C libraries once.</p>
@@ -51,12 +51,12 @@
 cd aristotle
 PLATO_LIBS_ONLY=1 tools/build-plato.sh
 tools/build-render.sh device</code></pre>
-    <p>The app bundle lands in <code>~/.cache/aristotle/render/aristotle-app-device.tar.gz</code>.</p>
+    <p>The app bundle lands in <code>$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz</code>.</p>
 
     <h2 id="copy">Copy it over</h2>
     <p>Create the key the device will accept, set up the USB network on the computer (NetworkManager), then plug in the Kindle as a USB drive and install:</p>
-<pre><code>mkdir -p ~/.cache/aristotle/ssh
-ssh-keygen -t ed25519 -f ~/.cache/aristotle/ssh/kindle_ed25519
+<pre><code>mkdir -p $ARISTOTLE_CACHE/ssh
+ssh-keygen -t ed25519 -f $ARISTOTLE_CACHE/ssh/kindle_ed25519
 devloop/host/setup-host-net.sh
 devloop/host/install-extensions.sh</code></pre>
     <p>Set <code>KINDLE_MOUNT</code> if the Kindle is not mounted at <code>/run/media/$USER/Kindle</code>. The script puts the app in <code>aristotle/</code> on the Kindle with its licences and <code>SOURCE.txt</code>, adds two KUAL extensions, and ejects the Kindle.</p>

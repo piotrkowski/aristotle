@@ -26,8 +26,20 @@ installation (`devloop/kindle/aristotle-usbnet/`):
   Without the key they get no further, but the device is not protected against
   someone who has both the device and the key.
 - **One file on the root filesystem.** The agent installs
-  `/etc/upstart/aristotle.conf`; everything it runs lives in
+  `/etc/upstart/aristotle-agent.conf`; everything it runs lives in
   `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes it out again.
+- **Wi-Fi is the stock system's by default.** In the default `off` mode the
+  agent adds no Wi-Fi rules, and the stock firewall lets every process,
+  Amazon's included, connect out. The optional `scoped` mode
+  (`aristotlectl net scoped`) drops everything on `wlan0` except DHCP, DNS to
+  the configured resolvers and the hosts in `/var/local/aristotle/net-allow`.
+  It is an IP allowlist, not a proxy: names are resolved to addresses when it
+  is applied, anything else on an allowed address (a shared CDN) is reachable
+  too, TLS SNI is not inspected, DNS queries are not filtered, and the stock
+  firewall applies for the few seconds between boot and the agent's first
+  tick. [docs/network.md](../docs/network.md) has the details and the checks
+  that confirm it on a device. A way through the scoped policy that its
+  documented limits do not cover is a security issue.
 
 Books are parsed by Plato's engine (Rust) and MuPDF (C), which read
 untrusted files. A malformed book that crashes the reader or worse is a

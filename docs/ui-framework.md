@@ -259,7 +259,7 @@ The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every sc
 
 Library organisation ("dobre folderowanie"): the home screen has three views. **Books** lists every book with four shelf chips: All, Reading (being read), New (never opened), Finished. **Folders** mirrors `/mnt/us/documents` exactly: its folders first ("Filozofia", "Mickiewicz, Adam", "Platon", "Powieści", with "3 books · 1 reading"), then the books lying loose at the top; a folder opens as its own shelf with its subfolders first, and the back arrow goes up one level. **Series** lists one shelf per series ("4 volumes · 2 finished"), whose books come in series order with "Volume n". Everything pages ("Page 1 of 3"), nothing scrolls. The view and the sort order are remembered.
 
-Settings, offline only, two pages of sections: **Screen** (frontlight on 24 perceptual steps with − and + and the slider, presets Off, Night, Medium, Bright; night mode; covers), **Power** (battery percentage, state, voltage and temperature; screensaver after 5, 15 or 30 minutes or never), **Device** (date and time, free space on the userstore, the USB port: "Network and SSH" or "USB drive" for 10 minutes through the aristotle agent's `aristotlectl`; the UI language, each language named in itself), **About** (Aristotle's version, the device, the Kindle firmware, free RAM).
+Settings, offline only, two pages of sections: **Screen** (frontlight on 24 perceptual steps with − and + and the slider, presets Off, Night, Medium, Bright; night mode; covers), **Power** (battery percentage, state, voltage and temperature; screensaver after 5, 15 or 30 minutes or never), **Device** (date and time, free space on the userstore, the USB port: "Network and SSH" or "USB drive" for 10 minutes through the device agent's `aristotlectl`; the UI language, each language named in itself), **About** (Aristotle's version, the device, the Kindle firmware, free RAM).
 
 Preview PNGs (from `aristotle-ui-preview`, in English unless `--lang` says otherwise, quantized to 16 levels, each also as `*-night.png`): `library`, `library-page2`, `library-cards`, `library-reading`, `library-new-cards`, `library-folders`, `library-series`, `folder`, `series`, `library-empty`, `settings`, `settings-page2`, `screensaver`, `reader`, `reader-menu`, `reader-charis`, `covers`, `icons`; plus `library-pressed.png`, `reader-zones.png`, `reader-page2.png`, `reader-menu-pressed.png`, `reader-menu-night-on.png`, `settings-on-night.png`, `settings-page2-charging-night.png`, damage overlays `*-damage.png`, `compare-library.png` (stock home on the left, ours on the right) and `targets.txt` (the centre of every control per screen, for device scenarios).
 
@@ -279,8 +279,9 @@ The stock reader page was not captured in our screenshots, so the reader compari
 ## Running the preview
 
 ```sh
-export CARGO_TARGET_DIR=~/.cache/aristotle/target-ui TMPDIR=~/.cache/aristotle/tmp
-cargo run --release -p aristotle-ui --bin aristotle-ui-preview      # writes ~/.cache/aristotle/ui-preview/v2/*.png
+. devloop/env.sh                                                    # ARISTOTLE_CACHE and TMPDIR
+export CARGO_TARGET_DIR=$ARISTOTLE_CACHE/target-ui
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview      # writes $ARISTOTLE_CACHE/ui-preview/v2/*.png
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- OUT_DIR
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang pl OUT_DIR   # Polish
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang all OUT_DIR  # OUT_DIR/en, OUT_DIR/pl, ...

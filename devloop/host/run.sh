@@ -5,18 +5,18 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
+. "$REPO/devloop/env.sh"
 SPEC=${1:-aristotle-hello}
 [ $# -gt 0 ] && shift
 PKG=${SPEC%%:*}
 NAME=${SPEC#*:}
 TARGET=armv7-unknown-linux-musleabihf
-BIN="$HOME/.cache/aristotle/target/$TARGET/release/$NAME"
-OUT="$HOME/.cache/aristotle/screens"
+export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
+BIN="$CARGO_TARGET_DIR/$TARGET/release/$NAME"
+OUT="$ARISTOTLE_CACHE/screens"
 CFG="$REPO/devloop/host/ssh_config"
-PY="$HOME/.cache/aristotle/venv/bin/python"
+PY="$ARISTOTLE_CACHE/venv/bin/python"
 
-export TMPDIR="$HOME/.cache/aristotle/tmp"
-export CARGO_TARGET_DIR="$HOME/.cache/aristotle/target"
 (cd "$REPO" && cargo build --release --target "$TARGET" -p "$PKG" --bin "$NAME")
 
 # The rootfs is read-only; /var/tmp is writable and wiped on reboot.

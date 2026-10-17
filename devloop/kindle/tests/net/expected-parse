@@ -1,0 +1,6 @@
+dash.example.org 443 tcp
+dash.example.org 8080 tcp
+192.168.1.10 8080 tcp
+time.example.net 123 udp
+cdn.example.com 443 tcp
+nothing.example.invalid 443 tcp

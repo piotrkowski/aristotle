@@ -1,0 +1,52 @@
+#!/bin/sh
+# A small model of iptables' filter table for the test: chains are files in
+# $AGENT_TEST_ROOT/ipt/, one rule per line. It fails where iptables fails
+# (creating a chain twice, deleting a referenced, non-empty or missing chain,
+# deleting a rule that is not there), so a wrong order in the generated
+# commands breaks the test as it would on the device.
+T=$AGENT_TEST_ROOT/ipt
+mkdir -p "$T"
+[ -f "$T/INPUT" ] || : >> "$T/INPUT"
+[ -f "$T/OUTPUT" ] || : >> "$T/OUTPUT"
+err() { echo "iptables: $*" >&2; exit 1; }
+builtin() { [ "$1" = INPUT ] || [ "$1" = OUTPUT ]; }
+referenced() { grep -q -- "-j $1\$" "$T"/*; }
+
+op=$1 chain=${2:-}
+shift 2 2> /dev/null
+rule="$*"
+case "$op" in
+-N) [ -f "$T/$chain" ] && err "chain $chain exists"; : >> "$T/$chain" ;;
+-F) [ -f "$T/$chain" ] || err "no chain $chain"; : > "$T/$chain" ;;
+-X)
+    [ -f "$T/$chain" ] || err "no chain $chain"
+    builtin "$chain" && err "cannot delete $chain"
+    [ -s "$T/$chain" ] && err "chain $chain not empty"
+    referenced "$chain" && err "chain $chain referenced"
+    rm "$T/$chain"
+    ;;
+-A) [ -f "$T/$chain" ] || err "no chain $chain"; echo "$rule" >> "$T/$chain" ;;
+-I)
+    [ -f "$T/$chain" ] || err "no chain $chain"
+    [ "$1" = 1 ] || err "test model only inserts at 1"
+    shift
+    { echo "$*"; cat "$T/$chain"; } > "$T/$chain.new" && mv "$T/$chain.new" "$T/$chain"
+    ;;
+-D)
+    [ -f "$T/$chain" ] || err "no chain $chain"
+    n=$(grep -n -x -F -- "$rule" "$T/$chain" | head -n 1 | cut -d: -f1)
+    [ -n "$n" ] || err "no such rule in $chain"
+    sed "${n}d" "$T/$chain" > "$T/$chain.new" && mv "$T/$chain.new" "$T/$chain"
+    ;;
+-E)
+    new=$1
+    [ -f "$T/$chain" ] || err "no chain $chain"
+    [ -f "$T/$new" ] && err "chain $new exists"
+    mv "$T/$chain" "$T/$new"
+    for f in "$T"/*; do
+        sed "s/-j $chain\$/-j $new/" "$f" > "$f.new" && mv "$f.new" "$f"
+    done
+    ;;
+-L) [ -f "$T/$chain" ] || err "no chain $chain"; cat "$T/$chain" ;;
+*) err "test model does not know $op" ;;
+esac

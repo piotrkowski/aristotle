@@ -31,7 +31,7 @@
 
   <div class="prose">
     <h2 id="workspaces">Two workspaces</h2>
-    <p>The <strong>root workspace</strong> holds the pure-Rust crates (the hardware layer, the UI toolkit, the library, the measurement tools) and builds anywhere with <code>cargo test</code>. The <strong>native workspace</strong>, the renderer and the reader app, links Plato's engine and its C libraries, which <code>tools/build-plato.sh</code> builds once with Zig. Keep builds under <code>~/.cache/aristotle/</code> and point <code>CARGO_TARGET_DIR</code> and <code>TMPDIR</code> there.</p>
+    <p>The <strong>root workspace</strong> holds the pure-Rust crates (the hardware layer, the UI toolkit, the library, the measurement tools) and builds anywhere with <code>cargo test</code>. The <strong>native workspace</strong>, the renderer and the reader app, links Plato's engine and its C libraries, which <code>tools/build-plato.sh</code> builds once with Zig. Keep builds under <code>$ARISTOTLE_CACHE/</code> and point <code>CARGO_TARGET_DIR</code> and <code>TMPDIR</code> there.</p>
 <pre><code>cargo test                                     # root workspace
 
 # native workspace on the host: C libraries once, about 6 minutes on 2 cores
@@ -46,14 +46,14 @@ cargo run --release -p aristotle-ui --bin aristotle-ui-preview
 # the reading interactions on a test book: menu, contents,
 # dictionaries, selection, highlights, footnotes, "go to"
 devloop/host/make-reading-test-epub.py BOOKS/Aristotle/proba-czytania.epub
-~/.cache/aristotle/render/host/aristotle --data DATA --library LIB \
+$ARISTOTLE_CACHE/render/host/aristotle --data DATA --library LIB \
     --dict DICTIONARIES --preview OUT BOOKS/Aristotle/proba-czytania.epub</code></pre>
     <p>Both report every panel update with its waveform and rectangle (the reader in <code>updates.txt</code>). Compare them before and after a change: the images should stay identical unless the change is about how things look.</p>
 
     <h2 id="emulator">The emulator</h2>
     <p><code>devloop/emulator/setup.sh</code> builds a QEMU Paperwhite 4 running the stock firmware 5.13.6, with KUAL, MRPI and the jailbreak. Anything that could hang boot, touch the stock framework or load kernel code goes there first. It does not reproduce e-ink timing or ghosting; that needs the device.</p>
 <pre><code>devloop/emulator/setup.sh
-cd ~/.cache/aristotle/emulator/eink-emulator
+cd $ARISTOTLE_CACHE/emulator/eink-emulator
 ./eink run pw4 --headless --qmp-socket --serial-socket</code></pre>
 
     <h2 id="scenarios">Scenarios on the device</h2>

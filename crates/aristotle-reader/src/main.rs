@@ -2252,7 +2252,7 @@ mod tests {
 }
 
 /// A fresh, empty directory for one test, under `$TMPDIR` (the build
-/// script points it at `~/.cache/aristotle/tmp`, not the RAM-backed /tmp).
+/// script points it at `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
 #[cfg(test)]
 pub(crate) fn testdir(name: &str) -> PathBuf {
     use std::sync::atomic::AtomicUsize;

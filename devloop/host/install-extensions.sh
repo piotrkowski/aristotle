@@ -6,14 +6,15 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
+. "$REPO/devloop/env.sh"
 KINDLE=${KINDLE_MOUNT:-/run/media/$USER/Kindle}
 # The device accepts exactly one key: the dedicated dev-loop key that
 # devloop/host/ssh_config uses. Create it once with
-#   ssh-keygen -t ed25519 -f ~/.cache/aristotle/ssh/kindle_ed25519
+#   mkdir -p "$ARISTOTLE_CACHE/ssh" && ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
 # or point ARISTOTLE_PUBKEY at another public key.
-PUBKEY=${ARISTOTLE_PUBKEY:-$HOME/.cache/aristotle/ssh/kindle_ed25519.pub}
+PUBKEY=${ARISTOTLE_PUBKEY:-$ARISTOTLE_CACHE/ssh/kindle_ed25519.pub}
 # The reader app's bundle, as tools/build-render.sh device writes it.
-APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/render/aristotle-app-device.tar.gz}
+APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz}
 
 [ -s "$PUBKEY" ] || {
     echo "no public key at $PUBKEY" >&2

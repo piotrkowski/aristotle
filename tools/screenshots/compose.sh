@@ -5,10 +5,9 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
-cache="$HOME/.cache/aristotle"
-export TMPDIR="$cache/tmp"
-export UV_CACHE_DIR="$cache/uv-cache"
-export UV_PROJECT_ENVIRONMENT="$cache/screenshots-venv"
-mkdir -p "$TMPDIR" "$UV_CACHE_DIR"
+. "$here/../../devloop/env.sh"
+export UV_CACHE_DIR="$ARISTOTLE_CACHE/uv-cache"
+export UV_PROJECT_ENVIRONMENT="$ARISTOTLE_CACHE/screenshots-venv"
+mkdir -p "$UV_CACHE_DIR"
 
 exec uv run --locked --project "$here" python -I "$here/compose.py" "${1:-$here/manifest.toml}"

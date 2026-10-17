@@ -7,11 +7,12 @@
 # thirdparty/download.sh, then Cargo links the binary with rust-lld through the
 # repo's .cargo/config.toml (+crt-static).
 #
-# Output: $PLATO_BUILD/out/plato (default PLATO_BUILD: ~/.cache/aristotle/plato-build/main).
+# Output: $PLATO_BUILD/out/plato (default PLATO_BUILD: $ARISTOTLE_CACHE/plato-build/main;
+# ARISTOTLE_CACHE comes from devloop/env.sh).
 # Static C archives, also used by crates/aristotle-render: $PLATO_BUILD/plato/libs.
 #
 # PLATO_TARGET=x86_64-unknown-linux-musl builds the same C libraries for the PC
-# (default PLATO_BUILD: ~/.cache/aristotle/plato-build/host-x86_64), so
+# (default PLATO_BUILD: $ARISTOTLE_CACHE/plato-build/host-x86_64), so
 # aristotle-render can render preview pages on the host with exactly the code
 # that runs on the device. PLATO_LIBS_ONLY=1 stops after the C libraries.
 #
@@ -55,6 +56,7 @@
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
+. "$REPO/devloop/env.sh"
 SUB="$REPO/third_party/plato"
 MUPDF_PATCHES="$REPO/tools/mupdf-patches"
 TARGET=${PLATO_TARGET:-armv7-unknown-linux-musleabihf}
@@ -73,8 +75,8 @@ case $TARGET in
         CMAKE_CPU=x86_64 ;;
     *) echo "unsupported PLATO_TARGET: $TARGET" >&2; exit 1 ;;
 esac
-B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
-TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
+B=${PLATO_BUILD:-$ARISTOTLE_CACHE/plato-build/$DEFAULT_BUILD}
+TOOLS=${ARISTOTLE_TOOLS:-$ARISTOTLE_CACHE/tools}
 JOBS=${JOBS:-2}
 
 MUPDF_FONTS=${MUPDF_FONTS:-latin-greek}
@@ -99,8 +101,7 @@ case $PLATO_DJVU in
 esac
 MUPDF_CONF=$MUPDF_FONTS-$MUPDF_FORMATS
 
-export TMPDIR="$HOME/.cache/aristotle/tmp"
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/aristotle/target-plato}
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ARISTOTLE_CACHE/target-plato}
 export ZIG_GLOBAL_CACHE_DIR="$B/zig-cache"
 export ZIG_LOCAL_CACHE_DIR="$B/zig-cache"
 DL="$TOOLS/downloads"
@@ -374,7 +375,7 @@ fi
 # toolchain variables are overridden on the command line. Each font and
 # format choice gets its own output directory.
 MUPDF_OUT=build/aristotle-$MUPDF_CONF
-if ! done_ "mupdf-$MUPDF_CONF"; then
+if ! done_ "mupdf-$MUPDF_CONF" || [ ! -f "$T/mupdf/$MUPDF_OUT/libmupdf.a" ]; then
     log "mupdf ($MUPDF_CONF)"
     # shellcheck disable=SC2086 # MUPDF_XCFLAGS is a list of flags
     (cd "$T/mupdf" && make generate XCFLAGS="$(echo $MUPDF_XCFLAGS)" \

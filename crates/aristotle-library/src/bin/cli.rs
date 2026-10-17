@@ -24,7 +24,8 @@ commands:
   thumb ID OUT.png                      export a book's thumbnail as PNG
 
 The data directory holds library.json and covers/. Default: $ARISTOTLE_DATA,
-else /mnt/us/.aristotle on the Kindle, else ~/.local/share/aristotle.";
+else /mnt/us/.aristotle on the Kindle, else $XDG_DATA_HOME/aristotle
+($HOME/.local/share/aristotle without XDG_DATA_HOME).";
 
 fn default_data_dir() -> PathBuf {
     if let Some(d) = std::env::var_os("ARISTOTLE_DATA") {

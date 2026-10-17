@@ -19,24 +19,26 @@
 #   host    x86_64-unknown-linux-musl, for preview PNGs on the PC
 #
 # Needs the static C libraries of a tools/build-plato.sh run for the same
-# target: PLATO_BUILD (default ~/.cache/aristotle/plato-build/main for device,
+# target: PLATO_BUILD (default $ARISTOTLE_CACHE/plato-build/main for device,
 # .../host-x86_64 for host; the host one only needs PLATO_LIBS_ONLY=1).
-# OUT defaults to ~/.cache/aristotle/render/<device|host>; the device tarball
-# goes to BUNDLE (default ~/.cache/aristotle/render/aristotle-render-device.tar.gz)
+# OUT defaults to $ARISTOTLE_CACHE/render/<device|host> (ARISTOTLE_CACHE comes
+# from devloop/env.sh); the device tarball goes to BUNDLE (default
+# $ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz)
 # and the reader app's to APP_BUNDLE (.../aristotle-app-device.tar.gz).
 # CARGO_CMD=clippy|test runs that cargo command instead of building.
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
+. "$REPO/devloop/env.sh"
 WHAT=${1:-device}
 case $WHAT in
     device) TARGET=armv7-unknown-linux-musleabihf PFX=arm DEFAULT_BUILD=main ;;
     host) TARGET=x86_64-unknown-linux-musl PFX=x86_64 DEFAULT_BUILD=host-x86_64 ;;
     *) echo "usage: $0 [device|host]" >&2; exit 1 ;;
 esac
-B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
-OUT=${OUT:-$HOME/.cache/aristotle/render/$WHAT}
-TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
+B=${PLATO_BUILD:-$ARISTOTLE_CACHE/plato-build/$DEFAULT_BUILD}
+OUT=${OUT:-$ARISTOTLE_CACHE/render/$WHAT}
+TOOLS=${ARISTOTLE_TOOLS:-$ARISTOTLE_CACHE/tools}
 # Hyphenation pattern sets to ship: Polish, English, Ancient Greek and Latin
 # by default. Plato loads every
 # file present when the first paragraph is hyphenated, so fewer files means a
@@ -56,9 +58,7 @@ if [ ! -f "$B/plato/libs/libmupdf.a" ]; then
     exit 1
 fi
 
-export TMPDIR="$HOME/.cache/aristotle/tmp"
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$HOME/.cache/aristotle/target-render}
-mkdir -p "$TMPDIR"
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ARISTOTLE_CACHE/target-render}
 
 SRC="$REPO/third_party/plato"
 if [ ! -f "$SRC/crates/core/Cargo.toml" ]; then
@@ -220,16 +220,16 @@ du -sh "$OUT/data"
 # upload can never carry a stale binary (it once did). One per binary,
 # because both together unpack to about 60 MB and /var on the device is a
 # 64 MB tmpfs. Unpack streamed:
-#   ssh kindle 'tar -xzf - -C /var/tmp' < ~/.cache/aristotle/render/aristotle-render-device.tar.gz
+#   ssh kindle 'tar -xzf - -C /var/tmp' < "$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz"
 # The reader app's bundle (aristotle/ with the app, data/ and
 # run-aristotle.sh) is meant for the userstore; see docs/reader.md:
-#   ssh kindle 'tar -xzf - -C /mnt/us' < ~/.cache/aristotle/render/aristotle-app-device.tar.gz
+#   ssh kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz"
 if [ "$WHAT" = device ]; then
-    BUNDLE=${BUNDLE:-$HOME/.cache/aristotle/render/aristotle-render-device.tar.gz}
+    BUNDLE=${BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-render-device.tar.gz}
     tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data \
         ./licenses ./SOURCE.txt
     mv -f "$BUNDLE.part" "$BUNDLE"
-    APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/render/aristotle-app-device.tar.gz}
+    APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz}
     cp "$REPO/devloop/kindle/run-aristotle.sh" "$REPO/devloop/kindle/takeover.sh" "$OUT/"
     tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \
         ./aristotle ./data ./run-aristotle.sh ./takeover.sh ./licenses ./SOURCE.txt

@@ -39,8 +39,16 @@ You need Rust through [rustup](https://rustup.rs) with the
 `armv7-unknown-linux-musleabihf` and `x86_64-unknown-linux-musl` targets, and
 for the C libraries curl, tar, xz, openssl, xxd, make, cmake, bash and a host
 C compiler.
-`tools/build-plato.sh` downloads a pinned Zig. Builds and downloads go under
-`~/.cache/aristotle/`; set `CARGO_TARGET_DIR` and `TMPDIR` there too.
+`tools/build-plato.sh` downloads a pinned Zig. Builds and downloads go to the
+cache directory, `$ARISTOTLE_CACHE` (default
+`${XDG_CACHE_HOME:-$HOME/.cache}/aristotle`), which `devloop/env.sh` defines;
+the scripts source it. For your own cargo runs, source it too and set
+`CARGO_TARGET_DIR` there: `/tmp` is a small RAM disk on many hosts.
+
+```sh
+. devloop/env.sh   # ARISTOTLE_CACHE, and TMPDIR inside it
+export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target"
+```
 
 ```sh
 git clone --recurse-submodules https://github.com/piotrkowski/aristotle && cd aristotle

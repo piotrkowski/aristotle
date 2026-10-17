@@ -1,0 +1,21 @@
+#!/bin/sh
+# Stub of glibc's `getent ahostsv4 HOST` for the test, in its output format.
+# FAKE_DNS_DOWN=HOST makes that host fail, as during a DNS hiccup.
+[ "${FAKE_DNS_DOWN:-}" = "$2" ] && exit 2
+case "$2" in
+dash.example.org)
+    echo "203.0.113.7     STREAM dash.example.org"
+    echo "203.0.113.7     DGRAM  "
+    echo "203.0.113.7     RAW    "
+    ;;
+time.example.net)
+    echo "198.51.100.2    STREAM time.example.net"
+    echo "198.51.100.1    STREAM "
+    ;;
+cdn.example.com)
+    echo "192.0.2.44      STREAM cdn.example.com"
+    echo "192.0.2.43      STREAM "
+    echo "2001:db8::1     STREAM "
+    ;;
+*) exit 2 ;;
+esac

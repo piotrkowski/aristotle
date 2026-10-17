@@ -74,7 +74,7 @@ language is one JSON file (`docs/ui-framework.md`, "Adding a language").
 > Aristotle reads **DRM-free** books only.
 
 Installing the device agent writes one file to the root filesystem
-(`/etc/upstart/aristotle.conf`); everything else lives in the user storage and in
+(`/etc/upstart/aristotle-agent.conf`); everything else lives in the user storage and in
 `/var/local`. KUAL removes the agent again.
 
 ## Install
@@ -91,7 +91,7 @@ You build Aristotle on a Linux computer and copy it over the USB cable.
    ```sh
    git clone --recurse-submodules https://github.com/piotrkowski/aristotle && cd aristotle
    PLATO_LIBS_ONLY=1 tools/build-plato.sh
-   tools/build-render.sh device      # ~/.cache/aristotle/render/aristotle-app-device.tar.gz
+   tools/build-render.sh device      # $ARISTOTLE_CACHE/render/aristotle-app-device.tar.gz
    ```
 
 3. **Copy it over.** Create the key the device will accept, set up the USB
@@ -99,8 +99,9 @@ You build Aristotle on a Linux computer and copy it over the USB cable.
    drive and install:
 
    ```sh
-   mkdir -p ~/.cache/aristotle/ssh
-   ssh-keygen -t ed25519 -f ~/.cache/aristotle/ssh/kindle_ed25519
+   . devloop/env.sh                     # sets ARISTOTLE_CACHE, the cache directory
+   mkdir -p "$ARISTOTLE_CACHE/ssh"
+   ssh-keygen -t ed25519 -f "$ARISTOTLE_CACHE/ssh/kindle_ed25519"
    devloop/host/setup-host-net.sh
    devloop/host/install-extensions.sh   # KINDLE_MOUNT if not /run/media/$USER/Kindle
    ```
@@ -151,6 +152,7 @@ the plan.
 - [The reader](docs/reader.md): how Plato's engine is built in, typesetting, opening books, dictionaries, highlights
 - [UI framework](docs/ui-framework.md): the toolkit, e-ink rules, night mode
 - [Library](docs/library.md): formats, metadata, covers, stock Kindle sidecars and clippings
+- [Network](docs/network.md): offline by default, and the scoped Wi-Fi policy
 - [E-ink rendering](docs/eink-rendering.md): how the panel driver behaves and how latency is measured
 - [Stock Kindle vs Aristotle](docs/native-vs-aristotle.md): the measurements
 - [Paperwhite 4 reference](docs/pw4-reference.md): hardware, kernel and stock userspace

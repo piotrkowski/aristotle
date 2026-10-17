@@ -30,6 +30,16 @@ GUI=lab126_gui
 # Background services that only serve the stock UI or Amazon's cloud.
 # Same list KOReader stops to reclaim RAM, plus telemetry.
 EXTRA="stored todo tmd rcm archive scanner otav3 otaupd dmld fastmetrics clickstream_logging perfd"
+# The agent's state directory, where its watchdog looks for the takeover flag.
+# Agents installed before the project's rename use /var/local/aristotle until
+# the device has run agent/migrate.sh; drop that fallback once none does.
+AGENT_DIRS="/var/local/aristotle /var/local/aristotle"
+agent_dir() {
+    for d in $AGENT_DIRS; do
+        [ -x "$d/boot.sh" ] && { echo "$d"; return; }
+    done
+    echo /var/local/aristotle
+}
 # Processes frozen by `pause`: everything that would draw over us.
 FROZEN="awesome cvm AaMenuApplication KindleContentDownloadManagerApplication"
 
@@ -47,8 +57,9 @@ state() {
 case "${1:-status}" in
 start)
     mem
-    # Tell the aristotle agent's watchdog that the stock GUI is down on purpose.
-    mkdir -p /var/local/aristotle && touch /var/local/aristotle/takeover
+    # Tell the agent's watchdog that the stock GUI is down on purpose.
+    dir=$(agent_dir)
+    mkdir -p "$dir" && touch "$dir/takeover"
     stop "$GUI" > /dev/null 2>&1
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
@@ -66,7 +77,9 @@ start)
     mem
     ;;
 stop)
-    rm -f /var/local/aristotle/takeover
+    for d in $AGENT_DIRS; do
+        rm -f "$d/takeover"
+    done
     for job in $EXTRA; do
         start "$job" > /dev/null 2>&1
     done

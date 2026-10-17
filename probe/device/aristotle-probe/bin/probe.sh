@@ -104,4 +104,4 @@ printf 'complete\n' > "$OUT/COMPLETE"
 mv "$OUT" "$OUT_ROOT/$STAMP"
 printf '%s\n' "$STAMP" > "$OUT_ROOT/LATEST"
 sync
-eips 0 0 "aristotle probe done: $STAMP     " > /dev/null 2>&1
+eips 0 0 "aristotle probe done: $STAMP   " > /dev/null 2>&1

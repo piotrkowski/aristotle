@@ -1,0 +1,13 @@
+# Allowlist for the test: one host[:port][/udp] per line.
+dash.example.org
+dash.example.org:8080   # the same host on a second port
+192.168.1.10:8080
+time.example.net:123/udp
+cdn.example.com:443/tcp
+
+# Rejected:
+bad_host.example.org
+-x.example.org
+dash.example.org:http
+dash.example.org:70000
+nothing.example.invalid

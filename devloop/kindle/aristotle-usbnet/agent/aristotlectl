@@ -1,9 +1,12 @@
 #!/bin/sh
-# Remote control for the aristotle agent (run over SSH as root).
+# Remote control for the Aristotle agent (run over SSH as root).
 #   aristotlectl status            agent, USB mode, network, stock GUI, last log lines
 #   aristotlectl mode net          USB network + SSH (default)
 #   aristotlectl mode storage [N]  USB drive mode for N minutes (default 10), then
-#                                back to net automatically. SSH drops meanwhile.
+#                                  back to net automatically. SSH drops meanwhile.
+#   aristotlectl net off|scoped    Wi-Fi policy: off (default, stock firewall) or
+#                                  only the hosts in /var/local/aristotle/net-allow
+#   aristotlectl net status        mode, allowed addresses, rule counters
 #   aristotlectl takeover on|off   tell the watchdog the stock GUI is down on purpose
 #   aristotlectl gui-restart       restart the stock GUI now
 #   aristotlectl log [N]           last N log lines (default 40)
@@ -13,8 +16,9 @@ S=/var/local/aristotle
 
 case "${1:-status}" in
 status)
-    initctl status aristotle 2> /dev/null || echo "aristotle job not installed"
+    initctl status aristotle-agent 2> /dev/null || echo "aristotle-agent job not installed"
     printf 'usb-mode: %s\n' "$(cat "$S/usb-mode" 2> /dev/null || echo net)"
+    printf 'net: %s\n' "$(cat "$S/net-mode" 2> /dev/null || echo off)"
     printf 'takeover: %s\n' "$([ -e "$S/takeover" ] && echo on || echo off)"
     printf 'stock GUI: cvm %s, Xorg %s\n' \
         "$(pgrep -f /usr/java/bin/cvm > /dev/null && echo up || echo down)" \
@@ -29,6 +33,16 @@ mode)
     *) echo "usage: aristotlectl mode net|storage [MINUTES]" >&2; exit 2 ;;
     esac
     echo "requested; the agent applies it within 15 s"
+    ;;
+net)
+    case "${2:-status}" in
+    off | scoped)
+        echo "$2" > "$S/net-mode"
+        sh "$S/net.sh" apply && sh "$S/net.sh" status
+        ;;
+    status) sh "$S/net.sh" status ;;
+    *) echo "usage: aristotlectl net off|scoped|status" >&2; exit 2 ;;
+    esac
     ;;
 takeover)
     case "${2:-}" in
@@ -49,7 +63,7 @@ reboot)
     reboot
     ;;
 *)
-    sed -n '2,12p' "$0"
+    sed -n '2,13p' "$0"
     exit 2
     ;;
 esac

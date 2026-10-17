@@ -13,17 +13,18 @@ tools/screenshots/compose.sh
 ```
 
 The wrapper keeps uv's cache, the virtualenv and `TMPDIR` under
-`~/.cache/aristotle/`, and runs against the pinned `uv.lock`.
+the cache directory, `$ARISTOTLE_CACHE` (`devloop/env.sh`), and runs against the pinned `uv.lock`.
 
 ## Inputs
 
 `manifest.toml` lists every output and its captures. Relative input paths
-resolve against `base` (default `~/.cache/aristotle/ui-preview`); paths may use
+resolve against `base` (default `$ARISTOTLE_CACHE/ui-preview`); paths may use
 `~` and `$VARS`. To use device captures, put them in one directory with the
 same relative names and point `SCREENSHOTS_BASE` at it:
 
 ```sh
-SCREENSHOTS_BASE=~/.cache/aristotle/screens/readme tools/screenshots/compose.sh
+. devloop/env.sh
+SCREENSHOTS_BASE="$ARISTOTLE_CACHE/screens/readme" tools/screenshots/compose.sh
 ```
 
 or edit an `inputs` entry to an absolute path. Each capture is checked for size
