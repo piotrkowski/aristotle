@@ -55,6 +55,8 @@ impl Clipping {
             position: None,
             created: self.added.clone(),
             source: "kindle-clippings".into(),
+            chapter: None,
+            note: None,
         }
     }
 }

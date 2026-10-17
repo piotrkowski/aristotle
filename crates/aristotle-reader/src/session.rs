@@ -13,8 +13,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use aristotle_library::index::AnnotationKind;
 use aristotle_library::{BookRecord, Library, Progress};
-use aristotle_render::book::{Book, Engine};
+use aristotle_render::book::{Book, Engine, Link, Position, Word};
 use aristotle_render::page::{Chrome, Page};
 use aristotle_render::plato_core::anyhow::{format_err, Context, Error};
 use aristotle_render::style::Style;
@@ -43,6 +44,11 @@ pub struct Session {
     next_of: HashMap<usize, Option<usize>>,
     prev_of: HashMap<usize, Option<usize>>,
     paginator: Option<Paginator>,
+    /// Highlights, bookmarks and reading speed drawn on pages.
+    deco: Deco,
+    /// Words and links of the last page asked for.
+    words: Option<(usize, Rc<Vec<Word>>)>,
+    links: Option<(usize, Rc<Vec<Link>>)>,
 }
 
 /// What the timing log reports about opening a book.
@@ -67,6 +73,11 @@ pub struct Source {
     pub data_dir: PathBuf,
     pub mobi_cache: PathBuf,
     pub saved: Option<Progress>,
+    /// Highlights and bookmarks made here, as saved positions; resolved
+    /// once the book is open, so the first page already shows them.
+    pub marks: Vec<(Position, Position)>,
+    pub bookmarks: Vec<Position>,
+    pub secs_per_page: f32,
     /// A page start to open at instead of placing `saved`: the location of
     /// a snapshot made for exactly this progress, so the book opens on the
     /// page the snapshot shows, whatever rounding the locator went through.
@@ -100,6 +111,15 @@ impl Source {
             data_dir: lib.data_dir().to_path_buf(),
             mobi_cache: mobi_cache.to_path_buf(),
             saved: rec.progress.clone(),
+            marks: crate::marks::ours(rec, AnnotationKind::Highlight)
+                .into_iter()
+                .map(|(_, s, e)| (s, e))
+                .collect(),
+            bookmarks: crate::marks::ours(rec, AnnotationKind::Bookmark)
+                .into_iter()
+                .map(|(_, s, _)| s)
+                .collect(),
+            secs_per_page: crate::speed::DEFAULT_SECS_PER_PAGE,
             exact: None,
             paginate: true,
             cancel: None,
@@ -120,6 +140,7 @@ pub struct Prepared {
     next_of: HashMap<usize, Option<usize>>,
     prev_of: HashMap<usize, Option<usize>>,
     paginator: Option<Paginator>,
+    deco: Deco,
     pub times: OpenTimes,
 }
 
@@ -189,7 +210,28 @@ impl Session {
         let t_place = t.elapsed();
         cancelled()?;
         let t = Instant::now();
-        let mut pages = vec![(current, book.render_location(current, &mut chrome)?)];
+        let deco = Deco {
+            marks: src
+                .marks
+                .iter()
+                .filter_map(|(s, e)| Some((book.location_of(s)?, book.location_of(e)?)))
+                .collect(),
+            bookmarks: src
+                .bookmarks
+                .iter()
+                .filter_map(|p| book.location_of(p))
+                .collect(),
+            secs_per_page: src.secs_per_page,
+        };
+        let first_next = if neighbours {
+            book.next_page(current)
+        } else {
+            None
+        };
+        let mut pages = vec![(
+            current,
+            render_page(&mut book, &mut chrome, &deco, current, first_next)?,
+        )];
         let t_render = t.elapsed();
         cancelled()?;
         let t = Instant::now();
@@ -200,7 +242,12 @@ impl Session {
             next_of.insert(current, next);
             prev_of.insert(current, prev);
             for loc in [next, prev].into_iter().flatten() {
-                match book.render_location(loc, &mut chrome) {
+                let after = if Some(loc) == next {
+                    None
+                } else {
+                    Some(current)
+                };
+                match render_page(&mut book, &mut chrome, &deco, loc, after) {
                     Ok(page) => pages.push((loc, page)),
                     Err(e) => eprintln!("aristotle: prerender: {e:#}"),
                 }
@@ -216,6 +263,7 @@ impl Session {
             next_of,
             prev_of,
             paginator,
+            deco,
             times: OpenTimes {
                 open: t_open,
                 place: t_place,
@@ -248,6 +296,9 @@ impl Session {
             next_of: p.next_of,
             prev_of: p.prev_of,
             paginator: p.paginator,
+            deco: p.deco,
+            words: None,
+            links: None,
         })
     }
 
@@ -312,7 +363,14 @@ impl Session {
             self.pages.push(entry);
             return Ok(page);
         }
-        let page = Rc::new(self.book.render_location(location, &mut self.chrome)?);
+        let next = self.neighbor(location, Turn::Forward);
+        let page = Rc::new(render_page(
+            &mut self.book,
+            &mut self.chrome,
+            &self.deco,
+            location,
+            next,
+        )?);
         if self.pages.len() >= KEEP_PAGES {
             self.pages.remove(0);
         }
@@ -393,6 +451,8 @@ impl Session {
         self.next_of.clear();
         self.prev_of.clear();
         self.paginator = None;
+        self.words = None;
+        self.links = None;
         self.load_pagination();
         let loc = self.book.location_of(&here).unwrap_or(0);
         self.current = self
@@ -421,6 +481,174 @@ impl Session {
             _ => format!("{:.0}%", (fraction * 100.0).floor()),
         };
         (chapter, page, fraction)
+    }
+
+    // ------------------------------------------------ reading interactions
+
+    pub fn book(&mut self) -> &mut Book {
+        &mut self.book
+    }
+
+    /// The words of the page starting at `location` (cached for the last
+    /// page asked).
+    pub fn words(&mut self, location: usize) -> Rc<Vec<Word>> {
+        match &self.words {
+            Some((l, w)) if *l == location => w.clone(),
+            _ => {
+                let w = Rc::new(self.book.words(location));
+                self.words = Some((location, w.clone()));
+                w
+            }
+        }
+    }
+
+    pub fn links(&mut self, location: usize) -> Rc<Vec<Link>> {
+        match &self.links {
+            Some((l, w)) if *l == location => w.clone(),
+            _ => {
+                let w = Rc::new(self.book.links(location));
+                self.links = Some((location, w.clone()));
+                w
+            }
+        }
+    }
+
+    /// New highlights and bookmarks: rendered pages are redrawn on demand.
+    pub fn set_marks(&mut self, marks: Vec<(usize, usize)>, bookmarks: Vec<usize>) {
+        if marks != self.deco.marks || bookmarks != self.deco.bookmarks {
+            self.deco.marks = marks;
+            self.deco.bookmarks = bookmarks;
+            self.pages.clear();
+        }
+    }
+
+    pub fn set_speed(&mut self, secs_per_page: f32) {
+        self.deco.secs_per_page = secs_per_page;
+    }
+
+    /// Whether the page starting at `location` holds a bookmark.
+    pub fn bookmarked(&mut self, location: usize) -> Option<usize> {
+        let next = self.neighbor(location, Turn::Forward);
+        self.deco.bookmark_on(location, next)
+    }
+}
+
+/// What is drawn on a page besides the book: the progress line, the
+/// highlights and the bookmark ribbon.
+#[derive(Clone, Debug, Default)]
+pub struct Deco {
+    /// Highlights as Plato location ranges (first word to last word).
+    pub marks: Vec<(usize, usize)>,
+    /// Bookmarks as Plato locations.
+    pub bookmarks: Vec<usize>,
+    pub secs_per_page: f32,
+}
+
+impl Deco {
+    fn bookmark_on(&self, location: usize, next: Option<usize>) -> Option<usize> {
+        let next = next.unwrap_or(usize::MAX);
+        self.bookmarks
+            .iter()
+            .copied()
+            .find(|&b| b >= location && b < next)
+    }
+}
+
+/// Render the page at `location` with the decorations. `next` is the next
+/// page's start if known (bookmarks and the minutes estimate use it).
+fn render_page(
+    book: &mut Book,
+    chrome: &mut Chrome,
+    deco: &Deco,
+    location: usize,
+    next: Option<usize>,
+) -> Result<Page, Error> {
+    let footer = progress_line(book, deco.secs_per_page, location, next);
+    let mut page = book.render_location_with(location, chrome, footer)?;
+    if !deco.marks.is_empty() {
+        let words = book.words(location);
+        let marked = |w: &Word| {
+            deco.marks
+                .iter()
+                .any(|&(s, e)| w.offset >= s && w.offset <= e)
+        };
+        let mut i = 0;
+        while i < words.len() {
+            if !marked(&words[i]) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i + 1 < words.len() && marked(&words[i + 1]) {
+                i += 1;
+            }
+            for b in crate::selection::line_boxes(&words, start, i) {
+                darken(&mut page, &crate::selection::marker_box(&b));
+            }
+            i += 1;
+        }
+    }
+    if deco.bookmark_on(location, next).is_some() {
+        ribbon(&mut page);
+    }
+    Ok(page)
+}
+
+/// "Rozdz. 3/12 · 7 min": the chapter and the minutes left in it at the
+/// measured speed.
+fn progress_line(
+    book: &mut Book,
+    secs_per_page: f32,
+    location: usize,
+    next: Option<usize>,
+) -> Option<String> {
+    let ch = book.chapter_info(location)?;
+    let pages_left = match book.pagination() {
+        Some(pages) => {
+            let here = pages.partition_point(|&p| p <= location);
+            let end = pages.partition_point(|&p| p < ch.end);
+            end.saturating_sub(here.saturating_sub(1)) as f32
+        }
+        None => {
+            // Bytes left over bytes per page, from this page's size.
+            let per_page = next.map_or(2000, |n| n.saturating_sub(location)).max(400) as f32;
+            (ch.end.saturating_sub(location)) as f32 / per_page
+        }
+    };
+    Some(crate::speed::progress_line(
+        ch.number,
+        ch.count,
+        pages_left,
+        secs_per_page,
+    ))
+}
+
+/// Multiply the pixels of a line of marked words by 0.75: a
+/// light gray marker that keeps the text black.
+fn darken(page: &mut Page, r: &aristotle_render::book::Bounds) {
+    let (w, h) = (page.width as i32, page.height as i32);
+    let x0 = r.x0.clamp(0, w);
+    let x1 = r.x1.clamp(0, w);
+    for y in r.y0.clamp(0, h)..r.y1.clamp(0, h) {
+        let row = y as usize * page.stride;
+        for p in &mut page.data[row + x0 as usize..row + x1 as usize] {
+            *p = (*p as u16 * 3 / 4) as u8;
+        }
+    }
+}
+
+/// A black bookmark ribbon in the top right corner, with a notch.
+fn ribbon(page: &mut Page) {
+    let (x0, w, h) = (page.width as i32 - 96, 44, 84);
+    for y in 0..h {
+        let notch = (y - (h - 18)).max(0); // the V cut at the bottom
+        for x in x0..x0 + w {
+            let dx = (x - x0 - w / 2).abs();
+            if dx < notch {
+                continue;
+            }
+            page.data[y as usize * page.stride + x as usize] = 0;
+        }
     }
 }
 

@@ -17,6 +17,7 @@ Sources are marked as in the rest of the docs: **[fw]** read from firmware 5.13.
 | `index` | The persistent records: metadata, progress, settings, annotations |
 | `query` | Sort, filter and search |
 | `clippings`, `sidecar` | `My Clippings.txt`, stock KRDS sidecars, KOReader `metadata.*.lua` |
+| `export` | Writing highlights: `My Clippings.txt` (stock template) and Markdown per book |
 | `encoding`, `text`, `id` | Legacy encodings, diacritic folding, partial MD5 |
 
 Dependencies: `serde`, `serde_json`, `roxmltree`, `miniz_oxide`, `jpeg-decoder` (without its rayon feature), `png` and `md-5`. None of them builds C code.
@@ -311,6 +312,15 @@ Firmware 5.13.6 ships no Polish clippings bundle (en, en_GB, de, es, fr, it, ja,
 Tests cover the en_GB, en_US, de, fr, nl and ru firmware templates and a plausible Polish form. Against the owner's real 2,490-line file (en_GB), it parses all 498 entries with none rejected **[host]**.
 
 `aristotle-library-cli clippings FILE --import` attaches clippings to books by folded title, then by prefix, with the author breaking ties. Exact duplicates are skipped, so importing twice is harmless. Clippings carry no reading position, so they never set progress.
+
+## Export
+
+`export` writes the highlights made in the reader (annotations with source `aristotle`; see `docs/reader.md`, "Highlights, bookmarks and export"):
+
+- **`My Clippings.txt`**, appended in the template above with English labels ("Your Highlight at location 60-63 | Added on Saturday, 17 October 2026 21:05:09"), CRLF, a BOM only when the file is created. Only entries whose title and text the file does not hold yet are written, so exporting after every highlight is idempotent. A highlight's note is a "Your Note" entry at the highlight's first location, written before it: the owner's notes pipeline attaches a pending note to the next highlight starting there. Bookmarks are not exported. Entries round-trip through `clippings::parse` (tested).
+- **Markdown**, one file per book (`<Title> — <Author>.md`, the characters Obsidian and FAT reject removed), rewritten each time: front matter (`tytuł`, `autor`, `źródło: Aristotle`, `tags`), the title, the author, and per highlight a quote with chapter, `lok.` and date, and the note if any, as the owner's Obsidian notes are laid out.
+
+Annotations carry two fields for this besides those above: `chapter` (the chapter title at the start) and `note`.
 
 ## CLI
 

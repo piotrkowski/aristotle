@@ -145,6 +145,9 @@ pub struct Folio {
     pub pages: Option<usize>,
     /// Position in the book, 0.0 to 1.0.
     pub progress: f32,
+    /// Shown at the left of the footer: the reader's progress line
+    /// ("Rozdz. 3/12 · 7 min").
+    pub left: Option<String>,
 }
 
 /// The slim header and footer ("chrome") drawn by Aristotle itself rather
@@ -214,6 +217,18 @@ impl Chrome {
         let x = (width - plan.width) / 2;
         self.regular
             .render(page, color, &plan, Point::new(x, self.footer_baseline));
+
+        if let Some(left) = folio.left.as_deref().filter(|l| !l.is_empty()) {
+            let mut plan = self.regular.plan(left, None, None);
+            // Keep clear of the centred page number.
+            self.regular.crop_right(&mut plan, max_width / 2 - 120);
+            self.regular.render(
+                page,
+                color,
+                &plan,
+                Point::new(self.margin, self.footer_baseline),
+            );
+        }
 
         let percent = format!("{}%", (folio.progress * 100.0).floor() as u32);
         let plan = self.regular.plan(&percent, None, None);

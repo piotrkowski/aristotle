@@ -19,7 +19,7 @@ aristotle-screens  aristotle-render  aristotle-dict  aristotle-library  aristotl
 aristotle-ui  aristotle-i18n                │                │               │
    └─────────────────┴──────────┬───────────┴────────────────┴───────────────┘
                           aristotle-core
-dev and test: aristotle-observe, aristotle-pen, aristotle-devtools      host: tools/press (Python)
+dev and test: aristotle-observe, aristotle-pen, aristotle-devtools
 ```
 
 | Crate | Responsibility |
@@ -37,7 +37,7 @@ dev and test: aristotle-observe, aristotle-pen, aristotle-devtools      host: to
 
 **Two workspaces, on purpose.** The root workspace holds the pure-Rust crates, so `cargo test` works on a fresh clone. A second workspace holds `aristotle-render` and the app, because they need Plato's patched sources and C libraries, built by `tools/build-plato.sh`. `tools/check.sh` runs fmt, clippy and the tests in both and checks that shared dependencies agree.
 
-**Size.** Cargo features trim the binary: formats (`render/djvu` is off), MuPDF's font set, dictionary formats, device profiles, and app modules (`dict`, `notes`, `newspaper`). Night mode and languages aren't features: they cost a few kilobytes.
+**Size.** Cargo features trim the binary: formats (`render/djvu` is off), MuPDF's font set, dictionary formats, device profiles, and app modules (`dict`, `notes`). Night mode and languages aren't features: they cost a few kilobytes.
 
 ## Extension points
 
@@ -45,7 +45,7 @@ dev and test: aristotle-observe, aristotle-pen, aristotle-devtools      host: to
 | --- | --- |
 | **Document engines** | `Engine { id, accepts(Format), open(path, &Style, &Cx) -> Box<dyn Layout> }`. `Layout` locates a position, steps pages, renders a page, and reports the table of contents, position and capabilities (lazy or eager pagination, word boxes, links). A `Converter` turns one format into another, e.g. MOBI into EPUB. `render::ENGINES` lists the compiled-in engines in order of preference. |
 | **Dictionaries** | `Dictionary { info() -> {id, name, from, to}, lookup(word) -> Vec<Entry> }`, plus `DictFormat { discover(dir) }`. The router orders results by the book's language. |
-| **Content sources** | The device is offline, so a source is a file protocol, not code. A producer on the computer (the newspaper, a future `aristotle push`, Calibre's folder driver) writes `documents/<Name>/.aristotle-source.json` with `{kind: periodical, series or inbox; title; keep}`. The library shows that folder as a collection, with retention for periodicals. Importers bring in metadata from Kindle sidecars, clippings and Calibre. |
+| **Content sources** | The device is offline, so a source is a file protocol, not code. Anything on the computer (Calibre's folder driver, a script, a future `aristotle push`) copies books into `documents/<Name>/` over USB; a folder may carry `.aristotle-source.json` with `{kind: periodical, series or inbox; title; keep}`, which the library will show as a collection with retention. [Fun use cases](fun-use-cases.md) has examples. |
 | **Screens and apps** | `Screen { build(&mut Cx) -> Tree, on_event(UiEvent) -> Nav, on_touch_raw(...) -> Option<Nav>, tick, transition() }`. `Nav` is `Stay`, `Push`, `Pop`, `Replace` or `Quit`. An `APPS` registry (id, title, icon, constructor) builds the apps menu. Each screen has a typed action enum. |
 | **Settings** | `Setting<T> { key, label, section, default, kind, scope, effect }`, where `kind` is a toggle, choice, steps or slider; `scope` is global or per book; and `effect` says whether the change is live, needs a re-layout, or a restart. The settings screen and the reader menu are rendered from the `SETTINGS` registry. Values are stored as a JSON map. |
 | **Themes** | Data, not a trait: `Theme { palette (day or night), fonts, scale }`. Night mode is a palette plus an inversion method (software, or the EPDC's hardware inversion). |

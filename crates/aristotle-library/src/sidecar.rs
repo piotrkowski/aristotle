@@ -262,6 +262,8 @@ fn collect_annotations(values: &[Value], out: &mut Vec<Annotation>) {
             position: Some((start.to_string(), end.to_string())),
             created,
             source: "kindle-sidecar".into(),
+            chapter: None,
+            note: None,
         });
     }
 }

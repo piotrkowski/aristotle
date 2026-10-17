@@ -32,6 +32,8 @@ use zip::ZipArchive;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Spine {
     pub sizes: Vec<usize>,
+    /// Archive path of each item, as Plato resolves links against it.
+    pub paths: Vec<String>,
 }
 
 impl Spine {
@@ -64,6 +66,7 @@ impl Spine {
             .find("spine")
             .ok_or_else(|| format_err!("the spine is missing"))?;
         let mut sizes = Vec::new();
+        let mut paths = Vec::new();
         for child in spine.children() {
             let Some(href) = child
                 .attribute("idref")
@@ -75,17 +78,28 @@ impl Spine {
             let href = decode_entities(href);
             let href = percent_decode_str(&href).decode_utf8_lossy();
             let path = parent.join::<&str>(href.as_ref());
-            if let Some(size) = path
-                .to_str()
-                .and_then(|p| zip.by_name(p).ok().map(|f| f.size() as usize))
-            {
+            let Some(name) = path.to_str() else {
+                continue;
+            };
+            if let Some(size) = zip.by_name(name).ok().map(|f| f.size() as usize) {
                 sizes.push(size);
+                paths.push(name.to_string());
             }
         }
         if sizes.is_empty() {
             return Err(format_err!("the spine is empty"));
         }
-        Ok(Spine { sizes })
+        Ok(Spine { sizes, paths })
+    }
+
+    /// Plato location where spine item `item` starts.
+    pub fn start(&self, item: usize) -> Option<usize> {
+        (item < self.sizes.len()).then(|| self.sizes[..item].iter().sum())
+    }
+
+    /// Spine item of an archive path.
+    pub fn item_of(&self, path: &str) -> Option<usize> {
+        self.paths.iter().position(|p| p == path)
     }
 
     /// Total size: Plato's location space is `0..total()`.
@@ -243,6 +257,7 @@ mod tests {
     fn spine_coordinates_round_trip() {
         let s = Spine {
             sizes: vec![100, 50, 200],
+            paths: vec!["a".into(), "b".into(), "c".into()],
         };
         assert_eq!(s.total(), 350);
         assert_eq!(s.location(0, 0), Some(0));

@@ -29,6 +29,7 @@ Early bring-up. Our Rust code draws on the panel and reads touch on the real dev
 | --- | --- |
 | `AGENTS.md` | Working rules and non-obvious device facts for contributors and coding agents (`CLAUDE.md` links here) |
 | `docs/architecture.md` | Crates, extension points, languages, and the migration plan |
+| `docs/fun-use-cases.md` | Things to do with an open Kindle: a daily newspaper, web pages, highlights in your notes, dictionaries |
 | `docs/pw4-reference.md` | Detailed hardware, kernel and stock-userspace reference |
 | `docs/eink-rendering.md` | How the EPDC driver behaves, the display-thread design, and how stroke latency is measured |
 | `docs/library.md` | Book library: formats, metadata precedence, index, cover pipeline, stock Kindle sidecars and clippings |

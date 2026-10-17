@@ -16,11 +16,22 @@ path = "src/main.rs"
 aristotle-hal = { path = "../aristotle-hal" }
 aristotle-library = { path = "../aristotle-library" }
 aristotle-render = { path = "../aristotle-render" }
-# The UI font is compiled in; the preview binary and its PNG encoder are not.
-aristotle-ui = { path = "../aristotle-ui", default-features = false, features = ["embedded-fonts"] }
+# Neither the embedded UI font (the app maps Literata from the renderer's
+# data directory) nor the preview binary and its PNG encoder.
+aristotle-ui = { path = "../aristotle-ui", default-features = false }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Page snapshots (src/snapshot.rs). Same version and features as zip's, so
 # it adds no new C build.
 zstd = { version = "0.13", default-features = false }
+# Same versions as plato-core: dictzip chunks and Unicode folding for the
+# dictionary.
+flate2 = "1.1.5"
+unicode-normalization = "0.1.25"
+# PNGs of the host preview (`--preview`); plato-core links the same version.
+png = "0.18"
+
+[dev-dependencies]
+# Same version as plato-core; the export test runs the owner's parser regexes.
+regex = "1.12.2"
