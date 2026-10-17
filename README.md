@@ -30,8 +30,8 @@ and no network code in the reader; books arrive over USB.
 **Status: alpha.** It runs on one device, the Paperwhite 4 (2018) on firmware
 5.13.x. The stock system stays installed underneath: Aristotle stops the stock
 interface while it runs, and the stock interface comes back when you quit or
-reboot. The interface is in Polish for now; English comes with the translation
-catalogs.
+reboot. The interface is in English, or Polish (Settings, Language); adding a
+language is one JSON file (`docs/ui-framework.md`, "Adding a language").
 
 ## Features
 
@@ -117,7 +117,7 @@ You build Aristotle on a Linux computer and copy it over the USB cable.
    ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh
    ```
 
-   To quit, hold the "Biblioteka" title for a second. The stock interface comes
+   To quit, hold the "Library" title for a second. The stock interface comes
    back after its boot splash.
 
 **Uninstall:** KUAL › Aristotle › Remove agent, then delete `aristotle/`,

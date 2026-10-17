@@ -229,7 +229,7 @@ ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh     
 ssh -F devloop/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh --turn-mode 7
 ```
 
-The app bundle (`aristotle/` with the binary, `data/`, `run-aristotle.sh` and `takeover.sh`) goes to the userstore: the binary was 29.5 MB when this was decided (8.4 MB now, see [Size budget](#size-budget)), and the 64 MB `/var/tmp` tmpfs is better left to the renderer CLI and logs. The app maps its UI font from `data/serif/`, so it needs the data directory next to it. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `pause`/`resume` (SIGSTOP) is not used: on our firmware the frozen framework was killed by Amazon's watchdog and the GUI did not come back without a reboot. The script ignores hangups, logs stderr to `/var/tmp/aristotle.log` and prints it on exit. Other options: `--library DIR`, `--root DIR`, `--data DIR`, `--no-scan`, `--open TITLE` (open a book at start, for scenarios), `--dict DIR` (dictionary folders), `--index-dicts` (build dictionary indexes and exit), `--test-clippings PATH` (export highlights there instead of the user's `My Clippings.txt`; scenarios), `--preview OUT BOOK` (host), `--night-method software|hardware`.
+The app bundle (`aristotle/` with the binary, `data/`, `run-aristotle.sh` and `takeover.sh`) goes to the userstore: the binary was 29.5 MB when this was decided (8.4 MB now, see [Size budget](#size-budget)), and the 64 MB `/var/tmp` tmpfs is better left to the renderer CLI and logs. The app maps its UI font from `data/serif/`, so it needs the data directory next to it. `run-aristotle.sh` stops the stock GUI with `takeover.sh start`, runs the app, and restarts the GUI with `takeover.sh stop` (30 to 60 s of boot splash). `pause`/`resume` (SIGSTOP) is not used: on our firmware the frozen framework was killed by Amazon's watchdog and the GUI did not come back without a reboot. The script ignores hangups, logs stderr to `/var/tmp/aristotle.log` and prints it on exit. Other options: `--library DIR`, `--root DIR`, `--data DIR`, `--no-scan`, `--open TITLE` (open a book at start, for scenarios), `--dict DIR` (dictionary folders), `--index-dicts` (build dictionary indexes and exit), `--test-clippings PATH` (export highlights there instead of the user's `My Clippings.txt`; scenarios), `--preview OUT BOOK` (host), `--night-method software|hardware`, `--lang en|pl` (the UI language, stored like the settings screen's choice; with `--preview`, the language of the preview).
 
 ### Timing log
 
@@ -265,20 +265,20 @@ In the PW4 emulator, with the stock GUI left running, three test books (two EPUB
 
 ## Reading interactions
 
-Selecting words, the dictionary, footnotes, highlights and bookmarks, the progress line, the contents and "go to". All of it is wired into the app (`reading.rs`); the host preview drives the same code (see [Preview and device scenario](#preview-and-device-scenario)). The labels are Polish.
+Selecting words, the dictionary, footnotes, highlights and bookmarks, the progress line, the contents and "go to". All of it is wired into the app (`reading.rs`); the host preview drives the same code (see [Preview and device scenario](#preview-and-device-scenario)). The labels are in the UI language (English by default; `docs/ui-framework.md`, "Languages").
 
 ### Gestures
 
 | Gesture | Result |
 | --- | --- |
 | Hold a word (500 ms) | The word is selected and its definition pops up (one update) |
-| Hold, then drag | The selection grows from the held word, both ways, with handles (A2 while the finger moves); on release: Zakreśl, Słownik, Tłumacz, Anuluj |
-| Hold a highlighted word | The definition, with "Usuń zakreślenie" |
-| Tap a footnote marker | The note in a popup; "Przejdź do przypisu" jumps (secondary); a plain link jumps |
+| Hold, then drag | The selection grows from the held word, both ways, with handles (A2 while the finger moves); on release: Highlight, Dictionary, Translate, Cancel |
+| Hold a highlighted word | The definition, with "Remove highlight" |
+| Tap a footnote marker | The note in a popup; "Go to the note" jumps (secondary); a plain link jumps |
 | Tap the top right corner (10 mm) | Bookmark on or off: a black ribbon, DU |
-| Tap outside a popup, "Zamknij", "Anuluj" | The page again, one full mode-9 update |
+| Tap outside a popup, "Close", "Cancel" | The page again, one full mode-9 update |
 | Swipe left or right on a popup or list | Its next or previous page |
-| Menu → Spis treści, Zakreślenia, Przejdź do… | A row under the menu's top bar |
+| Menu → Contents, Highlights, Go to… | A row under the menu's top bar |
 
 Pages turn on release, so a hold finds the page it started on, and the selection and the popup come in one update. Footnote markers and other links (enlarged to 6 mm) and the bookmark corner are "quiet": a tap there is resolved instead of turning. While a book opens from its snapshot ([Opening a book](#opening-a-book)), holds, drags, link and corner taps do nothing (no wait, nothing on the panel); turns between the snapshot's pages, the menu and "Biblioteka" work, and the menu's reading row waits for the book like the menu's settings. In night mode everything here follows the night palette: the UI inverts its pixels (or the EPDC does, `--night-method hardware`), selections included.
 
@@ -314,11 +314,11 @@ Building grc-en peaks at about 30 MB (12 bytes per record plus the keys); on the
 
 **Which dictionary.** Greek script means Ancient Greek; otherwise the book's language (`dc:language`). For a language the order is its own dictionaries with Polish targets first (grc-pl, then grc-en), then, for Latin-script words, the other Latin-script dictionaries (Polish, Latin, English: Latin phrases turn up in Polish books). The dictionary chosen in the switcher is remembered per language (`dictionaries.json`) and tried first next time.
 
-**Lookup** (`Dictionaries::lookup`): (1) the word and its listed forms, in order; (2) if a later dictionary of the same language knows the form, its headword is looked up in the earlier ones, so "λόγου", which grc-pl does not list, shows grc-pl's λόγος (the Greek-English tables act as a lemmatiser for the Greek-Polish dictionary); (3) suffix rules (`dict/lemma.rs`) for Polish, Greek (nominative, first person, -ομαι) and Latin, every guess checked against the dictionary and marked "≈ forma podstawowa (zgadnięta)"; (4) otherwise the closest headwords as tappable suggestions. Measured on those dictionaries on the host, warm: 0.03 to 1.3 ms per lookup (`real_dictionaries` test, ignored by default); the first lookup after start 9 to 13 ms.
+**Lookup** (`Dictionaries::lookup`): (1) the word and its listed forms, in order; (2) if a later dictionary of the same language knows the form, its headword is looked up in the earlier ones, so "λόγου", which grc-pl does not list, shows grc-pl's λόγος (the Greek-English tables act as a lemmatiser for the Greek-Polish dictionary); (3) suffix rules (`dict/lemma.rs`) for Polish, Greek (nominative, first person, -ομαι) and Latin, every guess checked against the dictionary and marked "≈ base form (guessed)"; (4) otherwise the closest headwords as tappable suggestions. Measured on those dictionaries on the host, warm: 0.03 to 1.3 ms per lookup (`real_dictionaries` test, ignored by default); the first lookup after start 9 to 13 ms.
 
-**Popup.** The dictionary form as the title (the tapped form under it when different), the switcher (one tap per dictionary), the senses, "Zakreśl" (or "Usuń zakreślenie"), "Więcej" and "Zamknij". By default only the senses show: the part of speech and the definitions, without the sections that are not senses (examples, syntax, collocations, related words, phraseology, etymology, translations, inflection, references; Polish and English Wiktionary headings, `dict::senses`), so "dusza" fits one popup page and Greek entries stay short. "Więcej" shows the whole entry, paged. Pronunciation (IPA) lines are dropped either way: Literata has no IPA glyphs, and they are noise while reading.
+**Popup.** The dictionary form as the title (the tapped form under it when different), the switcher (one tap per dictionary, labelled with the language pair of its file name, or else its `.ifo` `bookname`; a long name gives up a trailing "(source)", then words from the end, with an ellipsis, to fit the room the word and the other tabs leave: `overlay::fit_label`), the senses, "Highlight" (or "Remove highlight"), "More" and "Close". By default only the senses show: the part of speech and the definitions, without the sections that are not senses (examples, syntax, collocations, related words, phraseology, etymology, translations, inflection, references; Polish and English Wiktionary headings, `dict::senses`), so "dusza" fits one popup page and Greek entries stay short. "More" shows the whole entry, paged. Pronunciation (IPA) lines are dropped either way: Literata has no IPA glyphs, and they are noise while reading.
 
-**Translate a selection** ("Tłumacz"): a word-by-word gloss from the dictionaries, offline: each word's first sense, "headword — sense".
+**Translate a selection** ("Translate"): a word-by-word gloss from the dictionaries, offline: each word's first sense, "headword — sense".
 
 ### Footnotes
 
@@ -339,15 +339,15 @@ Every new highlight is exported at once (`aristotle-library` `export`). A highli
 - `/mnt/us/documents/My Clippings.txt`, appended in the stock reader's en_GB template (CRLF, a BOM only on creation), only what the file does not already hold, so tools that read that file over USB (note-taking importers, scripts) keep working unchanged. Deleting a highlight does not remove it from the file, as on the stock Kindle;
 - `/mnt/us/aristotle-notes/<Title — Author>.md`, rewritten with the book's highlights in the shape of an Obsidian note (front matter `tytuł`, `autor`, `źródło`, `tags`; one quote per highlight with chapter, location and date).
 
-Tests write the export and parse it with a line-by-line port of a clippings-to-Obsidian parser (title and author, `lok.`, the date, notes attached to highlights); an ignored test runs such a script itself on it (`ARISTOTLE_CLIPPINGS_SCRIPT`).
+Tests write the export and parse it with a line-by-line port of a clippings-to-Obsidian parser (title and author, the location, the date, notes attached to highlights); an ignored test runs such a script itself on it (`ARISTOTLE_CLIPPINGS_SCRIPT`).
 
 **Notes are deferred.** A note needs text input, which means an on-screen keyboard: a Polish layout with diacritics (long-press or a second layer for ą ć ę ł ń ó ś ź ż), a text field with a cursor, and an e-ink-friendly key feedback path (A2 per key, the field redrawn in DU). That is a component as large as everything above, and notes can be written on a computer from the exported highlights meanwhile. The data model and the export already carry a highlight's note (`Annotation::note`, written as a "Your Note" entry that clippings parsers attach to its highlight), so a keyboard can be added without changing the formats.
 
 ### Progress line and navigation
 
-The footer's left side shows the chapter and the minutes left in it: "Rozdz. 3/12 · 7 min". Chapters are the table of contents entries at the first level with more than one entry; their starts are found from the spine and the target files' ids without laying anything out (`Book::chapter_info`). Pages left come from the page numbers when known, else from the chapter's bytes over this page's. Reading speed is an average of seconds per page over forward turns between 5 s and 10 min (`speed.rs`, kept in `reading.json`; 75 s until measured).
+The footer's left side shows the chapter and the minutes left in it: "Ch. 3/12 · 7 min" ("Rozdz. 3/12 · 7 min" in Polish). Chapters are the table of contents entries at the first level with more than one entry; their starts are found from the spine and the target files' ids without laying anything out (`Book::chapter_info`). Pages left come from the page numbers when known, else from the chapter's bytes over this page's. Reading speed is an average of seconds per page over forward turns between 5 s and 10 min (`speed.rs`, kept in `reading.json`; 75 s until measured).
 
-"Spis treści" lists the flattened contents with the current chapter in bold, opened at its page. "Przejdź do…" offers a slider and −10/−1/+1/+10 % steps, with the page number when known.
+"Contents" lists the flattened contents with the current chapter in bold, opened at its page. "Go to…" offers a slider and −10/−1/+1/+10 % steps, with the page number when known.
 
 ### Preview and device scenario
 

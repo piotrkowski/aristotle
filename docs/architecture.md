@@ -120,11 +120,12 @@ Leptos and Topcoat render HTML for a browser, and Topcoat's interactivity runs a
 
 ## Languages
 
-- A `catalog!` macro defines one struct with a field per message; each language is a struct literal, so a missing or misspelt key fails to compile. No build script, no runtime parser.
-- Plurals: `Plural { one, few, many, other }`. English uses `one` for 1 and `other` otherwise. Polish uses `one` for 1, `few` when n mod 10 is 2–4 and n mod 100 isn't 12–14 (2, 22 książki), and `many` otherwise (5, 12, 25 książek).
-- The catalog also holds month and weekday names, the decimal separator, and date, size and duration formatting.
-- Tests check that every plural form is filled and that placeholders match across languages. CI fails on string literals with non-ASCII letters in screen code outside the catalogs.
-- The language is a setting (Automatic, English, Polski). The UI's hyphenation follows the UI language; a book's hyphenation follows the book. A dashboard's text follows the document's `lang`, or the UI language.
+- Messages are JSON files, one per language (`crates/aristotle-i18n/locales/<code>.json`), English the source of truth. JSON rather than Rust struct literals because translators should not need Rust: copying `en.json` and translating it is the whole job (`docs/ui-framework.md`, "Adding a language"), and the files diff and review as plain text.
+- The build script checks every locale against `en.json` (the same keys, the same `{placeholders}`, the plural forms the language needs) and generates the `Msg` and `Plural` enums and one string table per language, so a missing or misspelt key fails the build, the binary embeds every language, and there is no runtime parser. A locale may be marked incomplete; only then do its missing messages fall back to English.
+- Plurals: forms `one`, `few`, `many`, `other`, picked by a rule per language code in Rust. English uses `one` for 1 and `other` otherwise. Polish uses `one` for 1, `few` when n mod 10 is 2–4 and n mod 100 isn't 12–14 (2, 22 książki), and `many` otherwise (5, 12, 25 książek). Other languages fall back to the English rule until they get their own.
+- The locale data holds month and weekday names, the decimal separator, and the date and time patterns; the crate formats dates, numbers, sizes and durations with them.
+- The language is a setting (English by default, then every embedded language by its own name). The UI's hyphenation follows the UI language; a book's hyphenation follows the book. A dashboard's text follows the document's `lang`, or the UI language.
+- Text that must match the Kindle firmware's files (`My Clippings.txt`) or content inside books stays as it is in every language.
 
 ## Migration
 

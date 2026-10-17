@@ -151,15 +151,15 @@ All in Literata, in points (so 300 DPI px = pt × 300 / 72):
 
 | Token | Size | Weight | Used for |
 | --- | --- | --- | --- |
-| `DISPLAY` | 15 pt | bold, 1.15 | The one title of a screen: "Biblioteka", "Ustawienia" |
+| `DISPLAY` | 15 pt | bold, 1.15 | The one title of a screen: "Library", "Settings" |
 | `HEADLINE` | 12 pt | bold, 1.15 | The book to continue, a folder's or series' name |
 | `TITLE` | 11 pt | bold, 1.2 | Screensaver caption, prototype menu |
 | `ITEM` | 9.5 pt | bold, 1.15 | The first line of a list row (book title, folder name) |
 | `UI` | 8.5 pt | regular, 1.3 | Tabs, chips, labels, buttons, setting names |
 | `SMALL` | 7.5 pt | regular, gray `INK_2` | Authors, values, hints, the status line, the pager |
-| caps | 7.5 pt | small capitals, +8 % tracking, `INK_3` | Section labels: "Czytaj dalej", "Ekran", "Zasilanie" |
+| caps | 7.5 pt | small capitals, +8 % tracking, `INK_3` | Section labels: "Continue reading", "Screen", "Power" |
 
-The ratio between neighbours is about 1.15, with a jump to the display size so a screen has exactly one dominant line. Percentages are written without a space ("82%"), dates in full Polish ("sobota, 17 października 2026"), numbers with a decimal comma ("4,1 GB").
+The ratio between neighbours is about 1.15, with a jump to the display size so a screen has exactly one dominant line. Percentages are written without a space ("82%"); dates, numbers and sizes follow the UI language ("Saturday, 17 October 2026" and "4.1 GB" in English, "sobota, 17 października 2026" and "4,1 GB" in Polish; see [Languages](#languages)).
 
 ### Spacing
 
@@ -186,13 +186,13 @@ Night mode mirrors the palette exactly rather than using a second, softer one: w
 - **Header:** the display title with the settings gear, or on a shelf a back arrow, the shelf's name in headline size, "Folder · 3 książki" and the sort button.
 - **Tabs** ("Książki", "Foldery", "Serie"): text with a 5 px black underline under the chosen one.
 - **Chips** (shelves, presets, choices): pill-shaped; the chosen one solid black with white bold text, the others a 2 px `RULE` outline. They answer touch-down by inverting.
-- **List rows:** title, author, then a status line (progress bar and percentage, "✓ Przeczytana", "Nowa" in small capitals, or "Seria · tom 2"); a 1 px `RULE` hairline below. Folder and series rows carry their icon and a chevron.
+- **List rows:** title, author, then a status line (progress bar and percentage, "✓ Finished", "New" in small capitals, or "Series · vol. 2"); a 1 px `RULE` hairline below. Folder and series rows carry their icon and a chevron.
 - **Cards** (optional covers, `widgets::Cover`): see [Covers](#covers).
 - **Toggle, slider, size steps:** solid black and white, so a change is DU.
 
 ### Covers
 
-The library shows no covers by default; the settings offer "Bez okładek", "Karty" (typographic cards) and "Zdjęcia" (the books' own covers where they have one, cards otherwise). A card is one of four bindings, background and ink: white with black (and a 2 px edge), 0x22 with white, 0xdd with black, 0x55 with white. The binding is picked by a stable hash of the book's series or else its folder, so an author's folder or a series reads as one set on a shelf, and the four stay distinct in night mode. A large card (150 px wide and up: the book to continue, the screensaver) has an inner 2 px frame like a blocked cloth binding, "Tom 3" in small capitals for a series, the title in bold and balanced lines (shrunk until its longest word fits, since cards are not hyphenated), a short rule, and the author in small capitals at the foot. A small card (list rows, 72 × 106 px) is an italic monogram with the series number in a corner. Previews: `covers.png`, `covers-night.png`.
+The library shows no covers by default; the settings offer "No covers", "Cards" (typographic cards) and "Photos" (the books' own covers where they have one, cards otherwise). A card is one of four bindings, background and ink: white with black (and a 2 px edge), 0x22 with white, 0xdd with black, 0x55 with white. The binding is picked by a stable hash of the book's series or else its folder, so an author's folder or a series reads as one set on a shelf, and the four stay distinct in night mode. A large card (150 px wide and up: the book to continue, the screensaver) has an inner 2 px frame like a blocked cloth binding, "Volume 3" in small capitals for a series, the title in bold and balanced lines (shrunk until its longest word fits, since cards are not hyphenated), a short rule, and the author in small capitals at the foot. A small card (list rows, 72 × 106 px) is an italic monogram with the series number in a corner. Previews: `covers.png`, `covers-night.png`.
 
 ## Icons
 
@@ -255,13 +255,13 @@ The rule: nothing may look buggy. Each user action becomes one coherent update o
 
 ## Screens and the stock UI
 
-The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every screen from this crate: the library with `Library::build_shelf` from a `Shelf` (a `Place`: home with a view and a shelf, or a folder or series; the book to continue; rows as `Item`s; sort label; status line; cover mode), the settings with `Settings::build` from a `SystemView`, the screensaver with `sleep::build`, and the reader menu with `build_menu` over pages rendered by Plato. All labels are Polish for now; an English catalog comes with the i18n crate.
+The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every screen from this crate: the library with `Library::build_shelf` from a `Shelf` (a `Place`: home with a view and a shelf, or a folder or series; the book to continue; rows as `Item`s; sort label; status line; cover mode), the settings with `Settings::build` from a `SystemView`, the screensaver with `sleep::build`, and the reader menu with `build_menu` over pages rendered by Plato. Every label comes from `aristotle-i18n` in the UI language, English by default.
 
-Library organisation ("dobre folderowanie"): the home screen has three views. **Książki** lists every book with four shelf chips: Wszystkie, Czytane (being read), Nowe (never opened), Przeczytane (finished). **Foldery** mirrors `/mnt/us/documents` exactly: its folders first ("Filozofia", "Mickiewicz, Adam", "Platon", "Powieści", with "3 książki · 1 w trakcie"), then the books lying loose at the top; a folder opens as its own shelf with its subfolders first, and the back arrow goes up one level. **Serie** lists one shelf per series ("4 tomy · 2 przeczytane"), whose books come in series order with "Tom n". Everything pages ("Strona 1 z 3"), nothing scrolls. The view and the sort order are remembered.
+Library organisation ("dobre folderowanie"): the home screen has three views. **Books** lists every book with four shelf chips: All, Reading (being read), New (never opened), Finished. **Folders** mirrors `/mnt/us/documents` exactly: its folders first ("Filozofia", "Mickiewicz, Adam", "Platon", "Powieści", with "3 books · 1 reading"), then the books lying loose at the top; a folder opens as its own shelf with its subfolders first, and the back arrow goes up one level. **Series** lists one shelf per series ("4 volumes · 2 finished"), whose books come in series order with "Volume n". Everything pages ("Page 1 of 3"), nothing scrolls. The view and the sort order are remembered.
 
-Settings ("Ustawienia"), offline only, two pages of sections: **Ekran** (frontlight on 24 perceptual steps with − and + and the slider, presets Wyłącz, Nocne, Średnie, Jasne; Tryb nocny; covers), **Zasilanie** (battery percentage, state, voltage and temperature; screensaver after 5, 15 or 30 minutes or never), **Urządzenie** (date and time, free space on the userstore, the USB port: "Sieć i SSH" or "Dysk USB" for 10 minutes through the aristotle agent's `aristotlectl`), **O czytniku** (Aristotle's version, the device, the Kindle firmware, free RAM).
+Settings, offline only, two pages of sections: **Screen** (frontlight on 24 perceptual steps with − and + and the slider, presets Off, Night, Medium, Bright; night mode; covers), **Power** (battery percentage, state, voltage and temperature; screensaver after 5, 15 or 30 minutes or never), **Device** (date and time, free space on the userstore, the USB port: "Network and SSH" or "USB drive" for 10 minutes through the aristotle agent's `aristotlectl`; the UI language, each language named in itself), **About** (Aristotle's version, the device, the Kindle firmware, free RAM).
 
-Preview PNGs (from `aristotle-ui-preview`, quantized to 16 levels, each also as `*-night.png`): `library`, `library-page2`, `library-cards`, `library-reading`, `library-new-cards`, `library-folders`, `library-series`, `folder`, `series`, `library-empty`, `settings`, `settings-page2`, `screensaver`, `reader`, `reader-menu`, `reader-charis`, `covers`, `icons`; plus `library-pressed.png`, `reader-zones.png`, `reader-page2.png`, `reader-menu-pressed.png`, `reader-menu-night-on.png`, `settings-on-night.png`, `settings-page2-charging-night.png`, damage overlays `*-damage.png`, `compare-library.png` (stock home on the left, ours on the right) and `targets.txt` (the centre of every control per screen, for device scenarios).
+Preview PNGs (from `aristotle-ui-preview`, in English unless `--lang` says otherwise, quantized to 16 levels, each also as `*-night.png`): `library`, `library-page2`, `library-cards`, `library-reading`, `library-new-cards`, `library-folders`, `library-series`, `folder`, `series`, `library-empty`, `settings`, `settings-page2`, `screensaver`, `reader`, `reader-menu`, `reader-charis`, `covers`, `icons`; plus `library-pressed.png`, `reader-zones.png`, `reader-page2.png`, `reader-menu-pressed.png`, `reader-menu-night-on.png`, `settings-on-night.png`, `settings-page2-charging-night.png`, damage overlays `*-damage.png`, `compare-library.png` (stock home on the left, ours on the right) and `targets.txt` (the centre of every control per screen, for device scenarios).
 
 Compared with the stock home screen (firmware 5.13.x; `ARISTOTLE_STOCK_HOME=capture.png aristotle-ui-preview` puts the two side by side):
 
@@ -282,11 +282,39 @@ The stock reader page was not captured in our screenshots, so the reader compari
 export CARGO_TARGET_DIR=~/.cache/aristotle/target-ui TMPDIR=~/.cache/aristotle/tmp
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview      # writes ~/.cache/aristotle/ui-preview/v2/*.png
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- OUT_DIR
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang pl OUT_DIR   # Polish
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang all OUT_DIR  # OUT_DIR/en, OUT_DIR/pl, ...
 cargo run --release -p aristotle-ui --example render-bench           # timings, also runs on the device
 cargo test -p aristotle-ui                                           # includes tests/transitions.rs
 ```
 
-The preview prints, for every simulated step, how many minimal rectangles changed and what would be sent to the panel.
+The preview prints, for every simulated step, how many minimal rectangles changed and what would be sent to the panel. Render every language after changing a label: English and Polish lengths differ, and a label that fits in one can wrap or be cut in the other.
+
+## Languages
+
+The UI is in English by default; the settings screen lists the other embedded languages, each by its own name ("English", "Polski"), and switching redraws the screen at once. Every user-visible string lives in `crates/aristotle-i18n/locales/<code>.json`, with `en.json` the source of truth; code names messages through enums the build generates from it, so a misspelt key does not compile:
+
+```rust
+use aristotle_i18n::{fmt_date, tf, tr, trn, Msg, Plural};
+tr(Msg::LibraryContinueReading)                     // "Continue reading"
+trn(Plural::LibraryBooks, n)                        // "1 book", "3 books"
+tf!(Msg::CommonPageOf, page = 2, count = 5)         // "Page 2 of 5"
+fmt_date(2026, 10, 17, 6)                           // "Saturday, 17 October 2026"
+```
+
+A locale file is one JSON object: messages grouped one level deep by screen (`"library": {"title": "Library"}`), `{name}` placeholders, plural messages as objects of forms (`{"one": "{n} book", "other": "{n} books"}`), and the locale data under `"@locale"`: the language's name in itself, the decimal separator, month names as a date writes them (genitive in Polish), weekday names from Sunday, and the date and time patterns. The build script checks every locale against `en.json` (the same keys, the same placeholders, the plural forms the language's rule picks) and embeds them, so the device reads no files and a broken translation fails the build. Debug builds also check that `tf!` passes exactly a message's placeholders. The UI's hyphenation follows the UI language (`text::ui_hyphenator`: Polish syllables, none for other languages); a book's follows the book.
+
+What stays as it is, whatever the language, is text that is matched against content rather than shown: `My Clippings.txt` entries keep the stock en_GB labels ("Your Highlight at location", English dates), because the firmware writes them that way and the tools that import the file match them, and `aristotle-library`'s clippings parser reads them; footnote detection in `aristotle-render` (`notes.rs`) matches the class names publishers use (`przypis`); the Wiktionary section names in `dict::senses` are the dictionaries' own headings. Book text, titles and authors are never translated.
+
+### Adding a language
+
+1. Copy `crates/aristotle-i18n/locales/en.json` to `<code>.json`, with the language's code as the name (`de.json`).
+2. Translate every message and fill in `"@locale"`: `name` in the language itself, `decimal`, the twelve `months` as they appear in a date, the seven `weekdays` from Sunday, and the `date` (`{weekday}`, `{day}`, `{month}`, `{year}`) and `time` (`{h}`, `{hh}`, `{mm}`) patterns. Keep every `{placeholder}`; plural messages need the forms the language's rule uses.
+3. If the language's plurals are not "one for 1, other otherwise", add a rule to `crates/aristotle-i18n/src/plural.rs` (`Rule::for_language`, `categories`, `select`) with tests over 0, 1, 2, 5, 12, 14, 21, 22, 25, 112 and 122.
+4. Build: `cargo test -p aristotle-i18n`. The build names every missing key and wrong placeholder. A translation still in progress can say `"complete": false` in `"@locale"`; its missing messages then fall back to English, with a build warning.
+5. Look at every screen: `aristotle-ui-preview --lang <code>`, and the reader's `aristotle --preview ... --lang <code>`. Long words may need shorter wording in chips and segment labels.
+
+The language then appears in the settings by itself.
 
 ## Device build and size
 
