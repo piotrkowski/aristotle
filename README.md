@@ -22,7 +22,7 @@
   <img src="docs/images/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
-Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped. Quitting Aristotle brings the stock interface back. Aristotle connects only to the sync server and catalogs you add, and books can also be copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
+Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped. Quitting Aristotle brings the stock interface back. Aristotle connects only to the sync server and catalogs you add, and books can also be copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader. Less runs in the background, much less memory is used, and the Kindle feels like it is actually yours.
 
 The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
