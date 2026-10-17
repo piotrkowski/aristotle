@@ -22,13 +22,12 @@
   <img src="docs/images/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
-Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped, and a reboot brings them back. Aristotle makes no network connections, and books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
+Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped. Quitting Aristotle brings the stock interface back. Aristotle connects only to the sync server and catalogs you add, and books can also be copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.
 
 The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 
-| Size and memory | Stock | Aristotle |
+| Memory | Stock | Aristotle |
 |---|--:|--:|
-| Interface | Java framework and WebKit | one Rust binary, 9.6 MB |
 | RAM used by the interface | about 200 MB | **14.5 MB** |
 | RAM free while reading | about 240 MB | **about 380 MB** |
 
@@ -38,7 +37,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - The library shows `documents/` with shelves, folders, series and the current book. It opens EPUB, DRM-free MOBI, PDF and TXT.
 - Text is set in Literata with Knuth–Plass justification. Hyphenation covers English, Polish, Ancient Greek and Latin.
 - Hold a word to look it up in offline StarDict dictionaries. Inflected forms work too.
-- Highlights go to `My Clippings.txt` in the stock format and to Markdown. Footnotes open in a popup.
+- It continues where the stock reader left off ([without changing its files](docs/library.md#stock-files-sidecars-and-my-clippingstxt)) and adds highlights to `My Clippings.txt` and Markdown. Footnotes open in a popup.
 - Night mode, and an English or Polish interface.
 - Reading positions sync with KOReader through a KOSync server (EPUB chapters, PDF pages).
 - Books download from OPDS catalogs, such as calibre's content server, into the library.
@@ -68,8 +67,6 @@ Then:
 3. On the Kindle, open KUAL › Aristotle › Start Aristotle.
 
 **[docs/install.md](docs/install.md)** covers starting at boot, the optional agent, updates, uninstalling and what to do if something goes wrong. To build Aristotle yourself, see [CONTRIBUTING.md](.github/CONTRIBUTING.md#building).
-
-The stock interface stays installed and comes back when you quit Aristotle or reboot. Aristotle picks up where you left off in the stock reader, reading its sidecar files, and adds its highlights to `My Clippings.txt`. It does not write the stock sidecars ([docs/library.md](docs/library.md#stock-files-sidecars-and-my-clippingstxt)).
 
 ## Documentation
 
