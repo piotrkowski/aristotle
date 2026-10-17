@@ -268,12 +268,32 @@ fn run(args: &mut Args) -> Result<(), String> {
         "import-sidecars" => {
             args.done()?;
             let mut lib = Library::open(&data).map_err(err)?;
-            let (n, errors) = lib.import_sidecars();
+            let r = lib.import_sidecars();
             lib.save().map_err(err)?;
-            for e in errors {
+            for e in &r.errors {
                 eprintln!("warning: {e}");
             }
-            println!("{n} books updated from sidecars");
+            println!(
+                "{} books have stock or KOReader sidecars; {} updated now, the rest were already imported",
+                r.with_sidecars, r.changed
+            );
+            for b in lib.books() {
+                let Some(p) = &b.progress else { continue };
+                if matches!(p.source.as_deref(), Some("kindle" | "koreader")) {
+                    let page = p
+                        .page
+                        .as_deref()
+                        .map(|l| format!(", page {l}"))
+                        .unwrap_or_default();
+                    println!(
+                        "  {:5.1}%{page}  {:?}  [{}]  {}",
+                        p.fraction * 100.0,
+                        p.locator,
+                        p.source.as_deref().unwrap_or(""),
+                        b.meta.title
+                    );
+                }
+            }
         }
         "thumb" => {
             let id = args.positional("ID")?;
@@ -391,10 +411,14 @@ fn show(lib: &Library, b: &BookRecord) {
     println!("status:      {:?}", b.status);
     if let Some(p) = &b.progress {
         println!(
-            "progress:    {:.1}% {:?} ({})",
+            "progress:    {:.1}% {:?} ({}){}",
             p.fraction * 100.0,
             p.locator,
-            p.source.as_deref().unwrap_or("aristotle")
+            p.source.as_deref().unwrap_or("aristotle"),
+            p.page
+                .as_deref()
+                .map(|l| format!(", page {l}"))
+                .unwrap_or_default()
         );
     }
     println!("annotations: {}", b.annotations.len());

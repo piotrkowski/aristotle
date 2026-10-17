@@ -121,6 +121,10 @@ pub struct Progress {
     /// Where this progress came from: "aristotle", "kindle", "koreader".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Printed page label at the position, when a page map is known
+    /// (Kindle `.apnx`), for display such as "page 4 of 180".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 
 /// A format-specific position. Each variant is what the corresponding
@@ -296,6 +300,7 @@ mod tests {
                 },
                 updated: 2,
                 source: None,
+                page: None,
             }),
             settings: ReaderSettings {
                 font_size: Some(11.5),

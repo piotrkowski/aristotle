@@ -323,6 +323,7 @@ fn rescans_are_incremental_and_state_follows_the_book() {
             },
             updated: 1_000,
             source: None,
+            page: None,
         },
     );
     lib.save().unwrap();
