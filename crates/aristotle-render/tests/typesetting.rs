@@ -41,6 +41,11 @@ fn use_data() -> bool {
             aristotle_render::use_data_dir(&d).unwrap();
             true
         }
+        // CI builds the data first, so a missing directory there is a
+        // broken job, not a reason to skip.
+        None if std::env::var_os("CI").is_some() => {
+            panic!("no render data directory in CI (run tools/build-render.sh host first)")
+        }
         None => {
             eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
             false

@@ -2446,6 +2446,10 @@ mod tests {
     #[test]
     fn reopening_from_a_snapshot_is_one_update() {
         let Some(data) = render_data() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "no render data directory in CI"
+            );
             eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
             return;
         };

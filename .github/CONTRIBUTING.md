@@ -42,6 +42,7 @@ cargo run --release -p aristotle-ui --bin aristotle-ui-preview   # every screen 
 
 # Native members on the host (C libraries once, about 6 minutes on 2 cores)
 PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
+tools/build-render.sh host            # fonts and patterns the tests read; again after changing them
 CARGO_CMD=test tools/build-render.sh host
 
 # The device bundle, and the zip a release ships
