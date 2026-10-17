@@ -58,7 +58,7 @@ pub fn epub_language(path: &Path) -> Result<Option<String>, Error> {
             break;
         }
         let mut entry = zip.by_index(i)?;
-        let name = entry.name().to_ascii_lowercase();
+        let name = entry.name()?.to_ascii_lowercase();
         if name.ends_with(".xhtml") || name.ends_with(".html") || name.ends_with(".htm") {
             let mut buf = String::new();
             (&mut entry)

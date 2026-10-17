@@ -89,6 +89,7 @@ The two crates are members of the root workspace but not of its `default-members
 | `core: optional djvu` | DjVu is compiled out when `libdjvulibre.a` is absent |
 | `core: zip deflate only` | `zip` with deflate only |
 | `core: lazy epub layout` | See [Lazy layout](#lazy-layout) |
+| `core: zip 9` | `zip` 9, still deflate only |
 
 To change Plato, commit inside `third_party/plato` on the `aristotle` branch, push to the fork, and commit the submodule bump here. Cargo builds the submodule's working tree, so the next `tools/build-render.sh` run picks up the change. Rerun `tools/build-plato.sh` with a fresh `PLATO_BUILD` only for changes to `thirdparty/` or `mupdf_wrapper/`. A fix to an earlier change is squashed into that change's commit.
 

@@ -15,15 +15,6 @@ all-features = true
 # The RustSec advisory database. Unmaintained crates are reported only when
 # we depend on them directly.
 unmaintained = "workspace"
-ignore = [
-    # zip 7.0.0 (pinned by plato-core, matched by aristotle-render): the three
-    # advisories are about extracting archives to disk (`ZipArchive::extract`,
-    # `ZipStreamReader::extract`), which neither calls; both read members into
-    # memory. Drop these with the move to zip 9 in the Plato fork.
-    { id = "RUSTSEC-2026-0367", reason = "zip extract() only; not called" },
-    { id = "RUSTSEC-2026-0368", reason = "zip extract() only; not called" },
-    { id = "RUSTSEC-2026-0369", reason = "zip extract() only; not called" },
-]
 
 [licenses]
 # Licences whose terms allow combining the code into an AGPL-3.0-or-later
