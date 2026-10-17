@@ -1,6 +1,6 @@
 # The reader
 
-The reader is two crates. `crates/aristotle-render` turns books into full-screen 8-bit pages with the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and uses none of Plato's Kobo UI. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device and measures CPU and panel time. `crates/aristotle-reader` is the reader app, binary `aristotle`. It takes the library from `aristotle-library`, pages from `aristotle-render` and screens from `aristotle-ui`, and reaches the hardware through `aristotle-hal`. The renderer does not depend on the UI or the library.
+The reader is two crates. `crates/aristotle-render` turns books into full-screen 8-bit pages with the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and uses none of Plato's Kobo UI. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device and measures CPU and panel time. `crates/aristotle` is the reader app, binary `aristotle`. It takes the library from `aristotle-library`, pages from `aristotle-render` and screens from `aristotle-ui`, and reaches the hardware through `aristotle-hal`. The renderer does not depend on the UI or the library.
 
 The reader opens EPUB, DRM-free MOBI 7, PDF and TXT, and runs on the device. Device measurements are in [`native-vs-aristotle.md`](native-vs-aristotle.md), "Device measurements of the app". Numbers here are host numbers unless marked [dev].
 
@@ -28,7 +28,7 @@ aristotle-render (CLI: info, render, show, bench, turn, pages, place)
 | `notes.rs` | Footnote detection and text |
 | `richtext.rs` | HTML fragments as styled paragraphs for popups |
 
-| `aristotle-reader` | Role |
+| `aristotle` | Role |
 | --- | --- |
 | `main.rs` | Arguments, startup, the event loop, screens, menu actions |
 | `panel.rs` | Pages and UI damage onto the panel, night mode, the menu overlay |

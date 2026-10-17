@@ -7,7 +7,7 @@ members = [
     "crates/aristotle-library",
     "crates/aristotle-ui",
     "crates/aristotle-render",
-    "crates/aristotle-reader",
+    "crates/aristotle",
 ]
 # Everything but the two crates that link Plato and its C libraries: plain
 # `cargo build`, `cargo test` and `cargo clippy` work on any host. Build those

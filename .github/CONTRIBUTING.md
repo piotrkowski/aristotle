@@ -10,7 +10,7 @@ approach. Before you touch the display or input code, read
 The repository is one Cargo workspace. A plain `cargo build`, `cargo test` or
 `cargo clippy` covers the pure-Rust default members, which CI checks. The two
 native members, `crates/aristotle-render` and the reader app
-`crates/aristotle-reader`, link Plato's engine and its C libraries. CI does not
+`crates/aristotle`, link Plato's engine and its C libraries. CI does not
 build them, so check them locally.
 
 Plato comes from our fork in the `third_party/plato` submodule

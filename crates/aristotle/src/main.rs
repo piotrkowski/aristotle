@@ -2276,7 +2276,7 @@ pub(crate) fn testdir(name: &str) -> PathBuf {
         .unwrap()
         .subsec_nanos();
     let dir = std::env::temp_dir()
-        .join("aristotle-reader-tests")
+        .join("aristotle-tests")
         .join(format!("{name}-{}-{n}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir

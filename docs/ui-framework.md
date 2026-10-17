@@ -2,7 +2,7 @@
 
 `crates/aristotle-ui` is the toolkit behind Aristotle's screens. It is a retained-mode UI in pure Rust, built for the PW4's e-ink panel. It draws into an 8-bit gray canvas, finds the smallest rectangles that changed and picks a waveform for each. It also turns raw touch events into gestures. The crate does not depend on `aristotle-hal`, so it builds and tests on any host, and a desktop preview renders the screens to PNG.
 
-The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds its library, settings, screensaver and reader menu from this crate. Some parts have run on the host only so far; see [Open issues](#open-issues).
+The reader app (`crates/aristotle`, see `docs/reader.md`) builds its library, settings, screensaver and reader menu from this crate. Some parts have run on the host only so far; see [Open issues](#open-issues).
 
 ## Model
 
@@ -73,7 +73,7 @@ for d in ui.render() {
 
 `Display::damage` never blocks. The `epdc-display` thread merges what arrives while the panel is busy into one rectangle with the most faithful waveform. It submits that and waits in the ioctl, so pixels drawn meanwhile go out together in the next update.
 
-In the reader app, `Panel::present` (`crates/aristotle-reader/src/panel.rs`) sits between `Ui` and the HAL, and `panel::plan` maps each hint to an EPDC request. GC16 becomes one full mode-8 update of the whole screen, the stock flash. A gray change of the book page behind the menu becomes one full mode-9 update, like a page turn. A2, DU and GL16 stay partial. Book pages bypass the display thread and go out directly as one full mode-9 update of the whole screen, as in the stock reader.
+In the reader app, `Panel::present` (`crates/aristotle/src/panel.rs`) sits between `Ui` and the HAL, and `panel::plan` maps each hint to an EPDC request. GC16 becomes one full mode-8 update of the whole screen, the stock flash. A gray change of the book page behind the menu becomes one full mode-9 update, like a page turn. A2, DU and GL16 stay partial. Book pages bypass the display thread and go out directly as one full mode-9 update of the whole screen, as in the stock reader.
 
 ## Input
 
@@ -81,7 +81,7 @@ In the reader app, `Panel::present` (`crates/aristotle-reader/src/panel.rs`) sit
 
 The recognizer emits `Press` on touch-down, before it knows the gesture. `Ui` inverts or outlines the target at once with A2, so the highlight is on its way before the finger lifts. If the finger travels, `Cancel` withdraws it. Hit testing enlarges targets smaller than 9 mm to `MIN_TARGET`.
 
-The reader page has its own recognizer (`crates/aristotle-reader/src/turns.rs`). Taps turn on release. The top 12 % opens the menu, the left 30 % goes back and the rest goes forward. A hold selects a word and never turns.
+The reader page has its own recognizer (`crates/aristotle/src/turns.rs`). Taps turn on release. The top 12 % opens the menu, the left 30 % goes back and the rest goes forward. A hold selects a word and never turns.
 
 ## Transitions
 
@@ -164,7 +164,7 @@ A screen is a builder in `crates/aristotle-ui/src/screens/` and a handler in the
 1. Write `build(...) -> (Tree, Ids)`. It takes plain data, such as `SystemView` for the settings, and returns the tree plus a struct of the node ids the app will change later. Use `status_line`, `icon_button`, `text_button` and `segmented` from `screens/mod.rs`, so targets stay at 9 mm.
 2. Give the screen a `pub mod action` of `ActionId` constants. Ranges such as `LANGUAGE + i` cover lists of choices.
 3. If the screen pages, add `sync` and `handle` to `Ids`. Page counts exist only after layout, so call `ui.layout()` and then `ids.sync(&mut ui.tree)` before rendering.
-4. In `crates/aristotle-reader/src/main.rs`, add a variant to `enum Screen`, a `show_*` method and an `on_*_event` handler, and route them in `on_ui_event` and `ui_driven`. `show_*` calls `ui.set_tree_with(tree, Refresh::Full)` for a screen switch and `Refresh::Auto` to rebuild the screen already shown, then `render_ui()`.
+4. In `crates/aristotle/src/main.rs`, add a variant to `enum Screen`, a `show_*` method and an `on_*_event` handler, and route them in `on_ui_event` and `ui_driven`. `show_*` calls `ui.set_tree_with(tree, Refresh::Full)` for a screen switch and `Refresh::Auto` to rebuild the screen already shown, then `render_ui()`.
 5. Add the screen to `src/bin/preview.rs` with sample data, and a case to `tests/transitions.rs`.
 
 Inside a screen, change the tree with the mutators and call `render_ui()` once per action. A second render can become a second panel update, which breaks rule 3 of [Transitions](#transitions).

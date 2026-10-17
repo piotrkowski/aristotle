@@ -32,12 +32,12 @@ docs/, site/        developer documents and the project site
 | `aristotle-i18n` | Message catalogs, plurals, dates and numbers |
 | `aristotle-library` | Finds, indexes and describes EPUB, MOBI/AZW3, PDF, TXT and CBZ files. Covers, clippings, export, and `aristotle-library-cli` ([Library](library.md)) |
 | `aristotle-render` | Plato's document engine and MuPDF: opening, pagination, page rendering, footnotes ([Reader](reader.md)) |
-| `aristotle-reader` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
+| `aristotle` | The app, binary `aristotle`: event loop, screens, reading session, snapshots, dictionaries |
 | `aristotle-observe` | Pairs touches with the EPDC updates they cause, in any UI, and injects scripted touches. `bench` measures EPDC latency per waveform, streamed updates and page-turn strategies |
 
 `aristotle-hal` and `aristotle-i18n` sit at the bottom. `aristotle-ui` and `aristotle-library` depend on `aristotle-i18n` only, so the toolkit and the screens run on any host. `aristotle-render` uses `aristotle-hal` and `plato-core` from the submodule. The reader depends on all of them, and takes `aristotle-ui` without its embedded fonts.
 
-The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle-reader`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
+The workspace has one `Cargo.lock` and one release profile: `opt-level = "s"`, LTO, one codegen unit, `panic = "abort"`, stripped. `plato-core`, `aristotle-render`, `paragraph-breaker` and `kl-hyphenate` use `opt-level = 3`, because they lay out pages inside the page-turn budget (`docs/reader.md`, "Size budget"). A plain `cargo build`, `cargo test` or `cargo clippy` skips `aristotle-render` and `aristotle`, the two crates that link C. Cargo still reads `plato-core`'s manifest, so the submodule must be checked out. Build the C libraries with `tools/build-plato.sh`, then the native crates and their bundle with `tools/build-render.sh [device|host]`.
 
 ## On the device
 
@@ -77,7 +77,7 @@ Today these are code paths in the workspace. None is a stable API yet.
 | Languages | A JSON file in `crates/aristotle-i18n/locales/` ([Adding a language](ui-framework.md#adding-a-language)) |
 | Hyphenation | `aristotle_ui::text::Hyphenator` for the UI. Liang patterns in `data/hyphenation-patterns/` for books, chosen by `HYPH_LANGS` in `tools/build-render.sh` |
 | Book formats | `aristotle_library::format` detects a format by content. EPUB goes through Plato's HTML engine. MOBI 7 is converted to EPUB first (`aristotle-render/src/mobi.rs`). PDF and the rest go through MuPDF |
-| Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle-reader/src/dict/` picks them by script and the book's language |
+| Dictionaries | StarDict `*.ifo` files in `/mnt/us/dictionaries` or KOReader's folder. `crates/aristotle/src/dict/` picks them by script and the book's language |
 | Content | Folders under `/mnt/us/documents`. Any tool that copies files over USB or SSH is a source ([Fun use cases](fun-use-cases.md)) |
 | Refresh policy | The waveform hints in `aristotle_ui::ui` and `panel::plan` in the reader ([Transitions](ui-framework.md#transitions)) |
 
@@ -93,7 +93,7 @@ None of this is in the code yet. Each step should land on its own and pass the s
 
 ### Workspace and xtask
 
-Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts that run on the Kindle's busybox. `devloop/` and `probe/` split into `device/` and `tools/`. The bring-up crates (`aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen`, `aristotle-observe`) merge into `aristotle-devtools`. `aristotle-reader` becomes `aristotle`, and `aristotle-app` goes away.
+Host tooling moves to `cargo xtask`, one Rust binary with std and `xshell`. Its commands are `check`, `build [--device]`, `dist`, `run PKG[:BIN]`, `screenshot`, `scenario NAME`, `preview` and `install`. Shell stays for the C cross-build, the QEMU setup and the scripts that run on the Kindle's busybox. `devloop/` and `probe/` split into `device/` and `tools/`.
 
 ### Structure
 

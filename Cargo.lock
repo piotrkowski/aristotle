@@ -42,6 +42,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "aristotle"
+version = "0.1.0"
+dependencies = [
+ "aristotle-hal",
+ "aristotle-i18n",
+ "aristotle-library",
+ "aristotle-render",
+ "aristotle-ui",
+ "flate2",
+ "libc",
+ "png",
+ "regex",
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+ "zstd",
+]
+
+[[package]]
 name = "aristotle-hal"
 version = "0.1.0"
 dependencies = [
@@ -75,25 +94,6 @@ version = "0.1.0"
 dependencies = [
  "aristotle-hal",
  "libc",
-]
-
-[[package]]
-name = "aristotle-reader"
-version = "0.1.0"
-dependencies = [
- "aristotle-hal",
- "aristotle-i18n",
- "aristotle-library",
- "aristotle-render",
- "aristotle-ui",
- "flate2",
- "libc",
- "png",
- "regex",
- "serde",
- "serde_json",
- "unicode-normalization",
- "zstd",
 ]
 
 [[package]]
