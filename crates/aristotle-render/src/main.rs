@@ -10,6 +10,9 @@
 //! OPTIONS
 //!   --data DIR         runtime data (fonts/, css/, hyphenation-patterns/,
 //!                      serif/); default: data/ next to the binary
+//!   --cache DIR        where MOBI books converted to EPUB are kept;
+//!                      default: cache/ next to the binary
+//!   --no-convert       read MOBI with MuPDF instead of converting it
 //!   --font-size PT     body size in points (default 10)
 //!   --line-height EM   (default 1.3)
 //!   --margin MM        whole millimetres (default 5)
@@ -39,6 +42,9 @@ struct Args {
     command: String,
     positional: Vec<String>,
     data: Option<PathBuf>,
+    /// Where converted MOBI books are kept; `None` reads MOBI with MuPDF.
+    cache: Option<PathBuf>,
+    no_convert: bool,
     percent: bool,
     bw: bool,
     force: bool,
@@ -49,11 +55,14 @@ fn parse_args() -> Result<Args, Error> {
     let mut style = Style::pw4();
     let mut positional = Vec::new();
     let (mut data, mut percent, mut bw, mut force) = (None, false, false, false);
+    let (mut cache, mut no_convert) = (None, false);
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format_err!("{name} needs a value"));
         match arg.as_str() {
             "--data" => data = Some(PathBuf::from(value("--data")?)),
+            "--cache" => cache = Some(PathBuf::from(value("--cache")?)),
+            "--no-convert" => no_convert = true,
             "--font-size" => style.font_size = value("--font-size")?.parse()?,
             "--line-height" => style.line_height = value("--line-height")?.parse()?,
             "--margin" => style.margin_mm = value("--margin")?.parse()?,
@@ -74,6 +83,8 @@ fn parse_args() -> Result<Args, Error> {
         command,
         positional,
         data,
+        cache,
+        no_convert,
         percent,
         bw,
         force,
@@ -83,7 +94,7 @@ fn parse_args() -> Result<Args, Error> {
 
 fn usage() -> &'static str {
     "usage: aristotle-render [--data DIR] [--font-size PT] [--line-height EM] [--margin MM] [--lang TAG]\n\
-     \x20                       [--percent] [--bw] [--force] COMMAND\n\
+     \x20                       [--cache DIR] [--no-convert] [--percent] [--bw] [--force] COMMAND\n\
      commands:\n\
      \x20 info   BOOK\n\
      \x20 render BOOK PAGE OUT.raw\n\
@@ -138,7 +149,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Error> {
-    let args = parse_args()?;
+    let mut args = parse_args()?;
     let book_path: PathBuf = arg::<String>(&args, 0, "BOOK")?.into();
     let book_path = book_path
         .canonicalize()
@@ -146,12 +157,22 @@ fn run() -> Result<(), Error> {
     // Output paths are relative to where we were started, not to the data
     // directory we are about to change into.
     let cwd = std::env::current_dir()?;
-    let data = match &args.data {
-        Some(d) => cwd.join(d),
-        None => std::env::current_exe()?
-            .parent()
-            .ok_or_else(|| format_err!("binary has no parent directory"))?
-            .join("data"),
+    let exe_dir = std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| format_err!("binary has no parent directory"))?
+        .to_path_buf();
+    let data = args
+        .data
+        .as_ref()
+        .map_or_else(|| exe_dir.join("data"), |d| cwd.join(d));
+    args.cache = if args.no_convert {
+        None
+    } else {
+        Some(
+            args.cache
+                .as_ref()
+                .map_or_else(|| exe_dir.join("cache"), |c| cwd.join(c)),
+        )
     };
     aristotle_render::use_data_dir(&data)?;
 
@@ -166,15 +187,31 @@ fn run() -> Result<(), Error> {
 }
 
 fn open(args: &Args, path: &Path) -> Result<(Book, Chrome), Error> {
-    let book = Book::open(path, &args.style)?;
+    let book = Book::open(path, &args.style, args.cache.as_deref())?;
     let chrome = Chrome::load(&args.style).context("can't load the chrome fonts")?;
     Ok((book, chrome))
+}
+
+fn print_mobi(book: &Book) {
+    if let Some(m) = book.mobi() {
+        let i = &m.info;
+        println!(
+            "mobi          version {}, compression {}, encoding {}, kf8 boundary {:?}",
+            i.version, i.compression, i.encoding, i.kf8_boundary
+        );
+        println!(
+            "converted     {} ({})",
+            m.epub.display(),
+            if m.converted_now { "now" } else { "cached" }
+        );
+    }
 }
 
 fn info(args: &Args, path: &Path) -> Result<(), Error> {
     let (opened, t_open) = timed(|| open(args, path));
     let (mut book, _) = opened?;
     println!("file          {}", path.display());
+    print_mobi(&book);
     println!("engine        {:?}", book.engine());
     println!("title         {}", book.title().unwrap_or("-"));
     println!("author        {}", book.author().as_deref().unwrap_or("-"));
@@ -290,7 +327,7 @@ fn bench(args: &Args, path: &Path) -> Result<(), Error> {
     };
     let start = page_index(first)?;
 
-    let (opened, t_open) = timed(|| Book::open(path, &args.style));
+    let (opened, t_open) = timed(|| Book::open(path, &args.style, args.cache.as_deref()));
     let mut book = opened?;
     let (chrome, t_chrome) = timed(|| Chrome::load(&args.style));
     let mut chrome = chrome?;
@@ -300,6 +337,7 @@ fn bench(args: &Args, path: &Path) -> Result<(), Error> {
     let (_, t_seek) = timed(|| book.locate(start));
 
     println!("book       {}", path.display());
+    print_mobi(&book);
     println!(
         "engine     {:?}, language {}, hyphenation {} ({})",
         book.engine(),
@@ -308,7 +346,7 @@ fn bench(args: &Args, path: &Path) -> Result<(), Error> {
         if hyph.loaded { "loaded" } else { "missing" }
     );
     println!(
-        "open                {:>8.1} ms  (parse container, load body fonts)",
+        "open                {:>8.1} ms  (parse container, load body fonts; MOBI: read, and convert unless cached)",
         ms(t_open)
     );
     println!("chrome fonts        {:>8.1} ms", ms(t_chrome));

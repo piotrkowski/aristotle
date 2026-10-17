@@ -1,6 +1,6 @@
 //! Opening a book with Plato's document engine and turning it into pages.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use plato_core::anyhow::{format_err, Error};
 use plato_core::document::epub::EpubDocument;
@@ -10,6 +10,7 @@ use plato_core::framebuffer::Pixmap;
 use plato_core::metadata::TextAlign;
 
 use crate::lang;
+use crate::mobi::MobiInfo;
 use crate::page::{Chrome, Folio, Page};
 use crate::style::Style;
 
@@ -43,6 +44,17 @@ pub struct Book {
     pages: Vec<usize>,
     /// Whether `pages` covers the whole book.
     complete: bool,
+    mobi: Option<MobiConversion>,
+}
+
+/// A MOBI book opened through its converted EPUB (see [`crate::mobi`]).
+#[derive(Clone, Debug)]
+pub struct MobiConversion {
+    pub info: MobiInfo,
+    /// The cached EPUB this book is read from.
+    pub epub: PathBuf,
+    /// False when the EPUB came from the cache.
+    pub converted_now: bool,
 }
 
 /// How the book will be hyphenated.
@@ -60,11 +72,34 @@ impl Book {
     /// Open `path` and set it up for `style`. Nothing is laid out yet; the
     /// first call to [`Book::locate`] does that.
     ///
+    /// MOBI books are converted to EPUB in `cache_dir` (once per file) and
+    /// read with Plato's engine; without a cache directory, or when the
+    /// conversion fails, they go through MuPDF.
+    ///
     /// Plato resolves its fonts, stylesheets and hyphenation patterns
     /// relative to the current directory, so call [`crate::use_data_dir`]
     /// first.
-    pub fn open(path: &Path, style: &Style) -> Result<Book, Error> {
-        let kind = file_kind(path).unwrap_or_default();
+    pub fn open(path: &Path, style: &Style, cache_dir: Option<&Path>) -> Result<Book, Error> {
+        let mut kind = file_kind(path).unwrap_or_default();
+        let mut source = path.to_path_buf();
+        let mut mobi = None;
+        let is_mobi = matches!(kind.as_str(), "mobi" | "azw" | "prc");
+        if let (true, Some(dir)) = (is_mobi, cache_dir) {
+            match crate::mobi::cached_epub(path, dir) {
+                Ok((epub, info, converted_now)) => {
+                    source = epub.clone();
+                    kind = "epub".into();
+                    mobi = Some(MobiConversion {
+                        info,
+                        epub,
+                        converted_now,
+                    });
+                }
+                Err(e) => eprintln!("{}: {e:#}; reading it with MuPDF", path.display()),
+            }
+        }
+        let path = source.as_path();
+
         let mut language = None;
         let mut doc: Box<dyn Document> = if kind == "epub" {
             // Opened directly rather than through document::open, to pick
@@ -131,7 +166,13 @@ impl Book {
             language,
             pages: Vec::new(),
             complete: false,
+            mobi,
         })
+    }
+
+    /// Set when this is a MOBI book read through its converted EPUB.
+    pub fn mobi(&self) -> Option<&MobiConversion> {
+        self.mobi.as_ref()
     }
 
     pub fn engine(&self) -> Engine {
