@@ -1,7 +1,7 @@
 # Stock reader baseline on the PW4. Start on the stock Home screen with
-# "Pan Tadeusz" as the most recent book: the large first cover on the left.
-# Pages go forward and back by the same count, so the owner's reading
-# position ends where it started.
+# a long novel as the most recent book: the large first cover on the left.
+# Pages go forward and back by the same count, so the reading position
+# ends where it started.
 
 go-home
 label open-book

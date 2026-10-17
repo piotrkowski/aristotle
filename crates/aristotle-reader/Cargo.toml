@@ -3,6 +3,7 @@ name = "aristotle-reader"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
+publish = false
 description = "Aristotle's reader app for the PW4: library, Plato-rendered pages, menu, progress"
 # Member of the aristotle-render workspace, which links Plato's C libraries;
 # the root workspace excludes both. Build with tools/build-render.sh.
@@ -33,5 +34,5 @@ unicode-normalization = "0.1.25"
 png = "0.18"
 
 [dev-dependencies]
-# Same version as plato-core; the export test runs the owner's parser regexes.
+# Same version as plato-core; the export test runs a clippings parser's regexes.
 regex = "1.12.2"

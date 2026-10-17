@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Build zip with deflate only. EPUB containers hold stored and deflated
 entries, and the zip crate's default features add bzip2, LZMA, XZ, PPMd,
 Zstandard, Deflate64, AES and a second deflate backend: about 0.9 MB of a

@@ -7,6 +7,8 @@
 //! device applies.
 //!
 //! Usage: `aristotle-ui-preview [OUT_DIR]`, default `~/.cache/aristotle/ui-preview/v2`.
+//! `ARISTOTLE_STOCK_HOME=PNG` adds `compare-library.png`, the stock home
+//! screen next to ours.
 
 use aristotle_ui::canvas::{Canvas, Painter};
 use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};
@@ -308,16 +310,11 @@ fn library_screens(out: &Path) {
     });
     day_night(&mut ui, out, "library-empty");
 
-    // Side by side with the stock home screen.
-    let home_dir = std::env::var_os("HOME")
+    // Side by side with the stock home screen, when a capture of it is
+    // given: ARISTOTLE_STOCK_HOME=path/to/stock-home.png (1072 x 1448 gray).
+    let stock = std::env::var_os("ARISTOTLE_STOCK_HOME")
         .map(PathBuf::from)
-        .unwrap_or_default();
-    let stock = [
-        ".cache/aristotle/screens/stock-home.png",
-        ".cache/aristotle/screens/reader-20261017T094535Z.png",
-    ]
-    .iter()
-    .find_map(|p| load_gray(&home_dir.join(p)));
+        .and_then(|p| load_gray(&p));
     if let Some(s) = stock {
         let (mut ui, _) = home(View::Books, Filter::All, CoverMode::None, &all);
         ui.render();

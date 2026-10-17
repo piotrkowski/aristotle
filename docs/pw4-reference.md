@@ -137,16 +137,16 @@ KOReader's `koreader.sh` on our device shows the existing practice:
 - Without that mode, it disables Pillow (`lipc-set-prop com.lab126.pillow disableEnablePillow disable`) and sends `SIGSTOP` to `awesome`.
 - It stops `stored webreader kfxreader kfxview todo tmd rcm archive scanner otav3 otaupd` to free RAM.
 - PW4 paths it uses: frontlight `/sys/class/backlight/bl/brightness`; battery `/sys/class/power_supply/bd71827_bat/{capacity,charging,status}`; hall sensor `/sys/bus/platform/drivers/hall_sensor/rex_hall/hall_enable`; touch `/dev/input/event2` on Wi-Fi units and `event3` on LTE units (the extra SX9310 proximity sensor shifts the numbering).
-- Verified on our unit [dev]: frontlight `bl`, range 0–2047 (read 20 at the owner's setting; writes take effect and read back exactly); battery `bd71827_bat` with `capacity`, `status`, `charging`, `voltage_now` (µV) and `temp` (°C); charger `bd71827_ac`; touch is Goodix `goodix-ts` on `event2`, axes 0–1072 × 0–1448, identical to framebuffer coordinates. `aristotle-hal::power` and `::input` use these.
+- Verified on our unit [dev]: frontlight `bl`, range 0–2047 (read 20 at a dim reading setting; writes take effect and read back exactly); battery `bd71827_bat` with `capacity`, `status`, `charging`, `voltage_now` (µV) and `temp` (°C); charger `bd71827_ac`; touch is Goodix `goodix-ts` on `event2`, axes 0–1072 × 0–1448, identical to framebuffer coordinates. `aristotle-hal::power` and `::input` use these.
 
 ## Host-side artifacts
 
-Large artifacts stay out of git:
+Large artifacts stay out of git. The scripts expect them at these defaults:
 
 | Path | What |
 | --- | --- |
-| `~/.cache/aristotle/firmware/` | Update package and unpacked rootfs image. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. |
-| `~/.cache/aristotle/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources |
+| `~/.cache/aristotle/firmware/pw4-5.13.6/` (`ARISTOTLE_PW4_FW`) | The 5.13.6 update package unpacked with KindleTool: `imx6sll_rex/` and `rootfs.img`. `debugfs -R 'ls -p /path' rootfs.img` reads it without root. The emulator setup takes its boot files from here. |
+| `~/.cache/aristotle/firmware/native-5.13.6/` | Decompiled `home.jar` (CFR) and Pillow sources, for reading the stock UI |
 | `~/.cache/aristotle/probe/static/` | Output of `probe/host/` (kernel `Image`, `kernel.config`, DTS files, kernel modules, upstart jobs) |
 | `~/.cache/aristotle/tools/` | Ghidra 12.1.4, JDK 21 and JADX from `tools/fetch-tools.sh` |
 

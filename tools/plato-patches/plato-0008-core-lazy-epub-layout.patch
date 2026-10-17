@@ -1,7 +1,7 @@
 Lay out EPUB spine items lazily: only up to the pages asked for, resuming
 later where the layout stopped. Plato lays out a whole spine item before it
 can place a position in it or draw any of its pages; a MOBI converted to one
-huge spine item ("Pan Tadeusz", 420 KB) costs 2 to 3 s on the PW4 for every open,
+huge spine item (a 420 KB one-chapter novel) costs 2 to 3 s on the PW4 for every open,
 placement and font change, wherever the reader is in it.
 
 The engine's block loop can now stop between two children of a block (never

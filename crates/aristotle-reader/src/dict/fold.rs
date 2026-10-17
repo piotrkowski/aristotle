@@ -226,8 +226,8 @@ pub struct BuildStats {
 /// file and renamed, so a crash leaves no half index).
 pub fn build(index: &Index, out: &Path) -> io::Result<BuildStats> {
     // Keys NUL-terminated in one arena; records as (key offset, ref,
-    // target .idx number): 12 bytes each, about 30 MB for the largest of
-    // the owner's dictionaries at the peak.
+    // target .idx number): 12 bytes each, about 30 MB for the largest
+    // Wiktionary export tested (Ancient Greek to English) at the peak.
     let mut arena: Vec<u8> = Vec::new();
     let mut recs: Vec<(u32, u32, u32)> = Vec::new();
     let mut idx_offsets: Vec<u32> = Vec::new();

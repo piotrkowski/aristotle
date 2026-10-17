@@ -14,7 +14,7 @@ use crate::style::Style;
 
 /// Gray level below which a pixel becomes black in the black and white
 /// frame of a page turn. Same value as the page-turn experiment
-/// (`aristotle-bench --bin pageturn`), which the owner judged legible.
+/// (`aristotle-bench --bin pageturn`), where it was legible on the panel.
 pub const BW_THRESHOLD: u8 = 160;
 
 /// A full-screen page: `height` rows of `stride` bytes, the first `width`

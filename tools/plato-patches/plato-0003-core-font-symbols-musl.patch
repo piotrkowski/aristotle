@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Use the C-array names for MuPDF's embedded fonts (_binary_<name>) on any
 musl target. Zig-built MuPDF uses them on x86_64 as on ARM; Plato assumes
 the ld -b binary names (_binary_resources_fonts_..._start) on x86 Linux.

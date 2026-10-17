@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Let the caller choose the language EPUB text is hyphenated in. Plato takes
 the first dc:language, but some books declare several (a Polish book in our
 test set lists de-DE, en-US, pl-PL), which hyphenates Polish with German

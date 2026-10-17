@@ -291,8 +291,8 @@ pub struct Menu {
 
 /// Builds the reader menu: a top bar (back to the library, the title) and a
 /// bottom sheet (position with chapter skips, then the typography and light
-/// settings). It starts hidden. The labels are Polish, like all text the
-/// owner reads on the device.
+/// settings). It starts hidden. The labels are Polish, like the rest of the
+/// UI until the English catalog lands.
 pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> Menu {
     let m = margin();
     // Top bar: back to the library and the title.

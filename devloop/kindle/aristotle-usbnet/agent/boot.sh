@@ -77,8 +77,10 @@ net_up() {
         cp "$S/authorized_keys" "$KO/settings/SSH/authorized_keys" 2>> "$LOG"
         chmod 600 "$KO/settings/SSH/authorized_keys"
         # KOReader's dropbear reads settings/SSH/authorized_keys relative to
-        # its working directory and keeps its host keys there (-R).
-        if (cd "$KO" && ./dropbear -E -R -s -p 22 -P "$PIDFILE" >> "$LOG" 2>&1); then
+        # its working directory and keeps its host keys there (-R). -s: keys
+        # only; -p ADDRESS:PORT: listen on usb0's address only, never on
+        # Wi-Fi.
+        if (cd "$KO" && ./dropbear -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
             # dropbear writes its pid file after forking; give it a moment.
             sleep 1
             log "ssh: dropbear started (pid $(cat "$PIDFILE" 2> /dev/null))"

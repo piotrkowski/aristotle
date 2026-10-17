@@ -1,3 +1,6 @@
+Upstream: MuPDF 1.27.0 (https://mupdf.com), as pinned by Plato, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 KEEP_NOTO_SERIF: keep Noto Serif (Latin, Greek with polytonic, Cyrillic)
 when TOFU drops the other Noto fonts. It is MuPDF's fallback for those
 scripts in reflowed text (TXT, and MOBI books mobi.rs can't convert),

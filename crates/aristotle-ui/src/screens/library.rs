@@ -18,7 +18,7 @@
 //! Covers are optional ([`CoverMode`]): none by default, a clean list of
 //! titles; typographic cards (`widgets::Cover`); or the books' own covers.
 //!
-//! Labels are Polish: this is the text the owner reads on the device.
+//! Labels are Polish for now; an English catalog comes with the i18n crate.
 
 use super::icon_button;
 use crate::geom::{mm, Insets, MIN_TARGET};
@@ -103,8 +103,8 @@ impl Book {
     }
 }
 
-/// A plausible library, most recently opened first: author folders and
-/// topic folders like the owner's, one series.
+/// A plausible library of public-domain books, most recently opened first:
+/// author folders and topic folders, one series.
 pub fn sample_books() -> Vec<Book> {
     let mut lalka = Book::new("Lalka", "Bolesław Prus", 0.43).in_folder("Prus, Bolesław");
     lalka.chapter = "Rozdział VII · Idylla".into();
@@ -122,7 +122,7 @@ pub fn sample_books() -> Vec<Book> {
         Book::new("Potop", "Henryk Sienkiewicz", 0.0)
             .in_series("Trylogia", 2.0)
             .in_folder("Sienkiewicz, Henryk"),
-        Book::new("Medytacje", "Marek Aureliusz", 0.0).in_folder("Filozofia"),
+        Book::new("Rozmyślania", "Marek Aureliusz", 0.0).in_folder("Filozofia"),
         Book::new("Fedon", "Platon", 0.18).in_folder("Platon"),
         Book::new("Moby Dick", "Herman Melville", 0.0),
     ]
@@ -680,7 +680,10 @@ impl Library {
         let mut ap = Paragraph::plain(&b.author, s.small().line_height(1.2), Align::Left);
         ap.style.max_lines = Some(1);
         let author = t.text(ap);
-        let series = b.series.as_ref().and_then(|(name, i)| series_label(name, *i, in_series));
+        let series = b
+            .series
+            .as_ref()
+            .and_then(|(name, i)| series_label(name, *i, in_series));
         let status = match b.status {
             Status::Reading => {
                 let bar = t.add(progress(b.progress, 12), []);
@@ -847,9 +850,15 @@ mod tests {
 
     #[test]
     fn series_index_zero_is_never_shown() {
-        assert_eq!(series_label("Gazeta", 0.0, false).as_deref(), Some("Gazeta"));
+        assert_eq!(
+            series_label("Gazeta", 0.0, false).as_deref(),
+            Some("Gazeta")
+        );
         assert_eq!(series_label("Gazeta", 0.0, true), None);
-        assert_eq!(series_label("Dialogi", 3.0, false).as_deref(), Some("Dialogi · tom 3"));
+        assert_eq!(
+            series_label("Dialogi", 3.0, false).as_deref(),
+            Some("Dialogi · tom 3")
+        );
         assert_eq!(series_label("Dialogi", 3.0, true).as_deref(), Some("Tom 3"));
     }
     use crate::geom::{SCREEN_HEIGHT, SCREEN_WIDTH};

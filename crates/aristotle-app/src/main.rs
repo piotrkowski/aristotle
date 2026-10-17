@@ -92,8 +92,8 @@ enum TurnStrategy {
     /// One full mode-9 update, exactly the stock reader's turn: clean pages.
     Stock,
     /// A2 black and white preview first (readable at about 150 ms), then the
-    /// full mode-9 pass. Faster, but A2 leaves residue the owner saw as
-    /// heavy ghosting when the second pass was GL16.
+    /// full mode-9 pass. Faster, but A2 leaves residue that showed as heavy
+    /// ghosting in real reading when the second pass was GL16.
     A2ThenStock,
     /// One full GL16 update.
     FullGl16,

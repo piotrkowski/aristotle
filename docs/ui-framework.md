@@ -178,7 +178,7 @@ Every gray is one of the panel's 16 levels (a multiple of 17), checked by a test
 | `TONE` | 0xdd | 0x22 | Quiet fills |
 | `PAPER` | 0xff | 0x00 | Background |
 
-Night mode mirrors the palette exactly rather than using a second, softer one: white text on black is what the owner asked for; pure black and white chrome stays pure black and white and keeps qualifying for DU; and an e-ink panel reflects light, so full-white text does not glare the way it does on a backlit screen. The frontlight sets the brightness.
+Night mode mirrors the palette exactly rather than using a second, softer one: white text on black is the most legible night page; pure black and white chrome stays pure black and white and keeps qualifying for DU; and an e-ink panel reflects light, so full-white text does not glare the way it does on a backlit screen. The frontlight sets the brightness.
 
 ### Components
 
@@ -229,7 +229,7 @@ Switching is one full mode-8 flash into the new state, whatever screen is shown.
 
 ## Transitions
 
-The owner's rule: nothing may look buggy. Each user action becomes one coherent update of the final state on the panel.
+The rule: nothing may look buggy. Each user action becomes one coherent update of the final state on the panel.
 
 1. **Build the whole frame, then submit once.** A screen is built and laid out completely (covers read, battery and clock sampled, the list's page set) before `Ui::render`; no blank-then-content, no second pass a moment later. Two exceptions, both not caused by a tap: the library is rescanned after the first frame of a run, so books added over USB appear with one partial update if anything changed; and the status line's clock is redrawn once a minute (a small partial update of the digits).
 2. **Acknowledge on touch-down.** Every control inverts at once with A2 (about 120 to 144 ms on the panel). A2 rather than DU because DU takes about 309 ms, beyond the 150 ms target; the A2 inversion never stays, the result replaces it. Rows with cover photos get a heavy frame instead, so a photo never turns into a negative. When an action will take longer than about 300 ms (the first open of a MOBI or AZW3 book, which converts it), the busy mark (a black tab with three white dots, pure black and white) appears in the status line with the release, as one small DU update.
@@ -255,7 +255,7 @@ The owner's rule: nothing may look buggy. Each user action becomes one coherent 
 
 ## Screens and the stock UI
 
-The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every screen from this crate: the library with `Library::build_shelf` from a `Shelf` (a `Place`: home with a view and a shelf, or a folder or series; the book to continue; rows as `Item`s; sort label; status line; cover mode), the settings with `Settings::build` from a `SystemView`, the screensaver with `sleep::build`, and the reader menu with `build_menu` over pages rendered by Plato. All labels the owner reads are Polish.
+The reader app (`crates/aristotle-reader`, see `docs/reader.md`) builds every screen from this crate: the library with `Library::build_shelf` from a `Shelf` (a `Place`: home with a view and a shelf, or a folder or series; the book to continue; rows as `Item`s; sort label; status line; cover mode), the settings with `Settings::build` from a `SystemView`, the screensaver with `sleep::build`, and the reader menu with `build_menu` over pages rendered by Plato. All labels are Polish for now; an English catalog comes with the i18n crate.
 
 Library organisation ("dobre folderowanie"): the home screen has three views. **Książki** lists every book with four shelf chips: Wszystkie, Czytane (being read), Nowe (never opened), Przeczytane (finished). **Foldery** mirrors `/mnt/us/documents` exactly: its folders first ("Filozofia", "Mickiewicz, Adam", "Platon", "Powieści", with "3 książki · 1 w trakcie"), then the books lying loose at the top; a folder opens as its own shelf with its subfolders first, and the back arrow goes up one level. **Serie** lists one shelf per series ("4 tomy · 2 przeczytane"), whose books come in series order with "Tom n". Everything pages ("Strona 1 z 3"), nothing scrolls. The view and the sort order are remembered.
 
@@ -263,14 +263,14 @@ Settings ("Ustawienia"), offline only, two pages of sections: **Ekran** (frontli
 
 Preview PNGs (from `aristotle-ui-preview`, quantized to 16 levels, each also as `*-night.png`): `library`, `library-page2`, `library-cards`, `library-reading`, `library-new-cards`, `library-folders`, `library-series`, `folder`, `series`, `library-empty`, `settings`, `settings-page2`, `screensaver`, `reader`, `reader-menu`, `reader-charis`, `covers`, `icons`; plus `library-pressed.png`, `reader-zones.png`, `reader-page2.png`, `reader-menu-pressed.png`, `reader-menu-night-on.png`, `settings-on-night.png`, `settings-page2-charging-night.png`, damage overlays `*-damage.png`, `compare-library.png` (stock home on the left, ours on the right) and `targets.txt` (the centre of every control per screen, for device scenarios).
 
-Compared with the stock home screen (`~/.cache/aristotle/screens/stock-home.png`, firmware 5.13.x):
+Compared with the stock home screen (firmware 5.13.x; `ARISTOTLE_STOCK_HOME=capture.png aristotle-ui-preview` puts the two side by side):
 
 - **No store.** Stock spends about a third of the screen on "Find your next great read" with a cart tile, a "store" button in the toolbar and a "Swipe up to see more for you" feed. Ours has none of it.
 - **Back into the book in one obvious tap.** Stock shows the current book as a 170 × 235 px thumbnail between a large KUAL tile and an empty "reading lists" panel. Ours puts it first, large, with chapter, progress bar and time left, as one 9 mm-plus target.
 - **One hierarchy.** Stock stacks a title bar, a four-button toolbar, a search field and three all-caps section headings. Ours has one title, one small-caps label and one tab row.
 - **Pages instead of an endless scroll.** Stock has a scrollbar and a feed; ours shows four books per page with "Page 1 of 3" and 9 mm arrows.
 - **Legible lists.** Stock renders photographic covers in muddy gray and labels progress with small corner badges. Ours is a clean list of titles by default, with optional typographic cards, and a progress bar with a percentage, or "Nowa" and "Przeczytana".
-- **The owner's folders.** Stock has collections but no view of the folders on the device; ours shows `documents/` as it is.
+- **Your folders.** Stock has collections but no view of the folders on the device; ours shows `documents/` as it is.
 - **Quieter status line.** Time and battery only; no airplane icon or "Your Kindle".
 - **Instant press feedback** in A2 on touch-down for every target.
 

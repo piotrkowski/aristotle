@@ -3,7 +3,7 @@
 //! and the screensaver delay.
 //!
 //! Stored as `reader.json` in the library data directory. They are global,
-//! not per book: the owner sets a comfortable size once. Unknown or missing
+//! not per book: a reader sets a comfortable size once. Unknown or missing
 //! fields fall back to the defaults, so the file can grow, and a file from
 //! an older version keeps its values. The frontlight is not stored here: the
 //! LM3695 keeps its level, and the app reads it back.
@@ -16,7 +16,7 @@ use aristotle_ui::screens::reader::Settings;
 use serde::{Deserialize, Serialize};
 
 /// Body sizes in points for the menu's seven size steps. Step 2 is 10 pt,
-/// the size chosen with the owner for Literata (`docs/reader.md`). The
+/// the default chosen for Literata (`docs/reader.md`). The
 /// steps match the UI prototype's pixel sizes (34 to 62 px at 300 DPI).
 pub const FONT_PT: [f32; 7] = [8.0, 9.0, 10.0, 11.0, 12.0, 13.5, 15.0];
 /// Line heights in ems for tight, normal and loose. Normal is the 1.3 em
@@ -30,7 +30,7 @@ pub const MARGIN_MM: [i32; 3] = [3, 5, 8];
 /// whole screen). Measured 503 ms from tap to page on the device.
 pub const STOCK_TURN: u32 = 9;
 /// DU4 (mode 7): 317 ms in the same measurement, four gray levels. Offered
-/// as an option; the owner decides on the panel.
+/// as an option for readers who prefer speed.
 pub const DU4_TURN: u32 = 7;
 
 /// How night mode inverts the screen (`docs/ui-framework.md`, "Night mode").

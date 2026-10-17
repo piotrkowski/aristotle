@@ -64,7 +64,7 @@ Feel is hard to judge by eye and easy to fool yourself about, so stroke latency 
 2. **Replay**: `aristotle-pen-bench /var/tmp/pen.rec [params]` replays the recording at its original pace through the same `Pen` code. Idle gaps between strokes are shortened to 300 ms; timing within strokes is unchanged.
 3. **Measure**: for each event, the latency is the time from its (replayed) timestamp until the driver reports the update showing it as complete. That is what the eye actually waits for, minus the panel's own optical settling.
 
-`devloop/kindle/pen-sweep.sh` runs a set of variants in one go. The reference recording (`~/.cache/aristotle/pen-session-1.rec`) has 604 events and 52 strokes: fast and slow lines, handwriting, two fingers.
+`devloop/kindle/pen-sweep.sh` runs a set of variants in one go. The reference recording used below has 604 events and 52 strokes: fast and slow lines, handwriting, two fingers.
 
 ## Results on the reference recording
 

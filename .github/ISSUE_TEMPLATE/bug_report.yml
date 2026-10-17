@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in Aristotle does not work as the docs say it should.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected instead, and the steps to reproduce it if you know them.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Aristotle version
+      description: The commit you built, or the version under Settings > O czytniku.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and firmware
+      description: The model and the firmware version (Settings > Device info on the stock UI).
+      placeholder: Kindle Paperwhite 4 (2018), firmware 5.13.6
+    validations:
+      required: true
+  - type: input
+    id: jailbreak
+    attributes:
+      label: Jailbreak and tools
+      description: The jailbreak you used, and the KUAL, MRPI and KOReader versions.
+      placeholder: LanguageBreak; KUAL, MRPI and KOReader versions
+  - type: textarea
+    id: log
+    attributes:
+      label: App log
+      description: |
+        The lines around the problem from `/var/tmp/aristotle.log` on the device
+        (`run-aristotle.sh` prints it when the app exits). For the SSH agent,
+        `/var/local/aristotle/log`. Remove anything private, such as book titles you
+        would rather not share.
+      render: text

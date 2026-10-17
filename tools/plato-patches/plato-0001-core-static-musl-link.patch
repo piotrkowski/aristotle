@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Link the static Kindle build: search libs/ and target/mupdf_wrapper/Kindle
 by absolute path, and add the archives that the Kobo build gets through
 libmupdf.so and the system libstdc++ (lcms2 in libmupdf-third, Zig's libc++).

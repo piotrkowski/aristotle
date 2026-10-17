@@ -33,7 +33,7 @@
 //!                   the device instead of indexing there)
 //!   --test-clippings PATH  export highlights to PATH instead of
 //!                   ROOT/My Clippings.txt, and Markdown next to it (test
-//!                   runs must not reach the owner's notes)
+//!                   runs must not reach the user's own clippings)
 //!   --preview OUT BOOK  drive the reading interactions on BOOK with
 //!                   synthetic touches on an in-memory panel and write PNGs
 //!                   to OUT (host; see preview.rs)

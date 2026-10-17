@@ -1,3 +1,6 @@
+Upstream: https://github.com/baskerville/plato @7da89f296e58c7426692abb6fda16431b9631e60, AGPL-3.0.
+This patch is part of Aristotle and under the same licence.
+
 Let a MuPDF built without its Noto and CJK fonts (MuPDF's TOFU options,
 tools/build-plato.sh MUPDF_FONTS other than full) link. Plato takes the
 fallback fonts for glyphs its EPUB font lacks straight from MuPDF's

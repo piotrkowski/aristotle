@@ -1,16 +1,25 @@
 #!/bin/sh
 # Set up katadelos/eink-emulator with a Kindle Paperwhite 4 instance running
-# stock firmware 5.13.6, under $ARISTOTLE_EMU (default ~/.cache/aristotle/emulator).
-# Firmware comes from an already unpacked update package; see docs/pw4-reference.md.
+# stock firmware 5.13.6.
+#
+#   ARISTOTLE_EMU     where the emulator goes (default ~/.cache/aristotle/emulator)
+#   ARISTOTLE_PW4_FW  an unpacked 5.13.6 update package, the directory holding
+#                   imx6sll_rex/ and rootfs.img (default
+#                   ~/.cache/aristotle/firmware/pw4-5.13.6); see
+#                   docs/pw4-reference.md for how it is unpacked
+#   KINDLETOOL_DIR  directory with the kindletool binary, if it is not on PATH
 set -eu
 
 EMU=${ARISTOTLE_EMU:-$HOME/.cache/aristotle/emulator}
 FW=${ARISTOTLE_PW4_FW:-$HOME/.cache/aristotle/firmware/pw4-5.13.6}
-KINDLETOOL=${KINDLETOOL_DIR:-$HOME/.cache/aristotle/KindleTool/KindleTool/Release}
 INSTANCE=${1:-pw4}
 PATCH=$(cd "$(dirname "$0")" && pwd)/eink-emulator-pw4.patch
 export TMPDIR="$HOME/.cache/aristotle/tmp"
-export PATH="$KINDLETOOL:$PATH"
+[ -z "${KINDLETOOL_DIR:-}" ] || export PATH="$KINDLETOOL_DIR:$PATH"
+[ -f "$FW/rootfs.img" ] || {
+    echo "no unpacked PW4 firmware in $FW (set ARISTOTLE_PW4_FW)" >&2
+    exit 1
+}
 mkdir -p "$EMU" "$TMPDIR"
 
 if [ ! -d "$EMU/eink-emulator" ]; then

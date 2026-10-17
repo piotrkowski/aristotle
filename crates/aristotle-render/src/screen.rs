@@ -4,7 +4,7 @@
 //! whole screen with waveform mode 9 (seen in the driver log for every stock
 //! page turn). The faster A2-then-GL16 turn measured in
 //! `docs/native-vs-aristotle.md` looked fine in a quick demo, but on real
-//! reading the owner saw heavy ghosting: A2 leaves residue that GL16 does not
+//! reading it left heavy ghosting: A2 leaves residue that GL16 does not
 //! clear. It stays available as [`TurnStrategy::A2Preview`] for experiments.
 
 use std::io;

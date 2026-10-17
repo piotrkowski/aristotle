@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copy aristotle's KUAL extensions (and the reader app, if built) to a Kindle
+# Copy the dev-loop KUAL extensions (and the reader app, if built) to a Kindle
 # mounted over USB mass storage, then eject it so the device leaves drive mode
 # while the cable stays plugged in. After installing the agent from KUAL once,
 # everything else goes over SSH.
@@ -7,9 +7,19 @@ set -eu
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 KINDLE=${KINDLE_MOUNT:-/run/media/$USER/Kindle}
-# Dedicated dev-loop key first; the owner's main key as a fallback.
-KEYS="${ARISTOTLE_PUBKEY:-$HOME/.cache/aristotle/ssh/kindle_ed25519.pub} $HOME/.ssh/id_ed25519.pub"
-APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/reader-work/aristotle-app-device.tar.gz}
+# The device accepts exactly one key: the dedicated dev-loop key that
+# devloop/host/ssh_config uses. Create it once with
+#   ssh-keygen -t ed25519 -f ~/.cache/aristotle/ssh/kindle_ed25519
+# or point ARISTOTLE_PUBKEY at another public key.
+PUBKEY=${ARISTOTLE_PUBKEY:-$HOME/.cache/aristotle/ssh/kindle_ed25519.pub}
+# The reader app's bundle, as tools/build-render.sh device writes it.
+APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/render/aristotle-app-device.tar.gz}
+
+[ -s "$PUBKEY" ] || {
+    echo "no public key at $PUBKEY" >&2
+    echo "create one: ssh-keygen -t ed25519 -f ${PUBKEY%.pub}, or set ARISTOTLE_PUBKEY" >&2
+    exit 1
+}
 
 [ -d "$KINDLE/extensions" ] || { echo "Kindle not mounted at $KINDLE" >&2; exit 1; }
 dev=$(findmnt -no SOURCE "$KINDLE")
@@ -21,10 +31,7 @@ fi
 cp -r "$REPO/probe/device/aristotle-probe" "$KINDLE/extensions/"
 cp -r "$REPO/devloop/kindle/aristotle-usbnet" "$KINDLE/extensions/"
 cp "$REPO/devloop/kindle/takeover.sh" "$KINDLE/extensions/aristotle-usbnet/"
-: > "$KINDLE/extensions/aristotle-usbnet/authorized_keys"
-for key in $KEYS; do
-    [ -s "$key" ] && cat "$key" >> "$KINDLE/extensions/aristotle-usbnet/authorized_keys"
-done
+cp "$PUBKEY" "$KINDLE/extensions/aristotle-usbnet/authorized_keys"
 if [ -s "$APP_BUNDLE" ]; then
     tar -xzf "$APP_BUNDLE" -C "$KINDLE"
     echo "Unpacked the reader app to $KINDLE/aristotle"

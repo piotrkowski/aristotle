@@ -1,5 +1,5 @@
 //! Highlights and bookmarks: how they are stored in the library index, and
-//! exported for the owner's notes.
+//! exported for note-taking tools.
 //!
 //! An annotation made here is an [`Annotation`] with source "aristotle":
 //!
@@ -8,7 +8,7 @@
 //!   `epub:<spine item>:<offset>`, `kindle:<position>`, `page:<index>` or
 //!   `fraction:<f>`;
 //! - `location`: Kindle locations (150 bytes of text each, counted from 1),
-//!   what `My Clippings.txt` and the owner's notes show;
+//!   what `My Clippings.txt` and the Markdown notes show;
 //! - `chapter`, `created` (local time), `text`.
 //!
 //! Every new highlight is appended to `My Clippings.txt` at once (as the
@@ -195,12 +195,13 @@ mod tests {
         assert_eq!(kindle_location(7510), 51);
     }
 
-    /// The owner's notes pipeline (`clippings-to-notes`, Python), ported
-    /// line by line: how it splits entries, title and author, location and
-    /// date, and attaches notes to highlights. Kept faithful, quirks
-    /// included, so the export is tested against what the pipeline reads.
+    /// A clippings-to-notes pipeline (a Python script that turns
+    /// `My Clippings.txt` into Obsidian notes), ported line by line: how it
+    /// splits entries, title and author, location and date, and attaches
+    /// notes to highlights. Kept faithful, quirks included, so the export is
+    /// tested against what such a pipeline reads.
     #[derive(Debug, PartialEq)]
-    struct OwnerItem {
+    struct ParsedItem {
         title: String,
         author: String,
         text: String,
@@ -209,7 +210,7 @@ mod tests {
         note: String,
     }
 
-    fn owner_parse(raw: &str) -> Vec<OwnerItem> {
+    fn pipeline_parse(raw: &str) -> Vec<ParsedItem> {
         let months = [
             "January",
             "February",
@@ -285,7 +286,7 @@ mod tests {
             let note = take(&(title.clone(), last))
                 .or_else(|| take(&(title.clone(), first)))
                 .unwrap_or_default();
-            out.push(OwnerItem {
+            out.push(ParsedItem {
                 title: norm(&title),
                 author: norm(&author),
                 text,
@@ -332,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn export_round_trips_through_the_owners_parser() {
+    fn export_round_trips_through_a_clippings_parser() {
         let mut b = book();
         let mut h = highlight(NewHighlight {
             text: "Kto się naprawdę\n oddaje filozofii, ten się sposobi do śmierci.".into(),
@@ -369,11 +370,11 @@ mod tests {
         export(&paths, &b);
         export(&paths, &b); // idempotent
         let raw = std::fs::read_to_string(&paths.clippings).unwrap();
-        let items = owner_parse(&raw);
+        let items = pipeline_parse(&raw);
         assert_eq!(
             items,
             vec![
-                OwnerItem {
+                ParsedItem {
                     title: "Fedon (Dialogi)".into(),
                     author: "Platon, Władysław Witwicki".into(),
                     text: "Kto się naprawdę oddaje filozofii, ten się sposobi do śmierci.".into(),
@@ -381,7 +382,7 @@ mod tests {
                     date: "2026-10-17".into(),
                     note: String::new(),
                 },
-                OwnerItem {
+                ParsedItem {
                     title: "Fedon (Dialogi)".into(),
                     author: "Platon, Władysław Witwicki".into(),
                     text: "ψυχή — dusza".into(),
@@ -400,16 +401,15 @@ mod tests {
         assert!(md.contains("> Kto się naprawdę oddaje filozofii, ten się sposobi do śmierci.\n\n— Fedon · lok. 301 · 2026-10-17\n"), "{md}");
     }
 
-    /// The owner's real script, when it is installed: run its parser on
-    /// our export. `cargo test ... owners_script -- --ignored`.
+    /// A real pipeline script, when given: run its parser on our export.
+    /// The script is a Python module with `clippings(path)`:
+    /// `ARISTOTLE_CLIPPINGS_SCRIPT=path cargo test ... clippings_script -- --ignored`.
     #[test]
     #[ignore]
-    fn owners_script() {
-        let script =
-            PathBuf::from(std::env::var("HOME").unwrap()).join(".local/bin/clippings-to-notes");
-        if !script.exists() {
+    fn clippings_script() {
+        let Some(script) = std::env::var_os("ARISTOTLE_CLIPPINGS_SCRIPT").map(PathBuf::from) else {
             return;
-        }
+        };
         let mut b = book();
         b.annotations.push(highlight(NewHighlight {
             text: "Dusza jest nieśmiertelna.".into(),
@@ -424,7 +424,7 @@ mod tests {
             chapter: None,
             created: "2026-10-17 09:00:00".into(),
         }));
-        let dir = crate::testdir("marks-owner");
+        let dir = crate::testdir("marks-script");
         let paths = ExportPaths::for_root(&dir);
         export(&paths, &b);
         let code = "import importlib.machinery as m, importlib.util as u, sys, json\n\

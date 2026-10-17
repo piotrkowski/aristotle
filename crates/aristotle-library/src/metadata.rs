@@ -129,8 +129,8 @@ pub fn extract(
 }
 
 /// Common given names (folded), used only to tell which end of a two-part
-/// name is the given name. Polish first, then frequent foreign ones in the
-/// owner's library. A name missing here only makes the heuristic abstain.
+/// name is the given name. Polish first, then frequent foreign ones in
+/// Polish libraries. A name missing here only makes the heuristic abstain.
 const GIVEN_NAMES: &[&str] = &[
     "adam",
     "adrianna",
@@ -337,7 +337,7 @@ pub fn authors_from_folder(embedded: &[Author], folder: &str) -> Option<Vec<Auth
         .flat_map(|(n, a)| words(&a.name).into_iter().map(move |w| (w, n)))
         .collect();
     // "&" and ";" always separate people. A comma is ambiguous: in
-    // "Lecki Tomasz, Zolkiewska Jadwiga" it separates two people, in
+    // "Zulawski Jerzy, Konopnicka Maria" it separates two people, in
     // "Mickiewicz, Adam" it separates surname from given name. A side with
     // a single word means the latter; then the surname length is known.
     let mut groups: Vec<(Vec<String>, Option<usize>)> = Vec::new();
@@ -580,15 +580,15 @@ mod tests {
         );
         assert_eq!(names(&a), [("Adam Mickiewicz", "Mickiewicz, Adam")]);
         let a = check(
-            "Lecki Tomasz, Zolkiewska Jadwiga",
+            "Zulawski Jerzy, Konopnicka Maria",
             "Opowiadania.mobi",
-            "Żółkiewska Jadwiga Łęcki Tomasz",
+            "Konopnicka Maria Żuławski Jerzy",
         );
         assert_eq!(
             names(&a),
             [
-                ("Jadwiga Żółkiewska", "Żółkiewska, Jadwiga"),
-                ("Tomasz Łęcki", "Łęcki, Tomasz")
+                ("Maria Konopnicka", "Konopnicka, Maria"),
+                ("Jerzy Żuławski", "Żuławski, Jerzy")
             ]
         );
     }

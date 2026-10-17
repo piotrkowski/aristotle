@@ -9,6 +9,9 @@
 #                              (fonts cut to $FONT_SUBSET, see below)
 #   $OUT/data/css/            Plato's default stylesheets
 #   $OUT/data/hyphenation-patterns/   Liang patterns ($HYPH_LANGS)
+#   $OUT/licenses/             the licences of everything above
+#                              (tools/bundle-licenses.py)
+#   $OUT/SOURCE.txt            where the corresponding source is
 #
 # usage: tools/build-render.sh [device|host]
 #
@@ -34,11 +37,12 @@ esac
 B=${PLATO_BUILD:-$HOME/.cache/aristotle/plato-build/$DEFAULT_BUILD}
 OUT=${OUT:-$HOME/.cache/aristotle/render/$WHAT}
 TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
-# Hyphenation pattern sets to ship: the owner's languages. Plato loads every
+# Hyphenation pattern sets to ship: Polish, English, Ancient Greek and Latin
+# by default. Plato loads every
 # file present when the first paragraph is hyphenated, so fewer files means a
 # faster first page. Text in a language without patterns is not hyphenated.
 HYPH_LANGS=${HYPH_LANGS:-pl en-us en-gb grc la}
-# FONT_SUBSET=latin-greek (default) cuts the fonts to the owner's scripts;
+# FONT_SUBSET=latin-greek (default) cuts the fonts to Latin and Greek;
 # FONT_SUBSET=none ships them as they come.
 FONT_SUBSET=${FONT_SUBSET:-latin-greek}
 case $FONT_SUBSET in
@@ -179,6 +183,31 @@ for lang in $HYPH_LANGS; do
         -d "$OUT/data/hyphenation-patterns"
 done
 
+# Licences. The patterns' authors and licences are in the headers of their
+# hyph-utf8 master files, at the commit kl-hyphenate's README names; the
+# bundle ships those files.
+HYPH_REV=49706f9cfa97f6ead26b473ec10d23d5a651318a
+HYPH_DL=hyph-utf8-49706f9
+mkdir -p "$DL/$HYPH_DL"
+for lang in $HYPH_LANGS; do
+    case $lang in
+        pl) sum=83ddbbd21bc06a44bc4f4a4c49c38782e809cff5f026b764c044daa29e818843 ;;
+        en-us) sum=f4ffcd96c5cbc886bdad23f95dcae8edc3cd3620eae62f7946eceda97c4e68f8 ;;
+        en-gb) sum=e95bb4ab350f620c41c231c4785d7bdb4f91949d3e631b30e08b3ead3c340a52 ;;
+        grc) sum=dee55cf442ba4f4c5655622571ee796bede243a65ef2286858b28db7f1b40d78 ;;
+        la) sum=84e0be1877beaf6d1d7a83d5639fb65a0e0645cd2447b0dbccfa5e63565abdfd ;;
+        *) echo "no pinned hyph-utf8 notice for $lang; add its SHA-256 here" >&2; exit 1 ;;
+    esac
+    fetch "$HYPH_DL/hyph-$lang.tex" \
+        "https://raw.githubusercontent.com/hyphenation/tex-hyphen/$HYPH_REV/hyph-utf8/tex/generic/hyph-utf8/patterns/tex/hyph-$lang.tex" \
+        "$sum"
+done
+rm -rf "$OUT/licenses" "$OUT/SOURCE.txt"
+DJVU_LINKED=0
+[ ! -f "$B/plato/libs/libdjvulibre.a" ] || DJVU_LINKED=1
+PYTHONPATH="$DL/$FONTTOOLS" python3 "$REPO/tools/bundle-licenses.py" "$OUT" "$REPO" \
+    "$B/plato" "$TARGET" "$TOOLS/zig" "$DL/$HYPH_DL" "$DJVU_LINKED"
+
 file "$OUT/aristotle-render" "$OUT/aristotle"
 ls -l "$OUT/aristotle-render" "$OUT/aristotle"
 du -sh "$OUT/data"
@@ -193,12 +222,13 @@ du -sh "$OUT/data"
 #   ssh kindle 'tar -xzf - -C /mnt/us' < ~/.cache/aristotle/render/aristotle-app-device.tar.gz
 if [ "$WHAT" = device ]; then
     BUNDLE=${BUNDLE:-$HOME/.cache/aristotle/render/aristotle-render-device.tar.gz}
-    tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data
+    tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data \
+        ./licenses ./SOURCE.txt
     mv -f "$BUNDLE.part" "$BUNDLE"
     APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/render/aristotle-app-device.tar.gz}
     cp "$REPO/devloop/kindle/run-aristotle.sh" "$REPO/devloop/kindle/takeover.sh" "$OUT/"
     tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \
-        ./aristotle ./data ./run-aristotle.sh ./takeover.sh
+        ./aristotle ./data ./run-aristotle.sh ./takeover.sh ./licenses ./SOURCE.txt
     mv -f "$APP_BUNDLE.part" "$APP_BUNDLE"
     ls -l "$BUNDLE" "$APP_BUNDLE"
 fi

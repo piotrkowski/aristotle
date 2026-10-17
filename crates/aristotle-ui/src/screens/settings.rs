@@ -36,8 +36,8 @@ pub mod action {
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
-/// 24-step scale. "Nocne" is the owner's evening level (step 2 is raw 19
-/// of 2047, the owner's setting was 20).
+/// 24-step scale. "Nocne" is a dim evening level (step 2 is raw 19 of
+/// 2047, next to the raw 20 the stock UI had been set to on the test unit).
 pub const LIGHT_PRESETS: [(&str, u32); 4] =
     [("Wyłącz", 0), ("Nocne", 2), ("Średnie", 10), ("Jasne", 18)];
 

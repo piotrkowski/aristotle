@@ -1,6 +1,6 @@
 # Stock Kindle vs Aristotle
 
-Aristotle has to be measurably better than the stock UI, not just different. This document holds the stock baseline, the method that produces both sides' numbers, and the targets. Every number comes from `aristotle-observe` on our PW4 (firmware 5.13.6) unless marked otherwise.
+Aristotle has to be measurably better than the stock UI, not just different. This document holds the stock baseline, the method that produces both sides' numbers, and the targets. Every number comes from `aristotle-observe` on the test PW4 (firmware 5.13.6) unless marked otherwise.
 
 ## Method
 
@@ -51,7 +51,7 @@ Other stock observations:
 
 ## Page-turn strategy experiment
 
-`aristotle-bench --bin pageturn` alternates two full-screen pages of real text: a dump of the stock reader's own page of "Pan Tadeusz", and the same page shifted by 37 rows so every glyph changes. It runs with the stock GUI stopped and reports the median of 6 turns (two runs agreed within 5 ms):
+`aristotle-bench --bin pageturn` alternates two full-screen pages of real text: a dump of a page of a Polish novel as the stock reader rendered it, and the same page shifted by 37 rows so every glyph changes. It runs with the stock GUI stopped and reports the median of 6 turns (two runs agreed within 5 ms):
 
 | Strategy | Visible | Settled |
 | --- | --- | --- |
@@ -64,18 +64,18 @@ Other stock observations:
 
 "Visible" means the first update showing the new page has finished. In the two-step strategies the page is first thresholded to pure black and white, then upgraded to the anti-aliased page. Blitting a page into the framebuffer takes well under a millisecond (`Framebuffer::blit`).
 
-In a slow demo of all five (`devloop/kindle/pageturn-demo.sh`), the owner judged them all fast and saw no objectionable ghosting or flicker. That demo was misleading: its two pages differ only by a 37-row shift, so little residue could build up.
+In a slow demo of all five (`devloop/kindle/pageturn-demo.sh`), all of them looked fast, with no objectionable ghosting or flicker. That demo was misleading: its two pages differ only by a 37-row shift, so little residue could build up.
 
 ### What real reading showed (superseding the first decision)
 
-In the first real reading session (`aristotle-app`, then `aristotle-render` on "Pan Tadeusz"), the owner saw heavy ghosting and "shadowing" with A2 then GL16. Two mistakes compounded:
+Reading a whole novel (`aristotle-app`, then `aristotle-render`) showed heavy ghosting and "shadowing" with A2 then GL16. Two mistakes compounded:
 
 - Both updates were **partial**. A partial update drives only pixels whose value changes, so pixels the A2 pass had already set to white kept the previous page's ghost.
-- **A2 leaves residue** that GL16 does not clear, even as a full update. A2 preview followed by a full mode-9 pass still looked like "drawing twice" to the owner and was rejected.
+- **A2 leaves residue** that GL16 does not clear, even as a full update. A2 preview followed by a full mode-9 pass still looked like "drawing twice", so it was rejected.
 
-The driver log of the stock reader then showed what it does on every page turn: **one full-mode update of the whole screen with waveform mode 9** (`glkw16`, which FBInk calls a night-mode waveform, but stock uses it in day mode), and **mode 8** (`gck16`) for its flashing full refresh. Both trigger the driver's extra "Algorithm processing" and "ACD data" steps, Lab126's ghost reduction. Sending the identical request from our code makes ours indistinguishable in the log, and the owner confirmed the ghosting was gone.
+The driver log of the stock reader then showed what it does on every page turn: **one full-mode update of the whole screen with waveform mode 9** (`glkw16`, which FBInk calls a night-mode waveform, but stock uses it in day mode), and **mode 8** (`gck16`) for its flashing full refresh. Both trigger the driver's extra "Algorithm processing" and "ACD data" steps, Lab126's ghost reduction. Sending the identical request from our code makes ours indistinguishable in the log, and the ghosting was gone on the panel.
 
-With the next page rendered while the panel refreshes (`Screen::submit`/`finish`), a turn costs only the panel. Measured on "Pan Tadeusz", median of 6 turns:
+With the next page rendered while the panel refreshes (`Screen::submit`/`finish`), a turn costs only the panel. Measured on the same novel, median of 6 turns:
 
 | Single-step turn | Tap to page shown | Settled |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ With the next page rendered while the panel refreshes (`Screen::submit`/`finish`
 
 Rendering the next page takes about 106 ms on the device and fits inside the panel time.
 
-**Decision:** page turns use one full mode-9 update of the whole screen, the stock reader's own request, with the next page prerendered. That is as clean as stock and 11 % faster to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 stays a setting for anyone who prefers speed (about 1.8 times faster than stock), pending the owner's verdict on its look. Two-step turns with an A2 preview are off.
+**Decision:** page turns use one full mode-9 update of the whole screen, the stock reader's own request, with the next page prerendered. That is as clean as stock and 11 % faster to the page and 40 % faster to a calm screen, since stock sends a second update for its footer. DU4 stays a setting for anyone who prefers speed (about 1.8 times faster than stock), at some cost in gray levels. Two-step turns with an A2 preview are off.
 
 ## Targets for Aristotle
 
@@ -94,7 +94,7 @@ Rendering the next page takes about 106 ms on the device and fits inside the pan
 | Page turn, visible | 565 ms | **≤ 510 ms** (503 ms measured; 317 ms with DU4); about 440 ms from the release | One full mode-9 update like stock, next page prerendered, turn triggered on the tap's release (a hold selects text and must not turn) |
 | Page turn, settled | 830 ms | ≤ 510 ms (503 ms measured) | The footer is drawn in the same frame, so there is no second update |
 | Touch feedback | none before the result | ≤ 150 ms | A2 highlight on touch-down (`aristotle-ui`) |
-| Open a book | 0.8 s settled | ≤ 0.6 s (2.9 s measured for "Pan Tadeusz" before snapshots [dev]; host: submit 1 ms after the release instead of 278 ms, so about 0.5 s with the 480 ms flash; device check pending) | The page left last time shown from a snapshot with one mode-8 flash; layout on a worker thread; page numbers cached per book (see `reader.md`, "Opening a book") |
+| Open a book | 0.8 s settled | ≤ 0.6 s (2.9 s measured for a long MOBI novel before snapshots [dev]; host: submit 1 ms after the release instead of 278 ms, so about 0.5 s with the 480 ms flash; device check pending) | The page left last time shown from a snapshot with one mode-8 flash; layout on a worker thread; page numbers cached per book (see `reader.md`, "Opening a book") |
 | Menu or toolbar | 0.75–1.4 s settled | ≤ 0.5 s | DU-only UI chrome, no gray gradients |
 | Flashes during reading | 0 in 8 turns | 0 by default, GC16 on demand or every N pages | Measured ghosting decides N |
 | Stability | framework OOM restart observed | none | No JVM; static Rust; memory measured |
@@ -105,7 +105,7 @@ These are commitments to measure, not claims. Each will be checked with the same
 
 ## Transitions in the Aristotle app
 
-Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-transitions.txt` (injected taps; `aristotle-observe` counts the taps it injects, since the app grabs the touchscreen). Times run from the finger lifting; page turns then fired on touch-down, so they showed 0 ms to the first update. Since turns fire on release (the owner's decision: a long press on a word had turned the page first and flashed the next page before the definition), a turn's time from the release is the submit (the next page is prerendered) plus the panel's 440 ms; the target stays about 440 ms from the release, to be measured again with the same scenario.
+Measured on the device on 2026-10-17 with `devloop/kindle/scenarios/aristotle-transitions.txt` (injected taps; `aristotle-observe` counts the taps it injects, since the app grabs the touchscreen). Times run from the finger lifting; page turns then fired on touch-down, so they showed 0 ms to the first update. Since turns fire on release (a long press on a word had turned the page first and flashed the next page before the definition), a turn's time from the release is the submit (the next page is prerendered) plus the panel's 440 ms; the target stays about 440 ms from the release, to be measured again with the same scenario.
 
 | Interaction | Acknowledged | Settled | Updates | Flash | Waveforms |
 | --- | --- | --- | --- | --- | --- |

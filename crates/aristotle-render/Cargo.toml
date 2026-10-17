@@ -3,6 +3,7 @@ name = "aristotle-render"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
+publish = false
 description = "E-book page renderer for Aristotle on the PW4, built on Plato's document engine"
 
 # A workspace of its own, excluded from the root one: plato-core needs the

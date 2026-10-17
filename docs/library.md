@@ -47,7 +47,7 @@ Every book gets a title. Precedence, highest first:
 
    For MOBI, AZW3 and PDF, which have no sort names, the folder can also repair embedded authors. Device folders look like "Lecki Tomasz, Zolkiewska Jadwiga": ASCII-folded sort names separated by commas. The folder is used only when it is clearly better:
    - its words are exactly the embedded words, ignoring case, diacritics and punctuation;
-   - it either splits one embedded field into several authors ("Żółkiewska Jadwiga Łęcki Tomasz" becomes "Jadwiga Żółkiewska" and "Tomasz Łęcki") or reveals an inverted name ("Schopenhauer Arthur" becomes "Arthur Schopenhauer", sort "Schopenhauer, Arthur").
+   - it either splits one embedded field into several authors ("Konopnicka Maria Żuławski Jerzy" becomes "Maria Konopnicka" and "Jerzy Żuławski") or reveals an inverted name ("Schopenhauer Arthur" becomes "Arthur Schopenhauer", sort "Schopenhauer, Arthur").
 
    Commas are ambiguous. If one side of a comma is a single word, the folder is "Last, First" for one person ("Mickiewicz, Adam"): the surname is known, so an already correct "Adam Mickiewicz" stays as it is. Otherwise commas separate people, and a short list of common Polish and foreign given names decides which end of each name is the given name. When neither end is a known given name, a comma-separated list of several authors is read as surname-first; a single ambiguous name is left alone. Spelling with diacritics always comes from the book. EPUB is not touched, because its `file-as` is authoritative.
 3. The file name, for the title, with `_` turned into spaces and a trailing shop product code after `__` dropped (`Obrona_Sokratesa__p1234567890.epub` → "Obrona Sokratesa"). `title_source: "filename"` marks such guesses.
@@ -158,7 +158,7 @@ Shape (abridged, values illustrative):
 ## Cover pipeline
 
 1. **Extract** the raw cover bytes (see above).
-2. **Decode to luminance.** JPEG uses `jpeg-decoder`'s DCT scaling: the IDCT runs at 1/2, 1/4 or 1/8 size, picking the smallest scale still at least 200 px wide. A 1600 × 2560 cover is then decoded at 200 × 320, which matters most on the A9. RGB is converted with Rec. 601 integer weights. Alpha is composited over white. CMYK JPEGs are treated as Adobe-inverted. PNG is decoded fully with a 40 MP cap. GIF and WebP covers are detected but not decoded (none in the owner's library).
+2. **Decode to luminance.** JPEG uses `jpeg-decoder`'s DCT scaling: the IDCT runs at 1/2, 1/4 or 1/8 size, picking the smallest scale still at least 200 px wide. A 1600 × 2560 cover is then decoded at 200 × 320, which matters most on the A9. RGB is converted with Rec. 601 integer weights. Alpha is composited over white. CMYK JPEGs are treated as Adobe-inverted. PNG is decoded fully with a 40 MP cap. GIF and WebP covers are detected but not decoded (none in the test library).
 3. **Resize** to 200 px wide, height by aspect ratio and capped at 320. Shrinking uses exact area averaging, where each source pixel contributes by its overlap, so the thin title text on covers does not alias away. Enlarging uses bilinear interpolation.
 4. **Dither** to the 16 levels the panel shows (multiples of 17, what GL16/GC16 reproduce). It uses serpentine Floyd–Steinberg with errors kept in 1/16 gray steps. Without dithering the EPDC rounds intermediate values and bands gradients. Ordered dithering is better only for content that is partially refreshed while it changes, which a library thumbnail is not. A unit test checks that a gradient keeps its mean brightness per band and uses at least 14 levels.
 5. **Store** as binary PGM (`P5`) in `<data>/covers/<md5 of cover bytes>-<w>x<h>.pgm`. PGM is trivial to read, opens on any desktop, and its pixels are already in the 8 bpp framebuffer layout. Keying by content means re-scans, renames and duplicate editions share one file, a changed cover gets a new file, and a new thumbnail size never serves stale files. `aristotle-library-cli thumb ID out.png` exports one for viewing.
@@ -273,7 +273,7 @@ u32 × page count   start position of each page (here every 2300 positions)
   - `fpr` (kept for later);
   - font preferences (they map to the stock fonts, not ours).
 
-The unit tests build `.mbs`, `.mbp1` and `.apnx` files with the device layouts and invented values; the owner's files are not committed. An ignored test parses real copies: `ARISTOTLE_SDR_SAMPLES=~/.cache/aristotle/sdr-samples cargo test -p aristotle-library device_samples -- --ignored --nocapture`.
+The unit tests build `.mbs`, `.mbp1` and `.apnx` files with the device layouts and invented values; real reading state is not committed. An ignored test parses real copies: `ARISTOTLE_SDR_SAMPLES=~/.cache/aristotle/sdr-samples cargo test -p aristotle-library device_samples -- --ignored --nocapture`.
 
 Firmware 5.13.6 used `.mbs`/`.mbp1` (MOBI 7 class) for both sideloaded `.mobi` books, not `.azw3f` **[dev]**.
 
@@ -309,7 +309,7 @@ Firmware 5.13.6 ships no Polish clippings bundle (en, en_GB, de, es, fr, it, ja,
 - **Page versus location** is decided by keyword (`stron`, `lokalizac`, `pozycj`, …), with location as the default.
 - **Date** comes from the last `|` segment, read order-independently: year, day, a month name from a table with the Polish genitive forms ("29 grudnia"), time, and AM/PM.
 
-Tests cover the en_GB, en_US, de, fr, nl and ru firmware templates and a plausible Polish form. Against the owner's real 2,490-line file (en_GB), it parses all 498 entries with none rejected **[host]**.
+Tests cover the en_GB, en_US, de, fr, nl and ru firmware templates and a plausible Polish form. Against a real 2,490-line file (en_GB), it parses all 498 entries with none rejected **[host]**.
 
 `aristotle-library-cli clippings FILE --import` attaches clippings to books by folded title, then by prefix, with the author breaking ties. Exact duplicates are skipped, so importing twice is harmless. Clippings carry no reading position, so they never set progress.
 
@@ -317,8 +317,8 @@ Tests cover the en_GB, en_US, de, fr, nl and ru firmware templates and a plausib
 
 `export` writes the highlights made in the reader (annotations with source `aristotle`; see `docs/reader.md`, "Highlights, bookmarks and export"):
 
-- **`My Clippings.txt`**, appended in the template above with English labels ("Your Highlight at location 60-63 | Added on Saturday, 17 October 2026 21:05:09"), CRLF, a BOM only when the file is created. Only entries whose title and text the file does not hold yet are written, so exporting after every highlight is idempotent. A highlight's note is a "Your Note" entry at the highlight's first location, written before it: the owner's notes pipeline attaches a pending note to the next highlight starting there. Bookmarks are not exported. Entries round-trip through `clippings::parse` (tested).
-- **Markdown**, one file per book (`<Title> — <Author>.md`, the characters Obsidian and FAT reject removed), rewritten each time: front matter (`tytuł`, `autor`, `źródło: Aristotle`, `tags`), the title, the author, and per highlight a quote with chapter, `lok.` and date, and the note if any, as the owner's Obsidian notes are laid out.
+- **`My Clippings.txt`**, appended in the template above with English labels ("Your Highlight at location 60-63 | Added on Saturday, 17 October 2026 21:05:09"), CRLF, a BOM only when the file is created. Only entries whose title and text the file does not hold yet are written, so exporting after every highlight is idempotent. A highlight's note is a "Your Note" entry at the highlight's first location, written before it: common clippings parsers attach a pending note to the next highlight starting there. Bookmarks are not exported. Entries round-trip through `clippings::parse` (tested).
+- **Markdown**, one file per book (`<Title> — <Author>.md`, the characters Obsidian and FAT reject removed), rewritten each time: front matter (`tytuł`, `autor`, `źródło: Aristotle`, `tags`), the title, the author, and per highlight a quote with chapter, `lok.` and date, and the note if any, laid out as an Obsidian note.
 
 Annotations carry two fields for this besides those above: `chapter` (the chapter title at the start) and `note`.
 
@@ -337,7 +337,7 @@ aristotle-library-cli thumb ID OUT.png
 
 ## Performance
 
-The host is 2 cores; the PW4 emulator was running in the background, so the cold numbers are noisy. Release build. Sample set shaped like the owner's library: 25 EPUB (23 Wolne Lektury Plato dialogues, 2 shop EPUBs), 4 MOBI, 1 PDF, 1 TXT, 28 MB, in author folders with an `.sdr` folder and some clutter.
+The host is 2 cores; the PW4 emulator was running in the background, so the cold numbers are noisy. Release build. Sample set shaped like a real Polish library: 25 EPUB (23 Wolne Lektury Plato dialogues, 2 shop EPUBs), 4 MOBI, 1 PDF, 1 TXT, 28 MB, in author folders with an `.sdr` folder and some clutter.
 
 | Run | Time |
 | --- | --- |
