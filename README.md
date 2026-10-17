@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/readme-light.png#gh-light-mode-only" alt="Aristotle on a Kindle Paperwhite 4: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
-  <img src="assets/screenshots/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
+  <img src="docs/images/readme-light.png#gh-light-mode-only" alt="Aristotle on a Kindle Paperwhite 4: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
+  <img src="docs/images/readme-dark.png#gh-dark-mode-only" alt="Aristotle on a Kindle Paperwhite 4 in night mode: the library, a page of Aristotle's Nicomachean Ethics in English, and the dictionary popup for the Greek word ἀγαθοῦ">
 </p>
 
 Aristotle replaces the Kindle's stock Java interface. While it runs, the store, the web browser and 12 background services for Amazon's cloud and telemetry are stopped, and a reboot brings them back. Aristotle makes no network connections, and books are copied over USB. An older Paperwhite still has a good screen and battery, and this keeps it useful instead of buying a new e-reader.

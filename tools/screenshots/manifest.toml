@@ -9,7 +9,7 @@
 # set its own.
 
 base = "$ARISTOTLE_CACHE/captures/readme"
-out_dir = "../../assets/screenshots"
+out_dir = "../../docs/images"
 
 # Frame styles; an output picks one with `style`, which overrides `default`.
 #   radius     corner radius in output pixels

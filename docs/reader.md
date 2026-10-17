@@ -291,7 +291,7 @@ Popups sit at the bottom, or at the top when the word is in the lower half, and 
 
 ### Dictionary
 
-<img src="../assets/screenshots/dictionary.png" width="325" alt="The dictionary popup for the Greek word ἀγαθοῦ over a page of Bywater's Greek text: the dictionary form ἀγαθός, good; brave; noble; moral; gentle, from a grc-en Wiktionary dictionary, with a tab for grc-pl">
+<img src="images/dictionary.png" width="325" alt="The dictionary popup for the Greek word ἀγαθοῦ over a page of Bywater's Greek text: the dictionary form ἀγαθός, good; brave; noble; moral; gentle, from a grc-en Wiktionary dictionary, with a tab for grc-pl">
 
 The app reads StarDict dictionaries (`dict/stardict.rs`) one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict` or `--dict DIR`. The language pair comes from the file name, as in `grc-pl.ifo`. The tested dictionaries are Wiktionary exports (xxyzz/wiktionary_stardict), which list inflected forms as synonyms and sort their files by Python's `str.lower()`. StarDict's own order cannot be assumed.
 

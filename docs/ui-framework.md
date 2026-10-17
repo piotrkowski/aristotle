@@ -109,8 +109,8 @@ The times come from `docs/pw4-reference.md` and `docs/native-vs-aristotle.md`. T
 Night mode shows the library, the reader page, the menu and the settings as white on black. It is one switch, in the reader menu and in the settings, stored in `reader.json`. Screens are drawn in day colours and the final pixels are inverted. Anti-aliasing stays correct, and no screen needs a night variant.
 
 <p>
-  <img src="../assets/screenshots/reader.png" width="325" alt="Book I, Chapter I of Aristotle's Nicomachean Ethics in English, black on white">
-  <img src="../assets/screenshots/reader-night.png" width="325" alt="The same page in night mode, white on black">
+  <img src="images/reader.png" width="325" alt="Book I, Chapter I of Aristotle's Nicomachean Ethics in English, black on white">
+  <img src="images/reader-night.png" width="325" alt="The same page in night mode, white on black">
 </p>
 
 Software inversion is the default. `Ui::set_night` inverts the UI canvas, and `Framebuffer::blit_inverted` inverts book pages during the copy to the framebuffer. Hardware inversion (`--night-method hardware`) sets `EPDC_FLAG_ENABLE_INVERSION` on each update through `Framebuffer::set_hw_invert`. The panel receives the same values either way. The software method keeps the framebuffer and the panel in agreement, so screenshots and the host preview are exact. With the hardware method, an update sent without the flag shows in day colours. Snapshots and the page cache always hold day pixels.

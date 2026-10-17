@@ -4,7 +4,7 @@
 and the site. Inputs are 1072 x 1448 8-bit gray PNGs of the device's
 framebuffer (`tools/host/screenshot.sh`) or of the desktop preview.
 
-- Framed shots go to `assets/screenshots/` (README and docs) and
+- Framed shots go to `docs/images/` (README and docs) and
   `site/assets/shots/` (the site's figures), as lossless gray-and-alpha PNGs
   with a transparent background, so they sit on light and dark pages.
 - The site's demo frames go to `site/demo/frames/` unframed, snapped to the

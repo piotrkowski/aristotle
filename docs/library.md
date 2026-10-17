@@ -4,7 +4,7 @@
 
 Source marks: **[fw]** read from firmware 5.13.6, **[dev]** verified on files from our device, **[host]** verified on the host with real files, **[KOReader]** and **[calibre]** borrowed from those projects, **[inference]** not yet confirmed.
 
-<img src="../assets/screenshots/library.png" width="325" alt="The library on the device: the book to continue at the top, then the Books, Folders and Series views, the shelves All, Reading, New and Finished, and a page of books">
+<img src="images/library.png" width="325" alt="The library on the device: the book to continue at the top, then the Books, Folders and Series views, the shelves All, Reading, New and Finished, and a page of books">
 
 ## What it indexes
 
