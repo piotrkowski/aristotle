@@ -1,0 +1,23 @@
+[package]
+name = "aristotle-reader"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Aristotle's reader app for the PW4: library, Plato-rendered pages, menu, progress"
+# Member of the aristotle-render workspace, which links Plato's C libraries;
+# the root workspace excludes both. Build with tools/build-render.sh.
+workspace = "../aristotle-render"
+
+[[bin]]
+name = "aristotle"
+path = "src/main.rs"
+
+[dependencies]
+aristotle-hal = { path = "../aristotle-hal" }
+aristotle-library = { path = "../aristotle-library" }
+aristotle-render = { path = "../aristotle-render" }
+# The UI font is compiled in; the preview binary and its PNG encoder are not.
+aristotle-ui = { path = "../aristotle-ui", default-features = false, features = ["embedded-fonts"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

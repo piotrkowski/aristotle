@@ -1,7 +1,9 @@
 #!/bin/sh
-# Build aristotle-render (crates/aristotle-render) and assemble its bundle:
+# Build the aristotle-render workspace (crates/aristotle-render and the
+# reader app, crates/aristotle-reader) and assemble its bundle:
 #
-#   $OUT/aristotle-render      static binary
+#   $OUT/aristotle-render      static binary: the renderer CLI
+#   $OUT/aristotle             static binary: the reader app
 #   $OUT/data/fonts/           the fonts Plato's engine loads unconditionally
 #   $OUT/data/serif/           Literata, the body and chrome font
 #   $OUT/data/css/             Plato's default stylesheets
@@ -15,7 +17,9 @@
 # Needs the static C libraries of a tools/build-plato.sh run for the same
 # target: PLATO_BUILD (default ~/.cache/aristotle/plato-build/main for device,
 # .../host-x86_64 for host; the host one only needs PLATO_LIBS_ONLY=1).
-# OUT defaults to ~/.cache/aristotle/render/<device|host>.
+# OUT defaults to ~/.cache/aristotle/render/<device|host>; the device tarball
+# goes to BUNDLE (default ~/.cache/aristotle/render/aristotle-render-device.tar.gz)
+# and the reader app's to APP_BUNDLE (.../aristotle-app-device.tar.gz).
 # CARGO_CMD=clippy|test runs that cargo command instead of building.
 set -eu
 
@@ -56,12 +60,13 @@ export "CC_$T_=$B/bin/$PFX-cc" "CXX_$T_=$B/bin/$PFX-c++" "AR_$T_=$B/bin/$PFX-ar"
 # environment, and skips the bundle (tests need the host target).
 CARGO_CMD=${CARGO_CMD:-build}
 cargo "$CARGO_CMD" --config "$REPO/.cargo/config.toml" --release --target "$TARGET" \
-    --manifest-path "$REPO/crates/aristotle-render/Cargo.toml"
+    --manifest-path "$REPO/crates/aristotle-render/Cargo.toml" --workspace
 [ "$CARGO_CMD" = build ] || exit 0
 
 SRC="$REPO/third_party/plato-patched"
 mkdir -p "$OUT/data/fonts" "$OUT/data/serif" "$OUT/data/css" "$OUT/data/hyphenation-patterns"
 cp "$CARGO_TARGET_DIR/$TARGET/release/aristotle-render" "$OUT/aristotle-render"
+cp "$CARGO_TARGET_DIR/$TARGET/release/aristotle" "$OUT/aristotle"
 # Exactly the files plato-core's default_fonts() opens; without any one of
 # them the engine has no fonts at all.
 for f in LibertinusSerif-Regular.otf LibertinusSerif-Italic.otf LibertinusSerif-Bold.otf \
@@ -94,17 +99,26 @@ for lang in $HYPH_LANGS; do
         -d "$OUT/data/hyphenation-patterns"
 done
 
-file "$OUT/aristotle-render"
-ls -l "$OUT/aristotle-render"
+file "$OUT/aristotle-render" "$OUT/aristotle"
+ls -l "$OUT/aristotle-render" "$OUT/aristotle"
 du -sh "$OUT/data"
 
-# Device bundle: binary plus data, rebuilt from what was just built so an
-# upload can never carry a stale binary (it once did). Unpack streamed, since
-# /var on the device is a 64 MB tmpfs:
+# Device bundles: binary plus data, rebuilt from what was just built so an
+# upload can never carry a stale binary (it once did). One per binary,
+# because both together unpack to about 60 MB and /var on the device is a
+# 64 MB tmpfs. Unpack streamed:
 #   ssh kindle 'tar -xzf - -C /var/tmp' < ~/.cache/aristotle/render/aristotle-render-device.tar.gz
+# The reader app's bundle (aristotle/ with the app, data/ and
+# run-aristotle.sh) is meant for the userstore; see docs/reader.md:
+#   ssh kindle 'tar -xzf - -C /mnt/us' < ~/.cache/aristotle/render/aristotle-app-device.tar.gz
 if [ "$WHAT" = device ]; then
-    BUNDLE="$HOME/.cache/aristotle/render/aristotle-render-device.tar.gz"
+    BUNDLE=${BUNDLE:-$HOME/.cache/aristotle/render/aristotle-render-device.tar.gz}
     tar -czf "$BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' ./aristotle-render ./data
     mv -f "$BUNDLE.part" "$BUNDLE"
-    ls -l "$BUNDLE"
+    APP_BUNDLE=${APP_BUNDLE:-$HOME/.cache/aristotle/render/aristotle-app-device.tar.gz}
+    cp "$REPO/devloop/kindle/run-aristotle.sh" "$REPO/devloop/kindle/takeover.sh" "$OUT/"
+    tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \
+        ./aristotle ./data ./run-aristotle.sh ./takeover.sh
+    mv -f "$APP_BUNDLE.part" "$APP_BUNDLE"
+    ls -l "$BUNDLE" "$APP_BUNDLE"
 fi
