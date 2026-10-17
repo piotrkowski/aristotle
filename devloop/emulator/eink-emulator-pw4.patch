@@ -1,6 +1,10 @@
 Local fixes that let stock PW4 5.13.6 reach Home in katadelos/eink-emulator 8e1e42e.
 devloop/emulator/setup.sh applies this with git apply.
 
+Upstream: https://github.com/katadelos/eink-emulator @8e1e42e, which carries
+no licence. This patch is ours; it is kept to the changed lines plus one line
+of context each, so it reproduces as little of the upstream code as possible.
+
 - models.json: the Rex machine's default IDME board_id, 00015R0000000000, is a
   legacy tattoo ID that /etc/upstart/functions decodes as platform=yoshi. The
   guest then stays on the boot splash and never starts USB SSH. Use the PSN v2
@@ -13,17 +17,13 @@ diff --git a/eink_emulator/images/rootfs.py b/eink_emulator/images/rootfs.py
 index a9945c0..2219967 100644
 --- a/eink_emulator/images/rootfs.py
 +++ b/eink_emulator/images/rootfs.py
-@@ -575,6 +575,10 @@ def prepare_rex(source: Path, output: Path) -> None:
-         "/etc/upstart/qemu-wake-gui.conf": ("qemu-wake-gui.conf", "0100644"),
-         "/etc/upstart/qemu-disable-kpp-boot.conf": ("qemu-disable-kpp-boot.conf", "0100644"),
+@@ -577,2 +577,6 @@ def prepare_rex(source: Path, output: Path) -> None:
          "/etc/upstart/qemu-seed-locale.conf": ("qemu-seed-locale.conf", "0100644"),
 +        "/etc/upstart/qemu-keyboard-single-language.conf": (
 +            "qemu-keyboard-single-language.conf",
 +            "0100644",
 +        ),
      })
-     prepare_usb_network(output)
- 
 diff --git a/guest-overrides/rex/qemu-keyboard-single-language.conf b/guest-overrides/rex/qemu-keyboard-single-language.conf
 new file mode 100644
 index 0000000..d27d972
@@ -63,13 +63,9 @@ diff --git a/models.json b/models.json
 index cf9f0b2..2f5545e 100644
 --- a/models.json
 +++ b/models.json
-@@ -724,6 +724,9 @@
-       "rootfs": ["rootfs.img"],
-       "storage_bios": ["s-bios.bin"],
+@@ -726,2 +726,5 @@
        "falcon_bios": ["bios.bin"]
 +    },
 +    "machine_properties": {
 +      "idme-pcbsn": "P0015R0000000000"
      }
-   },
-   "kindle-4": {
