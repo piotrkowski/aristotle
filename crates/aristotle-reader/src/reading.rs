@@ -228,23 +228,28 @@ impl App {
             .as_ref()
             .map(|d| d.dicts.iter().map(|x| x.label.clone()).collect())
             .unwrap_or_default();
-        // Switcher tabs share the title row: long names are shortened to
-        // what their share of it holds.
-        let tabs = match self.reading().map(|r| &r.overlay) {
-            Some(Overlay::Dict { lookup, .. }) => lookup.order.len(),
-            _ => 0,
+        // Switcher tabs share the title row with the word: short labels
+        // keep their width, long names are shortened to what is left.
+        let shown: Vec<usize> = match self.reading().map(|r| &r.overlay) {
+            Some(Overlay::Dict { lookup, .. }) => lookup.order.clone(),
+            _ => Vec::new(),
         };
-        let dicts = if tabs > 0 {
+        let dicts = if shown.is_empty() {
+            dicts
+        } else {
             let row = (self.ui.bounds().w - 2 * aristotle_ui::theme::margin()) as f32;
-            let max = ((row - 260.0) / tabs as f32 - 38.0).clamp(150.0, 320.0);
             let style = styles.ui_bold();
             let text = &mut self.ui.text;
+            let widths: Vec<f32> = shown
+                .iter()
+                .filter_map(|&i| dicts.get(i))
+                .map(|d| text.measure(d, &style))
+                .collect();
+            let max = overlay::tab_width(&widths, row - overlay::TITLE_MIN);
             dicts
                 .iter()
                 .map(|d| overlay::fit_label(d, max, |s| text.measure(s, &style)))
                 .collect()
-        } else {
-            dicts
         };
         let h = self.ui.bounds().h;
         // Popup text the UI font can draw (see `overlay::printable`).

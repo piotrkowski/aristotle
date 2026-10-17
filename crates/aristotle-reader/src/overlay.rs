@@ -506,6 +506,28 @@ pub fn percent_label(value: f32, detail: &str) -> String {
     }
 }
 
+/// Room the word keeps in the popup's title row, beside the switcher.
+pub const TITLE_MIN: f32 = 200.0;
+/// What a switcher tab adds to its label: padding, border and the gap.
+const TAB_CHROME: f32 = 2.0 * 14.0 + 4.0 + 10.0;
+
+/// The widest label each switcher tab may have when the tabs, with labels
+/// `widths` wide, share `room`: tabs that fit their share keep their width,
+/// the rest split what is left (never under 150 px).
+pub fn tab_width(widths: &[f32], room: f32) -> f32 {
+    let mut long: Vec<f32> = widths.to_vec();
+    let mut left = room;
+    loop {
+        let share = left / long.len().max(1) as f32 - TAB_CHROME;
+        let (short, rest): (Vec<f32>, Vec<f32>) = long.iter().partition(|&&w| w <= share);
+        if short.is_empty() || rest.is_empty() {
+            return share.max(150.0);
+        }
+        left -= short.iter().map(|w| w + TAB_CHROME).sum::<f32>();
+        long = rest;
+    }
+}
+
 /// A dictionary's name for the switcher, at most `max` wide by `measure`:
 /// as it is if it fits; else without a trailing "(...)" (a source such as
 /// "(Wikipedia)"); else cut after the last whole word that fits, with
@@ -591,6 +613,19 @@ mod tests {
     /// One unit per character.
     fn chars(s: &str) -> f32 {
         s.chars().count() as f32
+    }
+
+    #[test]
+    fn short_tabs_keep_their_width_and_long_ones_share_the_rest() {
+        use super::{tab_width, TAB_CHROME};
+        // Three language pairs and a long name in 730 px.
+        let w = tab_width(&[90.0, 80.0, 85.0, 600.0], 730.0);
+        let expected = 730.0 - (90.0 + 80.0 + 85.0) - 4.0 * TAB_CHROME;
+        assert!((w - expected).abs() < 0.01, "{w}");
+        // Everything fits: the share is at least as wide as the widest.
+        assert!(tab_width(&[90.0, 80.0], 730.0) >= 90.0);
+        // Many long names never squeeze below the floor.
+        assert_eq!(tab_width(&[600.0; 6], 730.0), 150.0);
     }
 
     #[test]
