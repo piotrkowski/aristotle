@@ -1,6 +1,6 @@
 # Book library
 
-`crates/aristotle-library` indexes books and stores reading state. It imports stock Kindle sidecars and KOReader progress. The crate is pure Rust. `aristotle-library-cli` runs it on the host or device.
+`crates/aristotle-library` indexes books and stores reading state. It imports stock Kindle [sidecars](glossary.md#sidecar) and [KOReader](glossary.md#koreader) progress. The crate is pure Rust, and `aristotle-library-cli` runs it on the host or device.
 
 Source marks: [fw] means firmware 5.13.6, [dev] means device files, [host] means host tests, and [KOReader] or [calibre] names an external source. [inference] means unconfirmed.
 
@@ -14,16 +14,16 @@ The device book root is `/mnt/us/documents`. Detection uses file contents, not j
 
 | Format | Detection | Metadata | Cover |
 | --- | --- | --- | --- |
-| EPUB | ZIP with EPUB mimetype or `META-INF/container.xml` | OPF | Embedded cover |
-| MOBI, AZW3 | PalmDB `BOOKMOBI` | Record 0 and EXTH | EXTH 201 |
-| PalmDOC | `TEXtREAd` | Database name | None |
+| [EPUB](glossary.md#epub) | ZIP with EPUB mimetype or `META-INF/container.xml` | [OPF](glossary.md#opf) | Embedded cover |
+| [MOBI](glossary.md#mobi), [AZW3](glossary.md#azw3) | PalmDB `BOOKMOBI` | Record 0 and [EXTH](glossary.md#exth) | EXTH 201 |
+| [PalmDOC](glossary.md#palmdoc) | `TEXtREAd` | Database name | None |
 | PDF | `%PDF-` in the first 1 KiB | Info dictionary and page count | None |
-| CBZ | `.cbz` or `.zip` with at least half its entries images | `ComicInfo.xml` and page count | First image |
-| TXT | `.txt` with text bytes or UTF-16 BOM | File and folder names | None |
+| [CBZ](glossary.md#cbz) | `.cbz` or `.zip` with at least half its entries images | `ComicInfo.xml` and page count | First image |
+| TXT | `.txt` with text bytes or UTF-16 [BOM](glossary.md#bom) | File and folder names | None |
 
-The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, `My Clippings.txt`, and directory symlinks. Kindle dictionaries stay out of the library. Encrypted MOBI is listed with `drm: true` but cannot be read.
+The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, [`My Clippings.txt`](glossary.md#my-clippingstxt), and directory symlinks. Kindle dictionaries stay out of the library. [DRM](glossary.md#drm)-encrypted MOBI is listed with `drm: true` but cannot be read.
 
-KFX, CBR, CB7, FB2, DjVu, and Topaz are unsupported. Index support does not imply reader support ([Reader formats](reader.md#formats-and-positions)).
+[KFX](glossary.md#kfx), CBR and CB7 comic archives, FB2 (FictionBook), DjVu scanned documents, and Kindle Topaz books are unsupported. Index support does not imply reader support ([Reader formats](reader.md#formats-and-positions)).
 
 ## Metadata
 
@@ -41,23 +41,23 @@ For MOBI, AZW3, and PDF, a matching author folder can split merged names or corr
 
 ## Identity and the index
 
-Book IDs use KOReader's partial MD5 and survive moves and renames [KOReader]. Identical copies get `-2`, `-3`, and further suffixes.
+Book IDs use KOReader's [partial MD5](glossary.md#partial-md5), a hash of sampled content, so they survive moves and renames [KOReader]. Identical copies get `-2`, `-3`, and further suffixes.
 
-`library.json` lives in the data directory, `/mnt/us/.aristotle` on the device. Writes use a temporary file, sync, and rename. Records contain metadata, file stamps, cover keys, status, progress, settings, and annotations.
+`library.json` lives in the data directory, `/mnt/us/.aristotle` on the device. The library writes to a temporary file, syncs it to storage, then renames it. Records contain metadata, file stamps, cover keys, status, progress, settings, and annotations.
 
-Status is `unread`, `reading`, or `finished`. Opening a book sets `reading`. Completion is explicit or imported. Progress stores a fraction and a renderer-specific locator.
+Status is `unread`, `reading`, or `finished`. Opening a book sets `reading`, while completion is explicit or imported. Progress stores a fraction and a renderer-specific locator.
 
 | Locator | Position |
 | --- | --- |
-| `epub` | Spine index and character offset |
+| `epub` | [Spine](glossary.md#spine) index and character offset |
 | `kindle` | MOBI or AZW3 byte position |
 | `page` | PDF or CBZ page index |
 | `text` | TXT byte offset |
-| `xpointer` | KOReader position, kept verbatim |
+| `xpointer` | [KOReader position](glossary.md#xpointer), kept verbatim |
 
 Unchanged size and mtime avoid reopening a file. State follows the ID across moves, or the path when file contents change. Up to 500 removed records preserve progress for books copied back. A damaged file does not stop the scan.
 
-Covers are PGM thumbnails in `<data>/covers/`, keyed by the cover bytes' MD5. They are 200 px wide, at most 320 px high, and dithered to 16 grays.
+Covers are grayscale PGM image thumbnails in `<data>/covers/`, keyed by the cover bytes' MD5. They are 200 px wide, at most 320 px high, and [dithered](glossary.md#dithering) to 16 grays.
 
 ## Shelves, folders and series
 
@@ -71,7 +71,7 @@ Lists use pages, not scrolling. Sort order is recent, title, or author. Search i
 
 ## Stock files: sidecars and My Clippings.txt
 
-The library imports reading positions and annotation records from supported Kindle sidecars (KRDS). Stock annotation parsing is not verified on device data. Imported annotations are stored in the index, but the reader's page highlights and Highlights list show only annotations created in Aristotle. New highlights made in Aristotle go to `My Clippings.txt` in the stock format.
+The library imports reading positions and annotation records from supported Kindle sidecars in [KRDS](glossary.md#krds) format. Stock annotation parsing is not verified on device data. Imported annotations are stored in the index, but the reader's page highlights and Highlights list show only annotations created in Aristotle. New highlights made in Aristotle go to `My Clippings.txt` in the stock format.
 
 The format is described here in our own words, from public documentation (jhowell's KRDS notes on MobileRead, [krdsrw](https://github.com/midrare/krdsrw), `kindle_formats`) and from files on the device, for interoperability. No Amazon code is included.
 
@@ -82,7 +82,7 @@ For `<name>.<ext>`, the stock reader stores files in `<name>.sdr/`.
 | Format | Positions | Annotations and settings |
 | --- | --- | --- |
 | MOBI 7 | `.mbs` | `.mbp1` |
-| KF8, AZW3 | `.azw3f` | `.azw3r` |
+| [KF8](glossary.md#kf8), AZW3 | `.azw3f` | `.azw3r` |
 | KFX | `.yjf` | `.yjr` |
 | PDF | `.pdt` | `.pds` |
 | Topaz | `.tas` | `.tal` |
@@ -91,7 +91,7 @@ The folder can also contain `.apnx` page maps and KOReader's `metadata.<ext>.lua
 
 ### KRDS
 
-`sidecar.rs` parses big-endian typed objects. The layout matches four device `.mbs` and `.mbp1` files [dev] and firmware readers [fw].
+`sidecar.rs` parses typed objects whose multi-byte values store the most significant byte first, or big-endian order. The layout matches four device `.mbs` and `.mbp1` files [dev] and firmware readers [fw].
 
 | Object | Contents | Source |
 | --- | --- | --- |
@@ -103,7 +103,7 @@ MOBI positions begin with an uncompressed-text byte offset [dev]. AZW3 uses the 
 
 ### What is imported
 
-New books import sidecars during a scan. `aristotle-library-cli import-sidecars` imports them for all books. Only newer progress replaces saved progress.
+Scans import sidecars for new books, while `aristotle-library-cli import-sidecars` imports them for all books. Only newer progress replaces saved progress.
 
 - MOBI and AZW3 import `lpr`, with `.apnx` page labels when available. A fraction of at least 0.99 marks completion.
 - Stock annotations retain positions, creation times, and note text. Kindle locations use byte position divided by 150, plus 1 [calibre]. The same unit in firmware 5.x is an inference.
@@ -112,7 +112,7 @@ New books import sidecars during a scan. `aristotle-library-cli import-sidecars`
 
 ### My Clippings.txt [fw]
 
-The stock format is UTF-8 with CRLF lines and a BOM on creation:
+The stock format is UTF-8 with CRLF line endings, a carriage return followed by a line feed, and a [BOM](glossary.md#bom) on creation:
 
 ```text
 {title} ({author})
@@ -122,7 +122,7 @@ The stock format is UTF-8 with CRLF lines and a BOM on creation:
 ==========
 ```
 
-`aristotle-library-cli clippings FILE --import` matches folded titles and uses authors to break ties. Repeated imports add nothing. Clippings do not set reading progress. Polish label recognition is unverified.
+`aristotle-library-cli clippings FILE --import` matches folded titles and uses authors to break ties. Repeated imports add nothing, and clippings do not set reading progress. Polish label recognition is unverified.
 
 ## Export
 
@@ -170,13 +170,13 @@ There is no on-screen keyboard. The app imports `sync.json` and `catalogs.json` 
 {"catalogs":[{"name":"calibre","url":"http://192.168.1.10:8080/opds","username":"anna","password":"example"}]}
 ```
 
-On import, the app removes password fields from these userstore files. Credentials go to `/var/local/aristotle/accounts.json`, mode 0600, in a root-owned directory with mode 000. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device [dev]. `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
+On import, the app removes password fields from these [userstore](glossary.md#userstore) files. Credentials go to `/var/local/aristotle/accounts.json`, mode 0600, in a root-owned directory with mode 000. The app rejects credential directories with group or other permissions. This protects against the stock framework's recursive permission changes, observed on the device [dev]. `ARISTOTLE_ACCOUNTS_DIR` overrides the directory for development. Agent removal deletes it.
 
-Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for Basic and Digest authentication. Catalog imports merge by name, ignoring case. They retain an omitted password only when the URL and username are unchanged. Omitting a catalog from the import file does not delete it.
+Sync stores `md5(password)`, which still authenticates to that server. Catalogs retain the password for [Basic](glossary.md#basic-auth) and [Digest authentication](glossary.md#digest-auth). Catalog imports merge by name, ignoring case. They retain an omitted password only when the URL and username are unchanged. Omitting a catalog from the import file does not delete it.
 
 ### Progress sync (KOSync)
 
-Aristotle uses KOReader's protocol with compatible servers [KOReader]. The document ID is the partial MD5 without a duplicate suffix. A random device ID is saved once.
+Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatible servers [KOReader]. The document ID is the partial MD5 without a duplicate suffix. A random device ID is saved once.
 
 | Format | Position sent | Position received |
 | --- | --- | --- |
@@ -184,17 +184,17 @@ Aristotle uses KOReader's protocol with compatible servers [KOReader]. The docum
 | PDF, CBZ | 1-based page | Page |
 | MOBI, AZW3, TXT | Not sent | Percentage |
 
-`Fragments` maps EPUB chapter numbers between Plato and KOReader. Element paths after `DocFragment[N]` are not resolved.
+`Fragments` maps EPUB spine items between [Plato](glossary.md#plato) and KOReader's [`DocFragment`](glossary.md#docfragment) chapter numbers. It does not resolve element paths after `DocFragment[N]`.
 
 Automatic sync fetches progress on open with a 5-second timeout. A different remote position on another page needs confirmation before a jump. Timestamps are not compared. Closing a book sends changed progress only when a usable EPUB or page locator is available. MOBI, AZW3, and TXT do not send progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
 
 ### Catalogs (OPDS 1.2)
 
-Catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
+[OPDS](glossary.md#opds) catalogs support [Atom](glossary.md#atom) navigation, acquisition, paging, and [OpenSearch](glossary.md#opensearch) or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
 
 Downloads go to `documents/<catalog name>/<title> - <author>.<ext>`. Each is limited to 200 MiB and leaves at least 20 MiB free. A hidden `.part` file is synced and renamed on success. Failure or cancellation removes it. Existing files are not replaced. The library scans after download.
 
-HTTPS uses the `tls` feature, enabled in release bundles by `APP_FEATURES` in `tools/build-render.sh`. Certificate-time errors ask the user to check the date and time.
+HTTPS uses [TLS](glossary.md#tls) through the `tls` feature, enabled in release bundles by `APP_FEATURES` in `tools/build-render.sh`. Certificate-time errors ask the user to check the date and time.
 
 ## Known limitations
 

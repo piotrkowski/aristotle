@@ -1,14 +1,16 @@
 # Kindle Paperwhite 4 reference
 
-Device and stock-firmware facts for contributors. Source marks apply to the claim or table they follow:
+This reference records device and stock-firmware facts for contributors. Source marks apply to the claim or table they follow:
 
 - [fw]: read from firmware 5.13.6 on the host with `tools/probe/`.
 - [dev]: observed on our device.
-- [ko]: taken from KOReader, not verified by our probe.
+- [ko]: taken from [KOReader](glossary.md#koreader), not verified by our probe.
 - [ext]: another public source.
 - [inference]: a conclusion, not a measurement.
 
 ## Device
+
+[Device trees](glossary.md#device-tree), abbreviated DT, describe the board hardware. DTBs are compiled trees, and SoC means system on a chip. NEON is Arm's vector instruction set, and VFPv3 is its floating-point hardware interface.
 
 | Property | Value |
 | --- | --- |
@@ -22,20 +24,22 @@ Device and stock-firmware facts for contributors. Source marks apply to the clai
 
 ## Boot chain
 
-The update package `update_kindle_all_new_paperwhite_v2_5.13.6.bin`, unpacked with KindleTool [fw]:
+The update package `update_kindle_all_new_paperwhite_v2_5.13.6.bin`, unpacked with [KindleTool](glossary.md#kindletool) [fw]:
 
 | File | What it is |
 | --- | --- |
-| `imx6sll_rex/u-boot.bin` | U-Boot |
+| `imx6sll_rex/u-boot.bin` | [U-Boot](glossary.md#u-boot) |
 | `imx6sll_rex/bios.bin`, `s-bios.bin` | Resident Falcon BIOS |
-| `imx6sll_rex/boot.img` | Kernel, initramfs, and board device trees |
-| `rootfs.img.gz` | ext3 root filesystem |
+| `imx6sll_rex/boot.img` | Kernel, [initramfs](glossary.md#initramfs), and board device trees |
+| `rootfs.img.gz` | ext3 [root filesystem](glossary.md#rootfs) |
 
 Components have `.sig` signatures [fw]. A [MobileRead serial-log report](https://www.mobileread.com/forums/showthread.php?t=354311) shows `secure_cpu: 1, production: 1, unlocked: 0` and blocked fastboot writes [ext]. Signed boot-image enforcement remains an inference [inference]. Treat boot partitions as read-only.
 
 ## Hardware map
 
-From `imx6sll-moonshine-wfo.dts` [fw]:
+From `imx6sll-moonshine-wfo.dts` [fw]. [EPDC](glossary.md#epdc) controls the e-ink display, and [PXP](glossary.md#pxp) processes pixels. EPD means electrophoretic display, PMIC means power-management chip, and RTC means real-time clock.
+
+The table lists each component, bus address, and driver:
 
 | Function | Part | Bus and address | Kernel driver |
 | --- | --- | --- | --- |
@@ -56,14 +60,14 @@ From `imx6sll-moonshine-wfo.dts` [fw]:
 
 The config is embedded in the kernel and at `/proc/config.gz` on the device [fw].
 
-- Modules are not signed, so out-of-tree modules load if their vermagic matches.
+- Modules are not signed, so separately built modules load if their kernel-version signature, `vermagic`, matches.
 - `DEVTMPFS_MOUNT`, `CGROUPS`, `FUSE_FS`, `EXT4`, `SQUASHFS`, `INPUT_EVDEV`, `PREEMPT` and `SUSPEND` are on. The default cpufreq governor is `performance`.
-- USB gadget functions include mass storage, RNDIS, ECM, ACM, FunctionFS and MTP. `g_ether.ko`, `g_mass_storage.ko` and `g_ffs.ko` are modules.
-- `DRM_VIVANTE` is built in and unused. The display path is fbdev only.
+- [USB gadget](glossary.md#usb-gadget) functions include mass storage, RNDIS and ECM networking, ACM serial, FunctionFS userspace functions, and MTP media transfer. `g_ether.ko`, `g_mass_storage.ko` and `g_ffs.ko` are modules.
+- `DRM_VIVANTE` is built in and unused. The display path uses only fbdev, Linux's [framebuffer](glossary.md#framebuffer) interface.
 
 ## Display
 
-From FBInk and sysfs on the device [dev]:
+From [FBInk](glossary.md#fbink) and [sysfs](glossary.md#sysfs) on the device [dev]. The framebuffer stores pixels, with a row [stride](glossary.md#stride) that can exceed the visible width:
 
 | Property | Value |
 | --- | --- |
@@ -75,11 +79,13 @@ From FBInk and sysfs on the device [dev]:
 | Offsets | `xoffset=0`, `yoffset=0` from `FBIOGET_VSCREENINFO`. FBInk's `viewVertOrigin=4` is its own view adjustment |
 | Night mode | hardware inversion available (`canHWInvert=1`) |
 
-The EPDC driver loads waveforms with `request_firmware("eink/waveform")` from `/mnt/wfm/waveform_to_use/`, a partition managed by the upstart jobs `wfmupdate` and `wfmdelete` [fw]. It picks a LUT by the temperature from the FP9929 or BD71827, which sysfs can override. The update ioctl is Lab126's variant of `MXCFB_SEND_UPDATE`, and FBInk's Kindle headers are the reference for its layout.
+The EPDC driver loads [waveforms](glossary.md#waveform) with `request_firmware("eink/waveform")` from `/mnt/wfm/waveform_to_use/`, a partition managed by the [Upstart](glossary.md#upstart) jobs `wfmupdate` and `wfmdelete` [fw]. It picks a [LUT](glossary.md#lut) by the temperature from the FP9929 or BD71827, which sysfs can override. The update [ioctl](glossary.md#ioctl) is [Lab126](glossary.md#lab126)'s variant of `MXCFB_SEND_UPDATE`, and FBInk's Kindle headers are the reference for its layout.
 
 ### Waveform modes and timings
 
-The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where A2 is mode 6. The PW2 numbering does not apply. Times were measured with `aristotle-observe bench latency` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
+The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, where [A2](glossary.md#a2) is mode 6. The PW2 numbering does not apply. [DU](glossary.md#du) and [DU4](glossary.md#du4) use fewer shades than [GC16](glossary.md#gc16) and [GL16](glossary.md#gl16). [REAGL](glossary.md#reagl) includes GLR16 and its [dithered](glossary.md#dithering) variant GLD16, while [GCK16](glossary.md#gck16) and [GLKW16](glossary.md#glkw16) are the modes FBInk labels for night use.
+
+Times were measured with `aristotle-observe bench latency` on a 120 × 120 region toggling black and white, median of 6, on an idle panel [dev]:
 
 | Mode | Name | Time |
 | --- | --- | --- |
@@ -103,18 +109,22 @@ The driver runs one update at a time, even for non-overlapping regions [dev]. Us
 - `/etc/upstart/touch` probes Parade and Goodix controllers and loads the matching driver [fw].
 - Our Goodix `goodix-ts` uses framebuffer coordinates [dev]. Event numbers vary, including on LTE units [ko]. Find touch by name in `/proc/bus/input/devices`.
 - The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. [benchmarks.md](benchmarks.md#method) lists what an injected contact needs.
-- The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. musl's time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
+- The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. [musl](glossary.md#musl)'s time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
 
 ## Power and light
+
+[`powerd`](glossary.md#powerd) is the stock power-management service.
 
 - Frontlight: `/sys/class/backlight/bl/brightness`, range 0 to 2047. Writes take effect and read back exactly [dev].
 - Battery: `/sys/class/power_supply/bd71827_bat/` with `capacity`, `status`, `charging`, `voltage_now` (µV) and `temp` (°C). The charger is `bd71827_ac` [dev].
 - Hall sensor: `/sys/bus/platform/drivers/hall_sensor/rex_hall/hall_enable` [ko].
 - `preventScreenSaver=1` blocks screensaver and suspend [ko], and disables the power button [dev]. The reader sets it unless `ARISTOTLE_POWERD=1`.
-- `powerd` also ignores the button in USB drive mode, including our USB network setup [dev].
+- `powerd` also ignores the button in USB [drive mode](glossary.md#drive-mode), including our USB network setup [dev].
 - `powerd` requires `bootSplashCleanup` from `com.lab126.hal` [fw]. `ui-boot.sh` sends it when booting without the framework.
 
 ## Filesystems
+
+[tmpfs](glossary.md#tmpfs) is volatile storage. The [userstore](glossary.md#userstore) is the book storage exposed over USB.
 
 | Mount | Type | Notes |
 | --- | --- | --- |
@@ -126,7 +136,7 @@ The driver runs one update at a time, even for non-overlapping regions [dev]. Us
 
 ## Stock userspace
 
-The C library is glibc 2.20 with the softfp ARM EABI5: soft-float calling convention, VFPv3 and NEON code, `/lib/ld-linux.so.3` [fw]. Static `armv7-unknown-linux-musleabihf` binaries run on it [dev].
+The C library is [glibc](glossary.md#glibc) 2.20 with [softfp](glossary.md#softfp) ARM EABI5, the embedded [ABI](glossary.md#abi) in version 5: soft-float calling convention, VFPv3 and NEON code, `/lib/ld-linux.so.3` [fw]. [Static](glossary.md#static-binary) musl binaries targeting `armv7-unknown-linux-musleabihf` use [hard-float](glossary.md#hard-float) calls internally and run on it [dev].
 
 Key jobs [fw]:
 
@@ -138,21 +148,21 @@ Key jobs [fw]:
 | `x`, `framework`, `pillow`, `kb` | Window system, Java framework, UI, and keyboard |
 | `otaupd`, `otav3` | Firmware updates |
 
-Upstart 0.6.6 [dev] supports neither `.override` files nor `manual` [fw]. A job using `on starting X` completes before X starts. The agent uses this ordering to bind-mount over `/usr/bin/otav3` [dev, emulator].
+Upstart 0.6.6 [dev] supports neither `.override` files nor `manual` [fw]. A job using `on starting X` completes before X starts. The agent uses this ordering to [bind-mount](glossary.md#bind-mount) over `/usr/bin/otav3` [dev, emulator].
 
 `stored` reboots after more than five starts lasting under 10 seconds [fw]. `takeover.sh stop` leaves it and related jobs to `framework_ready`.
 
 The framework recursively changes group ownership and permissions under `/var/local`, `/var/log`, `/var/lock`, `/var/tmp`, and `/var/run` [fw]. `/var/tmp` is world-writable without a sticky bit, and `fs.protected_symlinks` is 0 [dev]. See [Security](../device/README.md#security).
 
-LIPC is Lab126's D-Bus property and event service. Its commands include `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, and `lipc-wait-event`. Names use `com.lab126.<name>` [fw].
+[LIPC](glossary.md#lipc) is Lab126's property and event service, built on the D-Bus interprocess message system. Its commands include `lipc-probe`, `lipc-get-prop`, `lipc-set-prop`, and `lipc-wait-event`. Names use `com.lab126.<name>` [fw].
 
-The stock reader stores state in `<book>.sdr/` and highlights in `My Clippings.txt` [fw]. See [Library formats](library.md#stock-files-sidecars-and-my-clippingstxt).
+The stock reader stores state in `<book>.sdr/` and highlights in [`My Clippings.txt`](glossary.md#my-clippingstxt) [fw]. See [Library formats](library.md#stock-files-sidecars-and-my-clippingstxt).
 
 ## USB network
 
 By default the port runs `g_mass_storage`, and `volumd` exports the userstore [dev]. While it is exported, the device cannot write `/mnt/us`. `g_mass_storage` unloads only after the host has ejected the drive [dev].
 
-The Aristotle agent and KUAL › Aristotle › Start USB network replace it with `g_ether` [dev]:
+The Aristotle agent and [KUAL](glossary.md#kual) › Aristotle › Start USB network replace it with [`g_ether`](glossary.md#g_ether) and use [Dropbear](glossary.md#dropbear) for SSH [dev]. The link uses fixed addresses without [DHCP](glossary.md#dhcp), and [iptables](glossary.md#iptables) controls access:
 
 | Property | Value |
 | --- | --- |
@@ -161,18 +171,18 @@ The Aristotle agent and KUAL › Aristotle › Start USB network replace it with
 | Firewall | the stock iptables rules drop unsolicited input. The scripts accept `usb0` only |
 | SSH | KOReader's `dropbear`, key-only, on `192.168.15.244:22` only |
 
-Use `udisksctl unmount` to eject. Re-entering drive mode requires a physical replug. `udisksctl power-off` also requires a replug [dev]. See [Network policy](../device/README.md#network).
+`udisksctl unmount` ejects the drive. Re-entering drive mode requires a physical replug. `udisksctl power-off` also requires a replug [dev]. See [Network policy](../device/README.md#network).
 
 ## Taking over the screen
 
-`device/app/takeover.sh start|stop|status` controls the stock GUI. On our device [dev]:
+[`device/app/takeover.sh start|stop|status`](glossary.md#takeover) controls the stock GUI. On our device [dev]:
 
 - `stop lab126_gui` stops `cvm`, Pillow, and the keyboard. The script also stops cloud and telemetry jobs. Available RAM rises from 236 MB to 392 MB.
 - Xorg, awesome, `lxinit`, and `blanket` remain running.
-- SIGSTOP is not a substitute. The watchdog killed the frozen framework.
+- SIGSTOP is not a substitute, because the [watchdog](glossary.md#watchdog) killed the frozen framework.
 - Restarting the GUI takes 30 to 60 seconds of boot splash.
 
-KOReader uses `stop lab126_gui` or disables Pillow and freezes awesome [ko]. KOReader reports that `powerd` continues suspend and screensaver control, and `volumd` owns USB export [ko]. Keep these services deliberately.
+KOReader uses `stop lab126_gui` or disables Pillow and freezes awesome [ko]. KOReader reports that `powerd` continues suspend and screensaver control, and `volumd` owns USB export [ko]. These services remain necessary when the stock GUI is stopped.
 
 ## Host-side artifacts
 

@@ -1,8 +1,8 @@
 # The reader
 
-`crates/aristotle-render` turns books into 8-bit gray pages through [Plato](https://github.com/baskerville/plato) and MuPDF. It uses none of Plato's Kobo UI. Its CLI renders files, shows pages on the device, and measures layout and panel time.
+`crates/aristotle-render` turns books into 8-bit gray pages through [Plato](https://github.com/baskerville/plato) and [MuPDF](glossary.md#mupdf), without Plato's Kobo interface. Its command-line interface (CLI) renders files, shows pages on the device, and measures layout and panel time.
 
-`crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens EPUB, DRM-free MOBI 7, PDF, and TXT. Measurements are from the host unless marked [dev]. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
+`crates/aristotle` combines the renderer, library, UI, and `aristotle-hal` hardware access into the app. It opens [EPUB](glossary.md#epub), DRM-free [MOBI](glossary.md#mobi) 7, PDF, and TXT. Measurements are from the host unless marked [dev]. See [Benchmarks](benchmarks.md#device-measurements-of-the-app) for results.
 
 For daily use, start with [Your first book](first-book.md). See [Format support](formats.md) for the default bundle's capabilities and [Back up and update](maintenance.md) for state and cache handling.
 
@@ -32,7 +32,7 @@ Short paths in each group are relative to the preceding crate's `src/` directory
 
 ### Threads
 
-The main thread handles input and draws frames. Workers keep other work off that path.
+The main thread handles input and draws frames, while workers handle slower tasks separately.
 
 | Thread | Work |
 | --- | --- |
@@ -43,13 +43,13 @@ The main thread handles input and draws frames. Workers keep other work off that
 | `dict`, `dict-index` | Dictionary lookup and idle-priority index builds |
 | `page-completions`, `panel-sequence` | Page completion tracking and menu update sequences |
 
-Idle priority means `SCHED_IDLE` plus nice 19. `pagecache::lower_priority` uses a direct system call because musl stubs `sched_setscheduler`.
+Idle priority means [`SCHED_IDLE`](glossary.md#sched_idle) plus nice 19. `pagecache::lower_priority` uses a direct system call because [musl](glossary.md#musl) stubs `sched_setscheduler`.
 
-Plato's font and page objects cannot cross threads. `Session::prepare` returns data without them. `OPEN_GATE` serializes background opens so an abandoned book is dropped before the next layout starts. Partial UI updates use the HAL display thread ([UI model](ui-framework.md#model)).
+Plato's font and page objects cannot cross threads. `Session::prepare` returns data without them. `OPEN_GATE` serializes background opens so an abandoned book is dropped before the next layout starts. Partial UI updates use the [HAL](glossary.md#hal) display thread ([UI model](ui-framework.md#model)).
 
 ## How Plato is consumed
 
-The renderer uses `plato-core` from the `third_party/plato` submodule. Both reader binaries change into their data directory because Plato uses relative paths.
+The renderer uses `plato-core` from the `third_party/plato` [submodule](glossary.md#submodule). Both reader binaries change into their data directory because Plato uses relative paths.
 
 ### Plato fork
 
@@ -61,7 +61,7 @@ Before rebasing the fork, tag its current tip so older Aristotle commits remain 
 
 ### Runtime data
 
-The data directory is `data/` next to the binary, or the path given by `--data`.
+The data directory is `data/` next to the binary unless you select another path with `--data`.
 
 | Path | Contents |
 | --- | --- |
@@ -111,7 +111,7 @@ ssh -F tools/host/ssh_config kindle 'tar -xzf - -C /mnt/us' < "$ARISTOTLE_CACHE/
 ssh -F tools/host/ssh_config kindle sh /mnt/us/aristotle/run-aristotle.sh
 ```
 
-The bundle lives in `/mnt/us/aristotle/`; `/var/tmp` is a 64 MB tmpfs [dev]. The launcher stops the stock GUI and restores it on exit, with 30 to 60 seconds of boot splash [dev]. It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
+The bundle lives in `/mnt/us/aristotle/`, while `/var/tmp` is a 64 MB [tmpfs](glossary.md#tmpfs) cleared on reboot [dev]. The launcher stops the stock GUI, then restores it on exit with 30 to 60 seconds of boot splash [dev]. It accepts only a PW4 on 5.13.x unless `ARISTOTLE_FORCE=1`.
 
 Hold the **Library** title for one second to quit, or run `killall aristotle`. This SSH launch logs to `/var/tmp/aristotle.log`. KUAL and boot launches use different paths ([Log locations](troubleshooting.md#find-the-right-log)). The render CLI's `show` and `turn` commands refuse to run while `cvm`, the stock framework, is active.
 
@@ -146,29 +146,29 @@ The header and footer stay in Literata (`style::CHROME_FAMILY`). MuPDF's reflow 
 
 ### Hyphenation
 
-Plato uses language patterns, including Polish with minima of 2 letters on either side of a break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements below `body` can override it with `lang` or `xml:lang`; `lang` on `html` or `body` is ignored. Greek words in a non-Greek language use the Ancient Greek patterns. Other text without matching patterns is not hyphenated.
+Plato uses language-specific [Liang hyphenation patterns](glossary.md#liang-hyphenation-patterns), with at least 2 letters on either side of a Polish break. The book language comes from `dc:language`, then the first HTML element's `xml:lang`, with English as fallback. Elements below `body` can override it with `lang` or `xml:lang`, while `lang` on `html` or `body` is ignored. Greek words in a non-Greek language use the Ancient Greek patterns, and other text without matching patterns is not hyphenated.
 
 For books declaring several languages, `lang.rs` samples 192 KiB of text and compares marker letters. `aristotle-render --lang TAG` overrides the result. `aristotle-render info BOOK` reports the language and pattern availability.
 
 ## Formats and positions
 
-`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles PalmDOC compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but HUFF/CDIC is unsupported by both engines and KF8-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for extension-dependent routing.
+`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles [PalmDOC](glossary.md#palmdoc) compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but [HUFF/CDIC](glossary.md#huffcdic) is unsupported by both engines and [KF8](glossary.md#kf8)-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for extension-dependent routing.
 
-Plato locations are byte offsets in book text. MuPDF locations are page indices. Saved EPUB positions use a spine item and offset. Converted MOBI uses Kindle byte positions and a `.posmap` beside the cached EPUB. Save page starts with `PosMap::position_at_or_after` to avoid rounding back a page.
+Plato locations are byte offsets in book text. MuPDF locations are page indices. Saved EPUB positions use a [spine](glossary.md#spine) item and offset. Converted MOBI uses Kindle byte positions and a `.posmap` beside the cached EPUB. `PosMap::position_at_or_after` saves page starts without rounding back a page.
 
-Page numbers require full pagination. Until `set_pagination` supplies them, the footer omits them. Changes that move page breaks must bump `LAYOUT_VERSION` in `pagecache.rs`, invalidating page caches and snapshots.
+The footer omits page numbers until full pagination supplies them through `set_pagination`. If your change moves page breaks, bump `LAYOUT_VERSION` in `pagecache.rs` to invalidate page caches and [snapshots](glossary.md#snapshot).
 
 ## Opening a book
 
 ### Snapshots
 
-At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with zstd. A snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, UI language, and progress. A snapshot saved before a language change is not shown.
+At each progress save, the current and next pages go to `snapshots/<book id>.snap`, compressed with [zstd](glossary.md#zstd). Each snapshot includes positions and menu labels. Its key checks the book, file size and mtime, style, layout version, app build, runtime data, UI language and progress, so a snapshot saved before a language change is not shown.
 
-The main thread copies pixels. `snapshot-writer` compresses and writes them, keeping slow filesystem syncs off the input path. Scans remove snapshots for missing books.
+The main thread copies pixels, then `snapshot-writer` compresses and writes them, keeping slow filesystem syncs off the input path. Scans remove snapshots for missing books.
 
 ### The open path
 
-1. Touch-down highlights the card with A2. On release, a valid snapshot appears with one mode-8 flash.
+1. Touch-down highlights the card with [A2](glossary.md#a2). On release, a valid snapshot appears with one mode-8 flash.
 2. The `open` worker opens the book at that position and renders neighboring pages.
 3. While it works, the snapshot supports page turns and the menu. Returning to the library cancels the open. Word selection and links require the book.
 4. The app keeps matching snapshot pixels. A header-only difference waits until the next turn. A page difference causes one full mode-9 correction.
@@ -183,11 +183,15 @@ For changes that must preserve layout, compare `aristotle-render pages BOOK 20` 
 
 ## Page turns and waveforms
 
-A page turn is one full-screen, full-mode update in mode 9, matching the stock reader [dev]. Partial updates and A2 followed by GL16 left visible ghosts during real reading ([Experiment](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` selects faster DU4 with fewer grays. The CLI retains `--a2-preview` for experiments.
+A [waveform](glossary.md#waveform) controls how the panel changes its pixels.
 
-Taps turn on release. The top 12 % opens the menu, the left 30 % goes back, and the rest goes forward. Horizontal swipes turn pages. A hold selects text without turning.
+A page turn is one full-screen, full-mode update in mode 9, matching the stock reader [dev]. Partial updates and A2 followed by [GL16](glossary.md#gl16) left visible [ghosting](glossary.md#ghosting) during real reading ([Experiment](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` selects faster [DU4](glossary.md#du4) with fewer grays. The CLI retains `--a2-preview` for experiments.
 
-After submission, the app renders neighboring pages while the panel refreshes. Before replacing framebuffer pixels, it waits for the previous page and display workers to finish. This page path bypasses the partial-update display thread.
+A tap turns the page on release unless it lands in the top 12 %, which opens the menu. The left 30 % goes back and the rest goes forward. Horizontal swipes also turn pages, while a hold selects text without turning.
+
+After submission, the app renders neighboring pages while the panel refreshes. Before replacing [framebuffer](glossary.md#framebuffer) pixels, it waits for the previous page and display workers to finish. This page path bypasses the partial-update display thread.
+
+[DU](glossary.md#du) supplies black-and-white UI updates.
 
 | Change | Update |
 | --- | --- |
@@ -208,7 +212,7 @@ Night mode keeps page-turn and flash modes. See [Night mode](ui-framework.md#nig
 
 Startup shows the saved library index, then scans `/mnt/us/documents`. The library has Books, Folders, Series, and a continue-reading card. Settings control the frontlight, night mode, covers, screensaver delay, and USB mode.
 
-The default screensaver saves progress, turns off the light, and shows a book card. A touch wakes it without taking another action. The app holds `powerd`'s `preventScreenSaver`, so the CPU does not suspend and the power button has no effect.
+The default screensaver saves progress, turns off the light, and shows a book card. A touch wakes it without taking another action. The app holds [`powerd`](glossary.md#powerd)'s `preventScreenSaver`, so the CPU does not suspend and the power button has no effect.
 
 `ARISTOTLE_POWERD=1` enables the implemented `powerd` event path in `powerd.rs`. It releases `preventScreenSaver`, handles sleep and wake events, and restores stock screensaver behavior on exit. This path has host tests only; device suspend, wake light levels, and battery use are unverified.
 
@@ -246,7 +250,7 @@ Transient selection feedback uses A2. Completed popups with grays use a full-scr
   <img src="images/gallery/dictionary-dark.png#gh-dark-mode-only" alt="The same dictionary popups in night mode">
 </p>
 
-StarDict dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict`, or `--dict DIR`. File names such as `grc-pl.ifo` identify language pairs.
+[StarDict](glossary.md#stardict) dictionaries are read one folder deep under `/mnt/us/dictionaries`, `/mnt/us/koreader/data/dict`, or `--dict DIR`. File names such as `grc-pl.ifo` identify language pairs.
 
 See [Install offline dictionaries](dictionaries.md) for the required file set, folder layout, and a first lookup.
 
@@ -274,7 +278,7 @@ Device index builds reached 66 MB [dev]. Build large indexes on the host with `a
 
 Annotations in `library.json` have source `aristotle`. They store positions that survive font-size changes, plus chapter and time.
 
-New highlights append to `/mnt/us/documents/My Clippings.txt` in the stock en_GB format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` export Aristotle highlights and attached notes, not bookmarks or imported highlights. Deleting a highlight does not remove its clippings entry. Removing the last Aristotle highlight leaves an existing Markdown file unchanged.
+New highlights append to [`My Clippings.txt`](glossary.md#my-clippingstxt) in `/mnt/us/documents/` in the stock en_GB format. The **Save highlights to My Clippings.txt** setting disables that output. Markdown notes in `/mnt/us/aristotle-notes/` export Aristotle highlights and attached notes, not bookmarks or imported highlights. Deleting a highlight does not remove its clippings entry. Removing the last Aristotle highlight leaves an existing Markdown file unchanged.
 
 Tests and scenarios must use `--test-clippings PATH`, never the user's clippings file. The app has no keyboard for adding annotation notes.
 
@@ -296,7 +300,7 @@ The footer shows the chapter and estimated minutes left. `speed.rs` averages for
 | `clippings` | `true` |
 | `font` | `Literata` |
 
-The frontlight level is read from the device, not saved. See `prefs.rs` for all fields.
+The app reads the frontlight level from the device rather than saving it. See `prefs.rs` for all fields.
 
 The library data directory is `/mnt/us/.aristotle`, overridden by `--library DIR` or `$ARISTOTLE_DATA`. It contains the index, covers, preferences, dictionary indexes, page starts, snapshots, converted MOBI cache, the list of font families in the fonts folder (`fonts.json`) and a copy of the chosen family (`reading-fonts/`). `--data` selects renderer assets, not library state. `aristotle --help` lists options.
 
@@ -314,7 +318,7 @@ The app writes `[perf <ms since start>]` lines to stderr. Direct `run-aristotle.
 
 ## Size budget
 
-The default build includes Latin and Greek fonts, five hyphenation languages, and EPUB, MOBI, PDF, and TXT support. Build sizes are recorded in [Benchmarks](benchmarks.md#binary-size).
+The default build includes Latin and Greek fonts, five hyphenation languages, and EPUB, MOBI, PDF, and TXT support. Other formats, including [CBZ](glossary.md#cbz) comic archives, need a different build configuration. Build sizes are recorded in [Benchmarks](benchmarks.md#binary-size).
 
 | Switch | Default | Other choices |
 | --- | --- | --- |
@@ -326,7 +330,7 @@ The default build includes Latin and Greek fonts, five hyphenation languages, an
 
 The first three belong to `build-plato.sh`, the last two to `build-render.sh`. Other C-library changes need a fresh `PLATO_BUILD`.
 
-MuPDF keeps Noto Serif for Greek in reflowed text. Plato uses smaller fallback fonts. Missing glyphs, including unsupported CJK characters, appear as boxes.
+MuPDF keeps Noto Serif for Greek in reflowed text. Plato uses smaller fallback fonts. Missing glyphs, including unsupported Chinese, Japanese, and Korean characters, appear as boxes.
 
 ## Known limitations
 

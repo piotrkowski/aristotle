@@ -10,17 +10,20 @@ implementation references. Keep behavior and limitations consistent across
 both. For bug reports, include the details in
 [Report a bug](../docs/troubleshooting.md#report-a-bug).
 
+The [glossary](../docs/glossary.md) explains device and book-format terms.
+
 ## Workspace
 
-The repository is one Cargo workspace. A plain `cargo build`, `cargo test` or
+The repository is one Cargo workspace, a group of Rust crates built together.
+A plain `cargo build`, `cargo test` or
 `cargo clippy` covers the pure-Rust default members, which CI checks. The two
 native members, `crates/aristotle-render` and the reader app
-`crates/aristotle`, link Plato's engine and its C libraries, which
-`tools/build-plato.sh` builds; CI checks them too, with those libraries
-cached.
+`crates/aristotle`, link [Plato](../docs/glossary.md#plato)'s engine and its C libraries, which
+`tools/build-plato.sh` builds. CI checks those members too, with the libraries cached.
 
-Plato comes from our fork in the `third_party/plato` submodule
-([docs/reader.md](../docs/reader.md), "Plato fork"). Cargo needs it even for
+Plato comes from our fork in the `third_party/plato`
+[submodule](../docs/glossary.md#submodule). See the
+[fork workflow](../docs/reader.md#plato-fork). Cargo needs it even for
 the default members, so clone with `--recurse-submodules`, and run
 `git submodule sync && git submodule update --init` when the submodule
 changes. Changes to Plato are commits on the fork's `aristotle` branch,
@@ -31,7 +34,7 @@ followed by a submodule bump here.
 You need Rust from [rustup](https://rustup.rs) with the
 `armv7-unknown-linux-musleabihf` and `x86_64-unknown-linux-musl` targets. The
 C libraries also need curl, tar, xz, openssl, xxd, make, cmake, bash and a host
-C compiler. `tools/build-plato.sh` downloads a pinned Zig.
+C compiler. `tools/build-plato.sh` downloads a pinned [Zig](../docs/glossary.md#zig) toolchain.
 
 Builds go to `$ARISTOTLE_CACHE` (default `~/.cache/aristotle`), since `/tmp`
 is a small RAM disk on many hosts. Do the same for your own cargo runs:
@@ -56,10 +59,12 @@ tools/build-render.sh device
 tools/package.sh zip     # $ARISTOTLE_CACHE/dist/aristotle-VERSION.zip
 ```
 
-Everything that runs on the Kindle is a static
-`armv7-unknown-linux-musleabihf` binary. `tools/package.sh` defines what goes
+Each compiled Aristotle program for the Kindle is a
+[static binary](../docs/glossary.md#static-binary) for
+`armv7-unknown-linux-musleabihf`, with the [musl](../docs/glossary.md#musl)
+C library linked in. `tools/package.sh` defines what goes
 on the Kindle's USB drive: `aristotle/` (the app bundle with its licences and
-`SOURCE.txt`) and `extensions/aristotle/` (the KUAL extension). Unzip the zip
+`SOURCE.txt`) and `extensions/aristotle/` (the [KUAL](../docs/glossary.md#kual) launcher extension). Unzip the zip
 to the root of the drive, as users do. For development access, follow
 [Host setup](../device/README.md#host-setup) for the dedicated key,
 NetworkManager profile, and SSH connection. After creating the key, you can
@@ -69,14 +74,14 @@ then ejects the Kindle.
 
 ## Trying changes
 
-1. On the host, `aristotle-ui-preview` renders the screens and
-   `aristotle --preview` the reading interactions (`docs/reader.md`). Both log
-   each panel update with its waveform and rectangle. Compare the logs before
+1. On the host, run `aristotle-ui-preview` for screens and
+   `aristotle --preview` for [reading interactions](../docs/reader.md#preview-and-device-scenario). Both log
+   each panel update with its [waveform](../docs/glossary.md#waveform) and rectangle. Compare the logs before
    and after your change.
 2. Test anything that could hang boot, touch the stock framework or load
    kernel code in the emulator (`tools/emulator/setup.sh`).
 3. On the device, use the dev loop in `tools/host/` (`device/README.md`). No recovery path is verified
-   yet, so never write to the root filesystem, the boot partitions, `/mnt/wfm`
+   yet, so never write to the [root filesystem](../docs/glossary.md#rootfs), the boot partitions, `/mnt/wfm`
    or `/var/local` on someone's device without their consent.
 
 If your change affects what reaches the panel, run the device scenarios in
@@ -87,7 +92,7 @@ the device and `[host]` for the PC.
 
 ## Checks
 
-CI runs all of them on every pull request:
+CI runs these checks on every pull request:
 
 ```sh
 cargo fmt --check        # every member, native ones included; not --all, which
