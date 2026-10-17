@@ -1,6 +1,8 @@
 # Transitions of the Aristotle reader app, starting in a book (any page):
 # turns, the reader menu, back to the library, filters, shelf paging, sort,
-# reopening the "Czytaj dalej" book. Run with the app in front:
+# reopening the "Continue reading" book. Coordinates are those of
+# `aristotle-ui-preview` (targets.txt) in English, the default language.
+# Run with the app in front:
 #   /var/tmp/aristotle-observe run /var/tmp/aristotle-transitions.txt
 label turn-fwd
 tap 900 800
@@ -18,31 +20,31 @@ label menu-open-2
 tap 536 60
 wait 2000
 label to-library
-tap 180 62
+tap 163 62
 wait 3000
-label filter-czytane
-tap 365 585
+label filter-reading
+tap 287 662
 wait 2000
 label filter-all
-tap 176 585
+tap 123 662
 wait 2000
 label shelf-next
-tap 948 1372
+tap 948 1377
 wait 2000
 label shelf-prev
-tap 122 1372
+tap 124 1377
 wait 2000
 label sort
-tap 890 120
+tap 905 550
 wait 2000
 label sort-2
-tap 890 120
+tap 905 550
 wait 2000
 label sort-3
-tap 890 120
+tap 905 550
 wait 2000
 label open-hero
-tap 390 290
+tap 536 334
 wait 4000
 label turn-fwd-2
 tap 900 800
