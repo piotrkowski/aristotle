@@ -6,3 +6,4 @@ pub mod framebuffer;
 pub mod input;
 pub mod power;
 pub mod system;
+pub mod wifi;
