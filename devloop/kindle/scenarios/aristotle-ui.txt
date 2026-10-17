@@ -1,0 +1,248 @@
+# Every screen and control of the Aristotle app, with the updates each
+# action must cause (docs/ui-framework.md, "Transitions"). Run it with the
+# app in front, on the library home ("Biblioteka", view Książki, shelf
+# Wszystkie, covers off, night off, a book opened before so "Czytaj dalej"
+# is shown):
+#   /var/tmp/aristotle-observe run /var/tmp/aristotle-ui.txt
+# Coordinates come from `aristotle-ui-preview` (targets.txt), which lays out
+# the same screens. "A2" below is the touch-down acknowledgement; "quiet" is
+# one partial DU/GL16 (GLKW16 at night) update of the changed region;
+# "flash" is one full update of the whole screen in mode 8; "turn" one full
+# update of the whole screen in mode 9.
+#
+# Not driven here on purpose: "Dysk USB" in the settings (it drops the USB
+# network and SSH for 10 minutes; try it by hand), and quitting (hold the
+# "Biblioteka" title for a second).
+
+snap ui-start
+
+# --- Library: shelves (A2 + quiet each) ---
+label shelf-czytane
+tap 417 662
+wait 2500
+label shelf-nowe
+tap 602 662
+wait 2500
+label shelf-przeczytane
+tap 821 662
+wait 2500
+label shelf-wszystkie
+tap 189 662
+wait 2500
+
+# --- Library: paging (A2 + quiet; flash instead only with covers on) ---
+label list-next
+tap 948 1377
+wait 2500
+label list-prev
+tap 124 1377
+wait 2500
+
+# --- Library: sort cycles Ostatnie -> Tytuł -> Autor -> Ostatnie (A2 + quiet) ---
+label sort-title
+tap 892 550
+wait 2500
+label sort-author
+tap 892 550
+wait 2500
+label sort-recent
+tap 892 550
+wait 2500
+
+# --- Library: folders (view: A2 + quiet; into a folder and back: A2 + flash) ---
+label view-folders
+tap 298 550
+wait 2500
+snap ui-folders
+label folder-open
+tap 536 675
+wait 3000
+snap ui-folder
+label folder-back
+tap 98 118
+wait 3000
+
+# --- Library: series (with no series in the library the list is empty and
+# the second tap does nothing; back then also does nothing) ---
+label view-series
+tap 436 550
+wait 2500
+snap ui-series
+label series-open
+tap 536 675
+wait 3000
+label series-back
+tap 98 118
+wait 3000
+label view-books
+tap 138 550
+wait 2500
+
+# --- Settings (into: A2 + flash) ---
+label settings-open
+tap 948 118
+wait 3000
+snap ui-settings-1
+label light-down
+tap 124 377
+wait 2500
+label light-up
+tap 948 377
+wait 2500
+label light-slider-third
+tap 420 377
+wait 2500
+label light-preset-srednie
+tap 609 463
+wait 2500
+label light-preset-nocne
+tap 417 463
+wait 2500
+label covers-cards
+tap 502 814
+wait 2500
+label covers-none
+tap 277 814
+wait 2500
+label sleep-5
+tap 216 1238
+wait 2500
+label sleep-15
+tap 389 1238
+wait 2500
+
+# --- Night mode from the settings: one flash in, one flash out ---
+label night-on
+tap 536 590
+wait 3000
+snap ui-settings-night
+label settings-page-2-night
+tap 948 1377
+wait 2500
+snap ui-settings-2-night
+label usb-network
+tap 256 676
+wait 2500
+label settings-page-1-night
+tap 124 1377
+wait 2500
+label night-off
+tap 536 590
+wait 3000
+label settings-back
+tap 98 118
+wait 3000
+
+# --- Reader: open (A2 + flash), turns (turn each) ---
+label open-hero
+tap 536 334
+wait 4000
+label turn-fwd
+tap 900 800
+wait 1500
+label turn-back
+tap 150 800
+wait 1500
+
+# --- Reader menu: open = A2 over the bars, then a full-mode gray update of
+# each bar (3 updates, the page between untouched); close = turn ---
+label menu-open
+tap 536 60
+wait 2500
+snap ui-menu
+label menu-close
+tap 536 450
+wait 2000
+
+# --- Night mode from the menu: one flash; turns stay mode 9 full ---
+label menu-open-2
+tap 536 60
+wait 2500
+label menu-night-on
+tap 634 1361
+wait 3000
+snap ui-menu-night
+label menu-close-night
+tap 536 450
+wait 2000
+label turn-fwd-night
+tap 900 800
+wait 1500
+snap ui-page-night
+label turn-back-night
+tap 150 800
+wait 1500
+label menu-open-night
+tap 536 60
+wait 2500
+label menu-night-off
+tap 634 1361
+wait 3000
+
+# --- Menu controls (each: one turn-like update of the whole screen when
+# the page changes behind the menu, else quiet) ---
+label size-up
+tap 948 881
+wait 3000
+label size-down
+tap 320 881
+wait 3000
+label spacing-loose
+tap 878 1001
+wait 3000
+label spacing-normal
+tap 633 1001
+wait 3000
+label margins-wide
+tap 878 1121
+wait 3000
+label margins-normal
+tap 633 1121
+wait 3000
+label menu-light-down
+tap 320 1241
+wait 2000
+label menu-light-up
+tap 948 1241
+wait 2000
+label chapter-next
+tap 948 746
+wait 3000
+label chapter-prev
+tap 124 746
+wait 3000
+snap ui-menu-after
+
+# --- Back to the library (A2 + flash) ---
+label menu-library
+tap 185 60
+wait 3000
+snap ui-library-end
+
+# --- Screensaver: 5 min without touch (sleep set to 5 min above was put
+# back to 15; set it again), then a touch wakes (one flash, light back) ---
+label settings-for-sleep
+tap 948 118
+wait 3000
+label sleep-5-again
+tap 216 1238
+wait 2500
+label back-for-sleep
+tap 98 118
+wait 3000
+label idle
+wait 310000
+snap ui-screensaver
+label wake
+tap 536 724
+wait 3000
+snap ui-woken
+label settings-restore
+tap 948 118
+wait 3000
+label sleep-15-again
+tap 389 1238
+wait 2500
+label back-end
+tap 98 118
+wait 3000

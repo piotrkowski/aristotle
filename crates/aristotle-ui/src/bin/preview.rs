@@ -658,6 +658,126 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     day_night(&mut ui, out, "reader-charis");
 }
 
+/// The centre of every visible control of `ui`, as `screen action x y w h`
+/// lines, for writing device scenarios with real coordinates.
+fn dump_targets(ui: &mut Ui, screen: &str, out: &mut String) {
+    ui.layout();
+    for i in 0..ui.tree.len() {
+        let id = aristotle_ui::tree::NodeId(i as u32);
+        let Some(action) = ui.tree.node(id).action else {
+            continue;
+        };
+        let r = ui.tree.rect(id);
+        if r.is_empty() {
+            continue;
+        }
+        let c = r.center();
+        out.push_str(&format!(
+            "{screen} {action} {} {} {} {}\n",
+            c.x, c.y, r.w, r.h
+        ));
+    }
+}
+
+/// Control coordinates of the app's screens with the sample library: home
+/// (books, folders, series), a folder, settings pages and the app's reader
+/// menu (no font row, night row on).
+fn targets(out: &Path) {
+    use aristotle_ui::screens::reader::{build_menu, MenuSpec};
+    let mut s = String::from("# screen action-id centre-x centre-y width height\n");
+    let books = library::sample_books();
+    for view in View::ALL {
+        let items = sample_items(
+            if view == View::Books {
+                &books[1..]
+            } else {
+                &books
+            },
+            view,
+        );
+        let (mut ui, _) = shelf_ui(&Shelf {
+            place: Place::Home {
+                view,
+                filter: Filter::All,
+            },
+            hero: Some(&books[0]),
+            items: &items,
+            sort: "Ostatnie",
+            status: STATUS,
+            covers: CoverMode::None,
+        });
+        dump_targets(&mut ui, &format!("library-{view:?}"), &mut s);
+    }
+    let platon: Vec<Item> = books
+        .iter()
+        .filter(|b| b.folder.as_deref() == Some("Platon"))
+        .cloned()
+        .map(Item::Book)
+        .collect();
+    let (mut ui, _) = shelf_ui(&Shelf {
+        place: Place::Folder { name: "Platon" },
+        hero: None,
+        items: &platon,
+        sort: "Tytuł",
+        status: STATUS,
+        covers: CoverMode::None,
+    });
+    dump_targets(&mut ui, "folder", &mut s);
+    let about = settings_screen::sample_about();
+    let view = SystemView {
+        status: STATUS,
+        light: Some((2, 24)),
+        night: false,
+        covers: CoverMode::None,
+        sleep_minutes: Some(15),
+        battery: Some(BatteryInfo {
+            level: 0.82,
+            charging: false,
+            state: "Rozładowuje się",
+            voltage_mv: 3980,
+            temperature_c: 26,
+        }),
+        storage: Some((4_100_000_000, 6_200_000_000)),
+        date: "",
+        time: "21:38",
+        usb: Some(Usb::Network),
+        about: &about,
+    };
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, ids) = settings_screen::Settings::build(&mut text, &Styles::new(FamilyId(0)), &view);
+    let mut ui = Ui::new(tree, text, W, H);
+    ui.layout();
+    dump_targets(&mut ui, "settings-1", &mut s);
+    ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+    dump_targets(&mut ui, "settings-2", &mut s);
+    let mut t = Tree::new();
+    let page = t.spacer(1);
+    let spec = MenuSpec {
+        title: "Fedon",
+        families: None,
+        night: true,
+        top_extra: 0,
+        bottom_extra: 0,
+    };
+    let menu = build_menu(
+        &mut t,
+        &Styles::new(FamilyId(0)),
+        &spec,
+        &Settings::default(),
+    );
+    let root = t.add(
+        Node::new(aristotle_ui::tree::Kind::Stack),
+        [page, menu.root],
+    );
+    t.set_root(root);
+    t.set_hidden(menu.root, false);
+    let mut ui = Ui::new(t, TextEngine::new(Fonts::embedded()), W, H);
+    dump_targets(&mut ui, "reader-menu", &mut s);
+    let path = out.join("targets.txt");
+    std::fs::write(&path, s).expect("targets.txt");
+    println!("wrote {}", path.display());
+}
+
 fn main() {
     let out = std::env::args_os()
         .nth(1)
@@ -674,4 +794,5 @@ fn main() {
     settings_screens(&out);
     sleep_screens(&out);
     reader_screens(&out, &fonts_dir);
+    targets(&out);
 }
