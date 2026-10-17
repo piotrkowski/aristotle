@@ -24,6 +24,12 @@ const EVIOCGRAB: libc::c_ulong = 0x4004_4590;
 /// `_IOW('E', 0xa0, int)`: select the clock used for event timestamps.
 const EVIOCSCLOCKID: libc::c_ulong = 0x4004_45a0;
 
+/// `EVIOCGMTSLOTS(len)`, `_IOC(_IOC_READ, 'E', 0x0a, len)`: the values of
+/// one multi-touch axis in every slot.
+const fn eviocgmtslots(len: usize) -> libc::c_ulong {
+    0x8000_450a | ((len as libc::c_ulong) << 16)
+}
+
 /// `_IOR('E', 0x40 + abs, struct input_absinfo)`
 const fn eviocgabs(abs: u16) -> libc::c_ulong {
     0x8018_4540 + abs as libc::c_ulong
@@ -147,6 +153,27 @@ pub fn find_touchscreen() -> io::Result<(String, String)> {
     ))
 }
 
+/// The kernel's value of the multi-touch axis `code` in each slot.
+fn mt_slots(file: &File, code: u16) -> io::Result<[i32; MAX_SLOTS]> {
+    let mut buf = [0i32; MAX_SLOTS + 1];
+    buf[0] = code as i32;
+    // SAFETY: EVIOCGMTSLOTS reads the code from the first 4 bytes and fills
+    // at most len - 4 bytes of values after it; len is the buffer's size.
+    let rc = unsafe {
+        libc::ioctl(
+            file.as_raw_fd(),
+            eviocgmtslots(std::mem::size_of_val(&buf)) as _,
+            buf.as_mut_ptr(),
+        )
+    };
+    if rc < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut values = [0; MAX_SLOTS];
+    values.copy_from_slice(&buf[1..]);
+    Ok(values)
+}
+
 fn abs_info(file: &File, axis: u16) -> io::Result<AbsInfo> {
     let mut info = AbsInfo::default();
     // SAFETY: EVIOCGABS fills a 24-byte input_absinfo, which AbsInfo mirrors.
@@ -180,13 +207,29 @@ impl TouchScreen {
         // The input core drops a value equal to the last one it passed on
         // for that slot, before we opened the device too: a first touch at
         // the same x (or y) as the last touch before the app started arrives
-        // without it. Start the kernel's current slot where the kernel says
-        // it is (EVIOCGABS reports the current slot's values).
+        // without it. Start every slot where the kernel says it is. For
+        // multi-touch axes that takes EVIOCGMTSLOTS: the kernel keeps their
+        // values per slot, and EVIOCGABS reports one it never updates (seen
+        // on the device: a first tap at 950,800, where the app before had
+        // its last tap, opened the reader's menu).
         let slot = abs_info(&file, ABS_MT_SLOT)
             .map_or(0, |s| s.value.clamp(0, MAX_SLOTS as i32 - 1) as usize);
         let mut slots = [Slot::default(); MAX_SLOTS];
-        slots[slot].x = abs_x.value;
-        slots[slot].y = abs_y.value;
+        match (
+            mt_slots(&file, ABS_MT_POSITION_X),
+            mt_slots(&file, ABS_MT_POSITION_Y),
+        ) {
+            (Ok(xs), Ok(ys)) => {
+                for (s, (x, y)) in slots.iter_mut().zip(xs.into_iter().zip(ys)) {
+                    s.x = x;
+                    s.y = y;
+                }
+            }
+            _ => {
+                slots[slot].x = abs_x.value;
+                slots[slot].y = abs_y.value;
+            }
+        }
         Ok(Self {
             file,
             path,
