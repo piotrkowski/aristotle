@@ -10,6 +10,12 @@
           "status": false
         },
         {
+          "name": "USB drive mode for 10 minutes (agent installed)",
+          "action": "sh /var/local/aristotle/aristotlectl mode storage 10",
+          "exitmenu": false,
+          "status": false
+        },
+        {
           "name": "Remove agent completely (job, state, SSH key)",
           "action": "sh ./agent/uninstall.sh",
           "exitmenu": false,

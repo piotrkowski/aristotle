@@ -5,8 +5,10 @@
 # (/mnt/us/aristotle-disable) stops the agent before it does anything on this
 # boot: no USB network, no SSH, no watchdog, no Wi-Fi policy. USB stays with
 # volumd and the stock system. It is the way out without SSH: connect the
-# Kindle as a USB drive, create the file, eject and reboot. Delete it and
-# reboot to have the agent back.
+# Kindle as a USB drive, create the file, eject and reboot. While the agent
+# runs, the USB port is a network link, so switch it to drive mode first
+# (KUAL > Aristotle > USB drive mode for 10 minutes, or the reader's
+# settings). Delete the file and reboot to have the agent back.
 #
 # Otherwise it keeps the device reachable and healthy without anyone touching
 # it:
