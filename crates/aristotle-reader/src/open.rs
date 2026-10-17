@@ -215,6 +215,8 @@ pub struct Opening {
     pub menu_open: bool,
     pub menu: Menu,
     pub page_node: NodeId,
+    /// The menu's row of reading actions (contents, highlights, go to).
+    pub nav: NodeId,
     pub settings: Settings,
     pub gestures: TurnGestures,
 }
@@ -310,7 +312,10 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
     // The reader's first frame, as App::open_book draws it: returns the time.
     let mut frame = |page: Rc<Page>| {
         let t = Instant::now();
-        let (tree, _, _) = crate::reader_tree(&styles, &rec.meta.title, &settings, page);
+        let (tree, _, _, _) =
+            crate::reader_tree(&styles, &rec.meta.title, &settings, page, &mut |_| {
+                Vec::new()
+            });
         match &mut ui {
             Some(ui) => {
                 ui.set_tree_with(tree, Refresh::Full);

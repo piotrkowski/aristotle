@@ -28,6 +28,8 @@ zstd = { version = "0.13", default-features = false }
 # dictionary.
 flate2 = "1.1.5"
 unicode-normalization = "0.1.25"
+# PNGs of the host preview (`--preview`); plato-core links the same version.
+png = "0.18"
 
 [dev-dependencies]
 # Same version as plato-core; the export test runs the owner's parser regexes.

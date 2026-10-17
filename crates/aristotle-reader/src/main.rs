@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode N] [--no-scan]
-//!           [--bench-open TITLE]
+//!           [--open TITLE] [--dict DIR]... [--bench-open TITLE] [--preview OUT BOOK]
 //!
 //!   --data DIR      renderer data (fonts/, css/, hyphenation-patterns/,
 //!                   serif/); default: data/ next to the binary
@@ -17,8 +17,18 @@
 //!   --turn-mode N   page-turn waveform: 9 (stock, default) or 7 (DU4);
 //!                   saved in reader.json
 //!   --no-scan       don't look for new or changed books on start
+//!   --open TITLE    open the first book whose title contains TITLE after
+//!                   start (device scenarios)
+//!   --dict DIR      look for StarDict dictionaries here (repeatable);
+//!                   default: /mnt/us/dictionaries, /mnt/us/koreader/data/dict
+//!   --index-dicts   build the dictionaries' lookup indexes into
+//!                   LIBRARY/dict-index and exit (on the host, to copy to
+//!                   the device instead of indexing there)
 //!   --bench-open T  time opening the first book whose title contains T,
 //!                   without panel or touchscreen, and exit (see open.rs)
+//!   --preview OUT BOOK  drive the reading interactions on BOOK with
+//!                   synthetic touches on an in-memory panel and write PNGs
+//!                   to OUT (host; see preview.rs)
 //! ```
 //!
 //! Run it with the stock GUI stopped: `devloop/kindle/run-aristotle.sh`.
@@ -26,14 +36,20 @@
 //! as `[perf ...]` lines; see docs/reader.md.
 
 mod dict;
+mod marks;
 mod open;
+mod overlay;
 mod pagecache;
 mod panel;
 mod prefs;
+mod preview;
 mod progress;
+mod reading;
+mod selection;
 mod session;
 mod shelf;
 mod snapshot;
+mod speed;
 mod turns;
 
 use std::path::PathBuf;
@@ -59,12 +75,16 @@ use aristotle_ui::tree::{Constraints, Kind, Node, NodeId, PaintCx, Refresh, Tree
 use aristotle_ui::ui::{Ui, UiEvent};
 use aristotle_ui::widgets::{Slider, Steps};
 
+use crate::dict::service::Service;
+use crate::marks::ExportPaths;
 use crate::open::Opening;
 use crate::panel::{Content, Panel};
 use crate::prefs::Prefs;
 use crate::progress::{Debounce, Saver};
+use crate::reading::{Overlay, OverlayNodes};
 use crate::session::{Prepared, Session, Source};
 use crate::shelf::{Covers, ShelfModel, SORTS};
+use crate::speed::Speed;
 use crate::turns::{Intent, Turn, TurnGestures};
 
 static START: OnceLock<Instant> = OnceLock::new();
@@ -93,6 +113,7 @@ extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::Relaxed);
 }
 
+#[derive(Clone)]
 struct Args {
     data: PathBuf,
     library: PathBuf,
@@ -100,10 +121,14 @@ struct Args {
     turn_mode: Option<u32>,
     scan: bool,
     bench_open: Option<String>,
+    dicts: Vec<PathBuf>,
+    preview: Option<(PathBuf, PathBuf)>,
+    open: Option<String>,
+    index_dicts: bool,
 }
 
 fn usage() -> &'static str {
-    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] [--no-scan]"
+    "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--turn-mode 9|7] [--no-scan] [--dict DIR]... [--preview OUT BOOK]"
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -120,6 +145,10 @@ fn parse_args() -> Result<Args, Error> {
         turn_mode: None,
         scan: true,
         bench_open: None,
+        dicts: Vec::new(),
+        preview: None,
+        open: None,
+        index_dicts: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -131,6 +160,14 @@ fn parse_args() -> Result<Args, Error> {
             "--turn-mode" => a.turn_mode = Some(value("--turn-mode")?.parse()?),
             "--no-scan" => a.scan = false,
             "--bench-open" => a.bench_open = Some(value("--bench-open")?),
+            "--dict" => a.dicts.push(cwd.join(value("--dict")?)),
+            "--open" => a.open = Some(value("--open")?),
+            "--index-dicts" => a.index_dicts = true,
+            "--preview" => {
+                let out = cwd.join(value("--preview")?);
+                let book = cwd.join(value("--preview")?);
+                a.preview = Some((out, book));
+            }
             "-h" | "--help" => bail!("{}", usage()),
             other => bail!("unknown argument {other}\n{}", usage()),
         }
@@ -165,6 +202,21 @@ fn run() -> Result<(), Error> {
         let root = args.scan.then_some(args.root.as_path());
         return open::bench(&args.library, root, title);
     }
+    if let Some((out, book)) = &args.preview {
+        return preview::run(&args, out, book);
+    }
+    if args.index_dicts {
+        let mut d =
+            dict::Dictionaries::discover(&dict_dirs(&args), &args.library.join("dict-index"), None);
+        let missing = d.missing_indexes();
+        dict::build_indexes(&missing);
+        perf!(
+            "dict: {} indexes built in {}",
+            missing.len(),
+            args.library.join("dict-index").display()
+        );
+        return Ok(());
+    }
 
     let mut prefs = Prefs::load(&args.library);
     if let Some(mode) = args.turn_mode {
@@ -181,6 +233,24 @@ fn run() -> Result<(), Error> {
     let mut touch =
         TouchScreen::open(w, h, Transform::default()).context("can't open the touchscreen")?;
     touch.grab(true)?;
+    let mut app = build_app(&args, panel, prefs, start_dictionaries(&args))?;
+    perf!("startup: first frame submitted");
+    open::warm_up();
+
+    if args.scan {
+        app.scan(&args.root)?;
+    }
+    if let Some(title) = &args.open {
+        app.open_by_title(title)?;
+    }
+    let result = app.run(&mut touch);
+    app.leave()?;
+    result
+}
+
+/// The app on `panel`, showing the library.
+fn build_app(args: &Args, panel: Panel, prefs: Prefs, dict: Service) -> Result<App, Error> {
+    let (w, h) = panel.size();
     let lib = Library::open(&args.library)?;
     let saver = Saver::new(&args.library);
     perf!(
@@ -217,19 +287,46 @@ fn run() -> Result<(), Error> {
         filter: Filter::All,
         sort: 0,
         shelf_turns: 0,
+        dict: Some(dict),
+        speed: Speed::load(&args.library),
+        exports: ExportPaths::for_root(&args.root),
     };
     app.enter_library_ui();
     app.ui.request_full_refresh();
     app.render_ui()?;
-    perf!("startup: first frame submitted");
-    open::warm_up();
+    Ok(app)
+}
 
-    if args.scan {
-        app.scan(&args.root)?;
+/// Where to look for dictionaries: `--dict`, else the device defaults.
+fn dict_dirs(args: &Args) -> Vec<PathBuf> {
+    if args.dicts.is_empty() {
+        dict::SEARCH_DIRS.iter().map(PathBuf::from).collect()
+    } else {
+        args.dicts.clone()
     }
-    let result = app.run(&mut touch);
-    app.leave()?;
-    result
+}
+
+/// Find the dictionaries and start the lookup thread (and the index
+/// builder if some dictionary has no index yet).
+fn start_dictionaries(args: &Args) -> Service {
+    let dirs = dict_dirs(args);
+    let t = Instant::now();
+    let s = Service::start(
+        dirs,
+        args.library.join("dict-index"),
+        args.library.join("dictionaries.json"),
+    );
+    perf!(
+        "startup: {} dictionaries ({}) in {:.0} ms",
+        s.dicts.len(),
+        s.dicts
+            .iter()
+            .map(|d| d.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        ms(t.elapsed())
+    );
+    s
 }
 
 /// A Plato page shown as the reader screen's background.
@@ -253,9 +350,14 @@ struct Reading {
     session: Session,
     menu: Menu,
     page_node: NodeId,
+    /// The row of reading actions shown with the menu.
+    nav: NodeId,
     menu_open: bool,
     gestures: TurnGestures,
     settings: Settings,
+    /// What covers the page (selection, popups, lists); see reading.rs.
+    overlay: Overlay,
+    nodes: OverlayNodes,
 }
 
 // One screen exists at a time and it is never moved in a hot path, so the
@@ -291,6 +393,11 @@ struct App {
     sort: usize,
     /// Shelf page turns since the last flash.
     shelf_turns: u32,
+    /// Dictionary lookups (a thread of their own).
+    dict: Option<Service>,
+    speed: Speed,
+    /// Where highlights are exported.
+    exports: ExportPaths,
 }
 
 /// What a handler wants the loop to do next.
@@ -422,6 +529,13 @@ impl App {
                 if r.session.paginating() {
                     timeout = timeout.min(Duration::from_millis(250));
                 }
+                // A long press fires while the finger rests.
+                if let Some(t) = r.gestures.next_deadline(now) {
+                    timeout = timeout.min(Duration::from_micros(t.max(1000)));
+                }
+                if matches!(r.overlay, Overlay::Waiting { .. }) {
+                    timeout = timeout.min(Duration::from_millis(20));
+                }
             }
             if self.opening.is_some() {
                 timeout = timeout.min(Duration::from_millis(10));
@@ -442,6 +556,7 @@ impl App {
                     return Ok(());
                 }
             }
+            self.tick_reading(monotonic_us())?;
             if !events.is_empty() && self.ui_driven() {
                 self.render_ui()?;
             }
@@ -454,7 +569,7 @@ impl App {
     fn ui_driven(&self) -> bool {
         match &self.screen {
             Screen::Library { .. } => true,
-            Screen::Reader(r) => r.menu_open,
+            Screen::Reader(r) => r.menu_open || !r.overlay.is_none(),
             Screen::Opening => self.opening.as_ref().is_some_and(|o| o.menu_open),
         }
     }
@@ -464,6 +579,7 @@ impl App {
         if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
             self.adopt(result)?;
         }
+        self.poll_lookup()?;
         if let Screen::Reader(r) = &mut self.screen {
             if r.session.poll_pagination() {
                 let (pn, pp) = r.session.prerender();
@@ -477,6 +593,7 @@ impl App {
         if self.debounce.due(Instant::now()) {
             self.save_snapshot();
             self.saver.save(&self.lib);
+            self.speed.save();
             self.debounce.saved();
         }
         Ok(())
@@ -488,7 +605,9 @@ impl App {
             return self.on_opening_touch(ev);
         }
         if let Screen::Reader(r) = &mut self.screen {
-            if !r.menu_open {
+            // The page's gestures own the touch unless the menu or an
+            // overlay is up; a hold keeps it until the finger lifts.
+            if r.gestures.holding() || (!r.menu_open && r.overlay.is_none()) {
                 let intents = r.gestures.feed(ev);
                 for i in intents {
                     self.on_intent(i)?;
@@ -507,7 +626,14 @@ impl App {
     fn on_ui_event(&mut self, ev: UiEvent) -> Result<Flow, Error> {
         match &self.screen {
             Screen::Library { .. } => self.on_library_event(ev),
-            Screen::Reader(_) => self.on_menu_event(ev).map(|_| Flow::Continue),
+            Screen::Reader(r) => {
+                let reading_action = matches!(ev, UiEvent::Action { id, .. } if id >= 1000);
+                if !r.overlay.is_none() || reading_action {
+                    self.on_overlay_event(ev).map(|_| Flow::Continue)
+                } else {
+                    self.on_menu_event(ev).map(|_| Flow::Continue)
+                }
+            }
             Screen::Opening => self.on_opening_ui_event(ev),
         }
     }
@@ -559,6 +685,25 @@ impl App {
         Ok(Flow::Continue)
     }
 
+    /// Open the first book whose title contains `title` (case and
+    /// diacritics ignored).
+    fn open_by_title(&mut self, title: &str) -> Result<(), Error> {
+        let want = aristotle_library::text::fold(title);
+        let id = self
+            .lib
+            .books()
+            .iter()
+            .find(|b| aristotle_library::text::fold(&b.meta.title).contains(&want))
+            .map(|b| b.id.clone());
+        match id {
+            Some(id) => self.open_book(&id),
+            None => {
+                eprintln!("aristotle: no book titled {title:?}");
+                Ok(())
+            }
+        }
+    }
+
     fn open_book(&mut self, id: &str) -> Result<(), Error> {
         let Some(rec) = self.lib.book(id).cloned() else {
             return Ok(());
@@ -566,7 +711,10 @@ impl App {
         let t0 = Instant::now();
         let style = self.prefs.style();
         let src = match Source::new(&self.lib, &rec, &self.mobi_cache) {
-            Ok(s) => s,
+            Ok(mut s) => {
+                s.secs_per_page = self.speed.secs_per_page();
+                s
+            }
             Err(e) => {
                 eprintln!("aristotle: {}: {e:#}", rec.meta.title);
                 return Ok(());
@@ -585,10 +733,14 @@ impl App {
         };
         let times = prepared.times;
         let mut session = Session::from_prepared(prepared)?;
+        session.set_speed(self.speed.secs_per_page());
         let page = session.page(session.current)?;
         let light = self.light_level();
         let settings = self.prefs.menu_settings(light);
-        let (tree, menu, page_node) = reader_tree(&self.styles, &session.title, &settings, page);
+        let (tree, menu, page_node, nav) =
+            reader_tree(&self.styles, &session.title, &settings, page, &mut |_| {
+                Vec::new()
+            });
         // A screen switch: the stock UI's flashing full refresh (mode 8).
         self.ui.set_tree_with(tree, Refresh::Full);
         self.ui.gesture_config_mut().long_press_us = 500_000;
@@ -611,7 +763,7 @@ impl App {
             ms(pp)
         );
         let gestures = TurnGestures::new(self.ui.bounds());
-        self.enter_reader(session, menu, page_node, settings, gestures);
+        self.enter_reader(session, menu, page_node, nav, settings, gestures);
         Ok(())
     }
 
@@ -627,8 +779,13 @@ impl App {
         let light = self.light_level();
         let settings = self.prefs.menu_settings(light);
         let page = snap.page.clone();
-        let (tree, menu, page_node) =
-            reader_tree(&self.styles, &src.title, &settings, page.clone());
+        let (tree, menu, page_node, nav) = reader_tree(
+            &self.styles,
+            &src.title,
+            &settings,
+            page.clone(),
+            &mut |_| Vec::new(),
+        );
         // A screen switch: the stock UI's flashing full refresh (mode 8).
         self.ui.set_tree_with(tree, Refresh::Full);
         self.ui.gesture_config_mut().long_press_us = 500_000;
@@ -667,6 +824,7 @@ impl App {
             menu_open: false,
             menu,
             page_node,
+            nav,
             settings,
             gestures: TurnGestures::new(self.ui.bounds()),
         }));
@@ -750,6 +908,8 @@ impl App {
                 self.render_ui()?;
                 Ok(true)
             }
+            // Holding, dragging and link taps need the book: they wait.
+            _ => Ok(false),
         }
     }
 
@@ -850,6 +1010,7 @@ impl App {
             prepared.next(),
         );
         let mut session = Session::from_prepared(prepared)?;
+        session.set_speed(self.speed.secs_per_page());
         session.current = at;
         let page = session.page(at)?;
         let verdict = if right {
@@ -896,7 +1057,7 @@ impl App {
         }
         let o = *o;
         let menu_open = o.menu_open;
-        self.enter_reader(session, o.menu, o.page_node, o.settings, o.gestures);
+        self.enter_reader(session, o.menu, o.page_node, o.nav, o.settings, o.gestures);
         if let Screen::Reader(r) = &mut self.screen {
             if menu_open {
                 r.menu_open = true;
@@ -915,6 +1076,7 @@ impl App {
         session: Session,
         menu: Menu,
         page_node: NodeId,
+        nav: NodeId,
         settings: Settings,
         gestures: TurnGestures,
     ) {
@@ -922,10 +1084,15 @@ impl App {
             session,
             menu,
             page_node,
+            nav,
             menu_open: false,
             gestures,
             settings,
+            overlay: Overlay::None,
+            nodes: OverlayNodes::default(),
         }));
+        self.speed.page_shown(Instant::now());
+        self.page_changed();
     }
 
     /// Store the current page (and the next, if rendered) for the next
@@ -965,7 +1132,22 @@ impl App {
         match intent {
             Intent::Turn { dir, at_us } => self.turn(dir, at_us),
             Intent::OpenMenu => self.open_menu(),
+            Intent::Hold { at, undo } => self.hold(at, undo),
+            Intent::Drag(p) => self.drag(p),
+            Intent::Release(p) => self.release(p),
+            Intent::Tap(p) => self.quiet_tap(p),
         }
+    }
+
+    /// Fire a long press on the page while the finger rests.
+    fn tick_reading(&mut self, now_us: u64) -> Result<(), Error> {
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
+        for i in r.gestures.tick(now_us) {
+            self.on_intent(i)?;
+        }
+        Ok(())
     }
 
     /// A page turn: show the (normally prerendered) page with one full
@@ -989,6 +1171,12 @@ impl App {
         let waited = self.panel.show_page(&page, false, "turn")?;
         let tap_to_submit = monotonic_us().saturating_sub(at_us) as f64 / 1000.0;
         s.current = target;
+        if dir == Turn::Forward {
+            self.speed.turned_forward(Instant::now());
+        } else {
+            self.speed.page_shown(Instant::now());
+        }
+        s.set_speed(self.speed.secs_per_page());
         let (pn, pp) = s.prerender();
         let t = Instant::now();
         if let Some(w) = self.ui.tree.widget_mut::<PageView>(r.page_node) {
@@ -1015,6 +1203,7 @@ impl App {
             self.lib.set_status(&s.id, Status::Finished);
         }
         self.debounce.changed(Instant::now());
+        self.page_changed();
         Ok(())
     }
 
@@ -1031,6 +1220,7 @@ impl App {
         }
         self.ui.tree.invalidate(r.menu.light, Refresh::Auto);
         self.ui.tree.set_hidden(r.menu.root, false);
+        self.ui.tree.set_hidden(r.nav, false);
         self.ui.reset_gestures();
         self.render_ui()
     }
@@ -1044,9 +1234,11 @@ impl App {
         r.menu_open = false;
         r.gestures.reset();
         self.ui.tree.set_hidden(r.menu.root, true);
+        self.ui.tree.set_hidden(r.nav, true);
         self.ui.render();
         let page = r.session.page(r.session.current)?;
         self.panel.show_page(&page, false, "menu closed")?;
+        self.page_changed();
         Ok(())
     }
 
@@ -1150,15 +1342,13 @@ impl App {
         }
         let t = Instant::now();
         r.session.restyle(self.prefs.style())?;
-        let page = r.session.page(r.session.current)?;
+        r.session.page(r.session.current)?;
         let t_layout = t.elapsed();
         r.settings = settings;
-        let (tree, menu, page_node) = reader_tree(&self.styles, &r.session.title, &settings, page);
-        r.menu = menu;
-        r.page_node = page_node;
-        self.ui.set_tree_with(tree, Refresh::Auto);
-        self.ui.tree.set_hidden(r.menu.root, false);
-        update_menu_labels(&mut self.ui, r);
+        self.rebuild_reader(Refresh::Auto)?;
+        let Screen::Reader(r) = &mut self.screen else {
+            return Ok(());
+        };
         perf!(
             "restyle: {} pt, line height {}, margin {} mm: layout and page {:.0} ms",
             r.session.style.font_size,
@@ -1196,6 +1386,7 @@ impl App {
         }
         app.save_snapshot();
         app.saver.save(&app.lib);
+        app.speed.save();
         app.saver.flush();
         app.snapshots.flush();
         app.panel.clear()?;
@@ -1204,15 +1395,20 @@ impl App {
     }
 }
 
-/// The reader screen: the page with the (hidden) menu over it.
+/// The reader screen: the page, the layers `extra` adds over it (the
+/// selection, a popup), and the (hidden) menu with its row of reading
+/// actions. Returns the tree, the menu, the page node and the row.
 fn reader_tree(
     styles: &Styles,
     title: &str,
     settings: &Settings,
     page: Rc<Page>,
-) -> (Tree, Menu, NodeId) {
+    extra: &mut dyn FnMut(&mut Tree) -> Vec<NodeId>,
+) -> (Tree, Menu, NodeId, NodeId) {
     let mut t = Tree::new();
     let page_node = t.custom(PageView { page });
+    let mut layers = vec![page_node];
+    layers.extend(extra(&mut t));
     let spec = MenuSpec {
         title,
         // Only Literata ships with the renderer, and night mode would need
@@ -1221,9 +1417,12 @@ fn reader_tree(
         night: false,
     };
     let menu = build_menu(&mut t, styles, &spec, settings);
-    let root = t.add(Node::new(Kind::Stack), [page_node, menu.root]);
+    let nav = overlay::nav_bar(&mut t, styles);
+    layers.push(menu.root);
+    layers.push(nav);
+    let root = t.add(Node::new(Kind::Stack), layers);
     t.set_root(root);
-    (t, menu, page_node)
+    (t, menu, page_node, nav)
 }
 
 fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {
