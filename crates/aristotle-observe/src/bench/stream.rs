@@ -10,7 +10,7 @@
 //! - overlap: each rectangle shares half its width with the previous one
 //!
 //! Also reports how long the submit ioctl itself blocked, which revealed that
-//! the driver runs one update at a time (see `docs/eink-rendering.md`). Pass
+//! the driver runs one update at a time (`docs/ui-framework.md`, "E-ink rendering"). Pass
 //! `waveforms` (`bench stream waveforms`) to compare A2, DU and GL16 instead.
 
 use std::sync::mpsc;

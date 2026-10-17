@@ -155,7 +155,7 @@ pub struct Folio {
 /// than by the book: chapter title on top, page number and progress below.
 /// They are drawn in the same frame as the text, so a page turn needs no
 /// separate footer update (the stock reader sends one, see
-/// `docs/native-vs-aristotle.md`).
+/// `docs/benchmarks.md`).
 pub struct Chrome {
     regular: Font,
     italic: Font,

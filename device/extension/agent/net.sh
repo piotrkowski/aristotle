@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Aristotle's Wi-Fi policy (docs/network.md). Two modes, kept in
+# Aristotle's Wi-Fi policy (device/README.md, "Network"). Two modes, kept in
 # /var/local/aristotle/net-mode:
 #
 #   off     the default: Aristotle adds no rules; the stock firewall applies.

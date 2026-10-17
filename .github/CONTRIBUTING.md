@@ -59,7 +59,7 @@ Everything that runs on the Kindle is a static
    and after your change.
 2. Test anything that could hang boot, touch the stock framework or load
    kernel code in the emulator (`tools/emulator/setup.sh`).
-3. On the device, use the dev loop in `tools/host/`. No recovery path is verified
+3. On the device, use the dev loop in `tools/host/` (`device/README.md`). No recovery path is verified
    yet, so never write to the root filesystem, the boot partitions, `/mnt/wfm`
    or `/var/local` on someone's device without their consent.
 

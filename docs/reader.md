@@ -2,7 +2,7 @@
 
 The reader is two crates. `crates/aristotle-render` turns books into full-screen 8-bit pages with the document engine of [Plato](https://github.com/baskerville/plato) (`plato-core`) and uses none of Plato's Kobo UI. Its CLI, `aristotle-render`, renders pages to files on any host, shows them on the device and measures CPU and panel time. `crates/aristotle` is the reader app, binary `aristotle`. It takes the library from `aristotle-library`, pages from `aristotle-render` and screens from `aristotle-ui`, and reaches the hardware through `aristotle-hal`. The renderer does not depend on the UI or the library.
 
-The reader opens EPUB, DRM-free MOBI 7, PDF and TXT, and runs on the device. Device measurements are in [`native-vs-aristotle.md`](native-vs-aristotle.md), "Device measurements of the app". Numbers here are host numbers unless marked [dev].
+The reader opens EPUB, DRM-free MOBI 7, PDF and TXT, and runs on the device. Device measurements are in [Benchmarks](benchmarks.md#device-measurements-of-the-app). Numbers here are host numbers unless marked [dev].
 
 ## Architecture
 
@@ -233,7 +233,7 @@ A restyle that lays out more than 48 KB of chapter text (`Session::slow_relayout
 
 ## Page turns and waveforms
 
-Pages turn like the stock reader: one full-mode update of the whole screen with waveform mode 9. Partial updates, and A2 previews followed by GL16, left visible ghosting in real reading ([`native-vs-aristotle.md`](native-vs-aristotle.md), "Page-turn strategy experiment"). `--turn-mode 7` uses DU4: 317 ms instead of 503 ms on the device [dev], with fewer grays. The CLI's `--a2-preview` keeps the old two-step turn for experiments.
+Pages turn like the stock reader: one full-mode update of the whole screen with waveform mode 9. Partial updates, and A2 previews followed by GL16, left visible ghosting in real reading ([Benchmarks](benchmarks.md#page-turn-strategy-experiment)). `--turn-mode 7` uses DU4: 317 ms instead of 503 ms on the device [dev], with fewer grays. The CLI's `--a2-preview` keeps the old two-step turn for experiments.
 
 A tap turns when the finger lifts: the left 30 % goes back, the rest below the top 12 % forward. A tap or a swipe down in the top strip opens the menu. A horizontal swipe turns one page. Turning on touch-down saves 80 to 150 ms but makes a long press on a word turn the page first, so a hold never turns. After each submit the pages on both sides are rendered, about 106 ms on the device [dev], so a turn costs a memcpy and a submit.
 

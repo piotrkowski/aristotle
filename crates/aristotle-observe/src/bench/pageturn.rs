@@ -5,7 +5,7 @@
 //! dumps, stride 1088) and measures, per strategy, when the new page is
 //! first legible ("visible") and when the panel is done ("settled"). The goal
 //! is a turn that beats the stock reader's 565 ms visible and 830 ms settled
-//! (`docs/native-vs-aristotle.md`).
+//! (`docs/benchmarks.md`).
 //!
 //! ```text
 //! aristotle-observe bench pageturn PAGE.raw [TURNS] [PAUSE_MS] [STRATEGY]

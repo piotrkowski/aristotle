@@ -100,13 +100,13 @@ The Rex EPDC driver uses the Zelda numbering from FBInk's `mxcfb-kindle.h`, wher
 
 A2 alone measures 120–144 ms. Larger regions take a little longer at room temperature: a full-screen GC16 flash about 570 ms, a 1072 × 724 GL16 partial about 565 ms, and a 992 × 60 DU partial about 320 ms, from an early bring-up test since removed [dev].
 
-The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. `docs/eink-rendering.md` has the measurements and the display thread built on them.
+The driver runs one update at a time [dev]. A submit blocks while an earlier update is still on the panel, whether or not the regions overlap, so each streamed update costs about two waveform durations. Updates submitted back to back before the first starts are merged and finish together. [ui-framework.md](ui-framework.md#e-ink-rendering) has the measurements and the display thread built on them.
 
 ## Input
 
 - The touch chip differs between units. `/etc/upstart/touch` powers the touch rail through PMIC register `0x12`, probes I2C2 at `0x24` (Parade), then at `0x5d` and `0x14` (Goodix), and loads the matching driver [fw].
 - Our unit has Goodix `goodix-ts` on `/dev/input/event2`, with axes 0–1072 × 0–1448, the same as framebuffer coordinates [dev]. LTE units have an extra SX9310 proximity sensor, which moves touch to `event3` [ko]. Find the device by name in `/proc/bus/input/devices`.
-- The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. `docs/native-vs-aristotle.md` lists what an injected contact needs.
+- The Goodix node declares only multi-touch axes and has no `BTN_TOUCH`, `ABS_X` or `ABS_Y` [dev]. [benchmarks.md](benchmarks.md#method) lists what an injected contact needs.
 - The kernel's `struct input_event` is 16 bytes, with a 32-bit `timeval`. musl's time64 layout is 24 bytes, so `aristotle-hal::input` defines its own.
 
 ## Power and light
@@ -163,7 +163,7 @@ The Aristotle agent and KUAL › Aristotle › Start USB network replace it with
 | Firewall | the stock iptables rules drop unsolicited input. The scripts accept `usb0` only |
 | SSH | KOReader's `dropbear`, key-only, on `192.168.15.244:22` only |
 
-Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the device off the bus, and the network gadget then needs a physical replug [dev]. After an eject the device leaves mass storage with the cable still in, and only a replug enters it again [dev]. `docs/network.md` covers the link and the Wi-Fi policy.
+Eject on the host with `udisksctl unmount`. `udisksctl power-off` takes the device off the bus, and the network gadget then needs a physical replug [dev]. After an eject the device leaves mass storage with the cable still in, and only a replug enters it again [dev]. [device/README.md](../device/README.md#network) covers the link and the Wi-Fi policy.
 
 ## Taking over the screen
 

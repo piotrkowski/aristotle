@@ -8,8 +8,8 @@
 //! aristotle-observe bench pageturn PAGE.raw [TURNS] [PAUSE_MS] [STRATEGY]
 //! ```
 //!
-//! The results are in `docs/eink-rendering.md` and
-//! `docs/native-vs-aristotle.md`.
+//! The results are in `docs/ui-framework.md` ("E-ink rendering") and
+//! `docs/benchmarks.md`.
 
 mod latency;
 mod pageturn;

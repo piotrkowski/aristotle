@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Getting pixels onto the PW4 panel, by the rules measured on the device
-//! (`docs/eink-rendering.md`, `docs/native-vs-aristotle.md`):
+//! (`docs/ui-framework.md`, "E-ink rendering"; `docs/benchmarks.md`):
 //!
 //! - **Book pages** go out as ONE full-mode update of the WHOLE screen with
 //!   the stock reader's waveform, mode 9 (or mode 7, DU4, if chosen). That

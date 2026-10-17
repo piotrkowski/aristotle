@@ -1,6 +1,6 @@
-# Stock Kindle vs Aristotle
+# Benchmarks: stock Kindle vs Aristotle
 
-This document records the stock UI's baseline, how both UIs are measured, Aristotle's targets and its results so far. Numbers come from `aristotle-observe` on the test PW4 (firmware 5.13.6) unless marked otherwise.
+This document records the stock UI's baseline, how both UIs are measured, Aristotle's targets and its results so far. It is the source of every number in the README and on the [benchmarks page](https://piotrkowski.github.io/aristotle/benchmarks.html). Device numbers come from `aristotle-observe` on the test PW4 (firmware 5.13.6) unless marked otherwise. Host numbers are in [Host measurements](#host-measurements). The panel's own timings, per waveform, are in [UI framework](ui-framework.md#e-ink-rendering).
 
 ## Method
 
@@ -125,3 +125,51 @@ Device, 2026-10-17, from the app's `[perf]` lines in `/var/tmp/aristotle.log` an
 | Free RAM while reading (`MemFree` + `Buffers` + `Cached`, of 490 MB) | 379–382 MB | 236–240 MB with the stock GUI running |
 | Peak memory (`VmHWM`) | 66 MB, during the one-time indexing of five dictionaries | |
 | One-time dictionary indexing | pl-pl 22.9 s, grc-en 37.2 s, the others under 3.1 s each | |
+
+`takeover.sh start` alone, before the app starts, takes available RAM from 236 MB to 392 MB [dev] (`docs/pw4-reference.md`, "Taking over the screen").
+
+## Binary size
+
+Stripped ARM binaries in MB (10⁶ bytes), built with `tools/build-plato.sh` and `tools/build-render.sh device`. The first build linked fonts and formats that a reader of Polish, English, Greek and Latin books never needs. They were removed step by step, and each step was checked by rendering all pages of a set of test books before and after. What each build option costs is in [reader.md](reader.md#size-budget).
+
+| Build | `aristotle` | `aristotle-render` | `data/` | App tarball |
+| --- | --- | --- | --- | --- |
+| Before the cuts (2026-10-17) | 29.52 MB | 26.04 MB | 5.04 MB | 19.4 MB |
+| After the cuts (2026-10-17) | 8.36 MB | 6.60 MB | 2.68 MB | – |
+| With night mode, settings, series, screensaver and page snapshots (2026-10-17) | 9.15 MB | 6.63 MB | 2.68 MB | 6.0 MB |
+| The current default build | 9.64 MB | 6.66 MB | 2.68 MB | 6.4 MB |
+
+## Host measurements
+
+On a PC (x86_64, release build) with the same code and library versions as the device build [host]. Layout on the device is about 8 times slower.
+
+### Opening a book from a snapshot
+
+`aristotle --bench-open`, 6 runs on one CPU, with a 379-page stand-in novel in a single spine item and page numbers cached.
+
+| Step | Old path | New path |
+| --- | --- | --- |
+| Tap to submit | 250–400 ms, median 278 | 1.0–1.2 ms |
+| Real page ready | the same | 257–372 ms after the tap, with no panel update |
+| Snapshot | – | 126 KB for two pages, 6.6 ms to encode and write |
+
+### Typesetting
+
+`aristotle-render bench` with Literata at 10 pt.
+
+| Book | Open | First page | Render per page, median / p90 | Paginate all | Max RSS |
+| --- | --- | --- | --- | --- | --- |
+| Plato, *Phaedo*, EPUB, 341 pages | 1.1 ms | 0.6 ms | 2.1 / 2.4 ms | 211 ms | 32 MiB |
+| Polish non-fiction, EPUB, 269 pages | 10 ms | 1.9 ms | 4.6 / 5.2 ms | 241 ms | 26 MiB |
+
+### Dictionary indexes
+
+The fold index is built once per dictionary (`docs/reader.md`, "Dictionary"). Warm lookups in these dictionaries take 0.03 to 1.3 ms.
+
+| Dictionary | Words | Forms | Index | Build |
+| --- | --- | --- | --- | --- |
+| grc-pl | 2,108 | 5,472 | 81 KB | 13 ms |
+| la-pl | 15,814 | 83,969 | 0.9 MB | 44 ms |
+| en-pl | 92,605 | 222,731 | 2.0 MB | 88 ms |
+| pl-pl | 123,535 | 1,369,720 | 21 MB | 846 ms |
+| grc-en | 21,819 | 1,789,814 | 23.6 MB | 1462 ms |

@@ -21,7 +21,7 @@
 #   reboots at most once an hour if that does not help. It stays out of the
 #   way while Aristotle has taken over (/var/run/aristotle-takeover exists;
 #   /var is a tmpfs, so a reboot clears it and the watchdog is back);
-# - the Wi-Fi policy (net.sh, docs/network.md): nothing in "off", the default;
+# - the Wi-Fi policy (net.sh, device/README.md, "Network"): nothing in "off", the default;
 #   in "scoped", wlan0 limited to the hosts in net-allow, re-applied when the
 #   address, the resolvers or the list change.
 #

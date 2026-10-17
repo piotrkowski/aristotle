@@ -6,7 +6,7 @@
 //! here as a small enum so this crate builds and tests on the host without
 //! the HAL; the device glue converts with `Waveform(hint as u32)`.
 //!
-//! Measured costs on our panel (`docs/eink-rendering.md`, 120 × 120 region):
+//! Measured costs on our panel (`docs/ui-framework.md`, "E-ink rendering", 120 × 120 region):
 //! A2 120–144 ms, DU 309 ms, GL16 and GC16 544 ms. Because the driver runs
 //! one update at a time, choosing a slower waveform than needed delays every
 //! update queued behind it, so the cheapest correct waveform matters.
