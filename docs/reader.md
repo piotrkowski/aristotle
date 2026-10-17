@@ -123,18 +123,43 @@ Saved positions (`position.rs`) outlive a layout:
 | `shelf.rs` | Library index to the library screen: book to continue, sort, covers |
 | `progress.rs` | Locator mapping, write debouncing, the index writer thread (host-tested) |
 | `pagecache.rs` | Page numbers on disk and the background pagination (host-tested) |
+| `snapshot.rs` | Page snapshots: the page a book was left at, on disk (host-tested) |
+| `open.rs` | Opening from a snapshot with the layout on a worker thread, `--bench-open` (host-tested) |
 | `prefs.rs` | Font size, spacing, margins and turn waveform, `reader.json` (host-tested) |
 
 ### Behaviour
 
 - **Library.** On start the index (`/mnt/us/.aristotle/library.json`) is shown at once, then `/mnt/us/documents` is scanned incrementally (an unchanged library costs a `stat` per file); if anything changed, the screen is rebuilt with only the changed pixels sent. "Czytaj dalej" shows the most recently opened book, or before any book was opened here, the one whose progress (stock-imported included) changed last. Filters by status (Wszystkie, Czytane, Nieprzeczytane, Przeczytane), the sort button cycles Ostatnie, Tytuł, Autor, and the shelf pages ("Strona x z y"). Covers come from the thumbnail cache. **Holding the "Biblioteka" title for a second quits.**
-- **Reader.** A book opens at its saved position with a mode-8 flash (a screen switch). A touch-down in the left 30 % turns back, anywhere else below the top 12 % forward, without waiting for the release. A horizontal swipe ends one page from where it started in its direction (a swipe right that started in the forward zone goes two back, undoing the touch-down turn). A tap or a swipe down in the top strip opens the menu.
+- **Reader.** A book opens at its saved position with one mode-8 flash (a screen switch), after the tapped card inverts on touch-down; see [Opening a book](#opening-a-book). A touch-down in the left 30 % turns back, anywhere else below the top 12 % forward, without waiting for the release. A horizontal swipe ends one page from where it started in its direction (a swipe right that started in the forward zone goes two back, undoing the touch-down turn). A tap or a swipe down in the top strip opens the menu.
 - **Page turns.** Exactly the stock reader's: one full-mode update of the whole screen with mode 9 (`--turn-mode 7` for DU4, kept in `reader.json`). The previous page update must have finished before the next page is written to the framebuffer; that is the only place the input loop waits for the panel. After the submit, the pages on both sides are rendered, so the next turn costs a memcpy and a submit.
 - **Menu.** Opening and changing it are chrome: DU and GL16 through the display thread. Size (8 to 15 pt), spacing (1.2, 1.3, 1.5 em) and margins (3, 5, 8 mm) lay the book out again at the same place; the new page goes out as a full mode-9 update. Chapter arrows jump through the table of contents. The light slider drives the frontlight (perceptual: raw = value² × max). "Biblioteka" goes back. Closing the menu (a tap on the page) redraws the page with a full mode-9 update, which also clears what the menu left. The font and night rows of the prototype are left out: the renderer ships Literata only, and night mode would need inverted pages.
 - **Progress.** Every turn updates the record in memory (a spine or Kindle locator plus the fraction; the last page marks the book finished). The index goes to disk 3 s after the last turn, or at the latest 20 s after the first unsaved one, on a writer thread; also when going back to the library and on exit (SIGTERM and SIGINT included).
 - **Page numbers.** `x / y` is cached per book and style in `/mnt/us/.aristotle/pages/`. On a miss a thread opens its own copy of the book and paginates it at `SCHED_IDLE` (musl stubs `sched_setscheduler`, so the system call is made directly), so on the single-core PW4 it only runs while the reader waits for input. When it finishes, the numbers appear from the next page on.
 
-Files in the library data directory besides the index and covers: `reader.json` (preferences), `pages/<book id>-<key>.txt` (page starts, one per line; the key hashes the style, the file's size and mtime and a layout version), `epub-cache/` (converted MOBI books and their position maps).
+Files in the library data directory besides the index and covers: `reader.json` (preferences), `pages/<book id>-<key>.txt` (page starts, one per line; the key hashes the style, the file's size and mtime and a layout version), `snapshots/<book id>.snap` (page snapshots, below), `epub-cache/` (converted MOBI books and their position maps).
+
+### Opening a book
+
+Plato finds page breaks only by laying out the chapter that holds a position, from the chapter's start. Placing the saved position therefore costs the layout of its whole chapter, and a MOBI without page breaks converts to one chapter: "Pan Tadeusz" took 1989 ms of 2454 ms to the first submit on the device [dev], with the page numbers cached or not. The page the reader left is known, though, so the app keeps it:
+
+1. **Snapshot.** Whenever progress is saved (3 s after the last turn, back to the library, quitting) the current page and the prerendered next one go to `snapshots/<book id>.snap`: the 8-bit page buffers, zstd level 1 (about 63 KB per text page instead of 1.5 MB), with each page's location, progress locator and menu labels. The key is the book id, the file's size and mtime, a hash of every style field, the layout version and the app build, and the progress locator. The snapshot is used only if all of them match the index and the preferences now, so another font size, a replaced file, a position imported from the stock reader or a new build each make it stale (it is overwritten at the next save). The page chrome (chapter title, `x / y`, percentage) is a function of the location and has no live fields such as a clock or battery, so a snapshot cannot show a stale one.
+2. **Tap to page.** On a tap the card inverts (A2) on touch-down; on release the snapshot is read, decoded and drawn into the reader screen, which goes out as the open's one mode-8 flash. Nothing has been laid out yet.
+3. **Worker.** A thread opens the book, places the position, renders the page and both neighbours, and returns them (`Session::prepare`; the result holds no `Rc` pages or FreeType fonts, so it can cross threads; the session loads its own chrome fonts). Meanwhile a forward turn shows the snapshot's next page and a back turn returns from it (mode-9 turns), the menu opens with the stored labels, and "Biblioteka" goes back at once: the worker is abandoned (its thread drops to `SCHED_IDLE` and its result is discarded) and the page shown is kept as the progress. Anything that needs the book (a turn beyond the stored pages, a menu setting) waits for the worker.
+4. **Adoption.** The main loop polls the worker every 10 ms while it runs. The real session must place the position on the page shown, and its rendered page must equal the snapshot's pixels; then nothing is sent. Otherwise (another location, or a different header or footer, for example page numbers that were unknown when the snapshot was taken) the real page replaces it with one full mode-9 update, never a partial fix-up.
+
+Without a snapshot (the first open with this app, another style) there is nothing to show early, and the book is opened on the main thread as before. Other cuts on the open path: a cached MOBI conversion reads only the PalmDB header and record 0, not the whole file, and Plato's hyphenation patterns (all files in `hyphenation-patterns/`, 5 to 9 ms on the host) are loaded at idle priority while the library is on screen.
+
+`aristotle --library DIR [--root DIR] --bench-open TITLE` runs the open path without panel or touchscreen and prints both paths (it writes progress, page numbers and a snapshot to `DIR` like the app). Host numbers for a stand-in of "Pan Tadeusz" (420 KB of Polish prose in one spine item, converted from a generated MOBI, 379 pages; one CPU, `taskset`, page numbers cached, a loaded host, 6 runs):
+
+| Step | Old path | New path |
+| --- | --- | --- |
+| Tap to submit (book, position, first page, UI frame) | 250–400 ms, median 278 (position 244–392) | **1.0–1.2 ms** (read 0.1, decode 0.6, UI frame 0.3) |
+| Real page ready | the same | 257–372 ms after the tap, then nothing sent (snapshot `Same`) |
+| Snapshot | | 126 KB for two pages; encode 1.5 ms, encode and write 6.6 ms |
+
+On the device the layout is about 8 times slower than on the host ("Pan Tadeusz": 1989 ms against about 250 ms), so the submit should land at about 10 to 20 ms after the release, and the page should be on the panel after the 480 ms of the mode-8 flash: about 0.5 s from tap to page, against 2.9 s before and 0.8 s for the stock reader. These are host numbers until verified on the device; the scenario `devloop/kindle/scenarios/aristotle-open.txt` (`aristotle-observe run`) exercises opening, turning, the menu and going back while a book opens, and opening another book after that.
+
+**Splitting huge chapters instead.** The converter could cut a one-chapter MOBI into spine items of, say, 50 KB, so placing a position lays out only its piece (about a tenth of the time). But a spine item boundary is a forced page break: every cut would end a page early, leaving a part-empty page every 20 pages or so, at places that differ from both the stock reader and the book. Cutting only at scene breaks would hide some of that, at the cost of a typographic rule the book does not have. The snapshot makes reopening fast without touching page breaks, so the converter keeps chapters whole; the remaining cost is the first open of a book (no snapshot yet) and a size change in the menu, which lay out the chapter on the main thread.
 
 ### Running it on the device
 
@@ -155,7 +180,12 @@ Every step that matters for speed writes a `[perf <ms since start>]` line to std
 | --- | --- |
 | `startup: first frame submitted` | Process start to the library's first frame handed to the panel |
 | `scan: ...` | Incremental scan time and what changed |
-| `open: "<title>": book, position, first page, submitted after` | Opening a book: Plato open (MOBI conversion on first open), placing the saved position, rendering the first page, total to submit |
+| `open: "<title>": book, position, first page, submitted after ...; no snapshot` | Opening a book without a snapshot: Plato open (MOBI conversion on first open), placing the saved position, rendering the first page, total to submit |
+| `open: "<title>": snapshot submitted after N ms (read, decode)` | Opening from a snapshot: tap release to the flash submitted |
+| `open: "<title>": book ready N ms after the tap (worker: ...); snapshot Same\|Chrome\|Page` | The worker's open adopted; anything but `Same` sent one full mode-9 update (`corrected page`) |
+| `open: waited N ms for the book`, `open: ... back to the library ... before the book was ready` | Input that needed the book, or abandoned it |
+| `snapshot: N page(s) saved` | Snapshot writes (on their own thread) |
+| `warm-up: ...` | Hyphenation patterns loaded at startup |
 | `turn <dir>: tap->submit` | Kernel timestamp of the touch-down to the update submitted, whether the page was prerendered, the wait for the previous update, then the prerender times |
 | `panel: <what> on the panel N ms after submit` | When the driver reported the update complete |
 | `paginate: N pages in T ms` | The background pagination |

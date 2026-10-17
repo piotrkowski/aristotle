@@ -160,7 +160,7 @@ impl Drop for Paginator {
 /// process-wide semantics Linux does not have), so the system call is made
 /// directly; with pid 0 Linux applies it to the calling thread. Nice 19 as a
 /// fallback.
-fn lower_priority() {
+pub(crate) fn lower_priority() {
     const SCHED_IDLE: libc::c_int = 5;
     // SAFETY: sched_param is plain data; priority 0 is what SCHED_IDLE takes.
     let param: libc::sched_param = unsafe { std::mem::zeroed() };
