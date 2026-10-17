@@ -29,10 +29,8 @@ computer uses (`ip route` lists the ones in use), for example
 |------|------|----------------|
 | `devloop/kindle/aristotle-usbnet/agent/boot.sh` | device, agent | `DEV_IP`; the `netmask` in `net_up` if the prefix is not `/24` |
 | `devloop/kindle/aristotle-usbnet/bin/start.sh` | device, KUAL | `DEV_IP`; the `netmask` of its `ifconfig` line likewise |
-| `devloop/kindle/aristotle-usbnet/agent/migrate.sh` | device | `DEV_IP` (what the migration checks before it commits) |
 | `devloop/host/setup-host-net.sh` | computer | the address in `ipv4.addresses` |
 | `devloop/host/ssh_config` | computer | `HostName` |
-| `devloop/kindle/tests/migrate.sh` | test | the address the fake `ifconfig` prints |
 
 Change both sides together; the device and the computer must agree on the
 subnet, or SSH has nothing to connect to. Then apply the change on each

@@ -40,7 +40,7 @@ crates/
 device/
   kual/aristotle/     KUAL extension: start Aristotle, USB network on and off
   kual/probe/         KUAL extension: the read-only device probe
-  agent/              the upstart job and aristotlectl, installed with an automatic rollback
+  agent/              the upstart job and aristotlectl, with install and uninstall scripts
   bin/                run-aristotle.sh, takeover.sh
 tools/
   build-plato.sh      cross-builds MuPDF and the other C libraries; called by xtask
@@ -132,7 +132,7 @@ Leptos and Topcoat render HTML for a browser, and Topcoat's interactivity runs a
 The steps land one at a time, each verified the same way: `cargo xtask check` (until it exists, fmt, clippy and the tests by hand, for the default members and the native ones), identical preview images unless the step changes visuals on purpose, the device scenarios (same updates, modes and flashes as before, latency within 10 %), the binary size (budget: +50 KB per step) and peak RAM.
 
 1. **Merge the feature work in flight**, one branch at a time, then record the baselines.
-2. **Rename** the project from its working name to Aristotle: host scripts and docs, the cache directory (now `$ARISTOTLE_CACHE`, `devloop/env.sh`), the KUAL extension, and the device agent. The agent's upstart job lives on the root filesystem, so devices that run the old agent move over with `agent/migrate.sh`, which rolls back by itself when the new job, dropbear or `usb0` fail its 30-second check (`agent/rollback.sh` undoes it later; `devloop/kindle/tests/migrate.sh` exercises both on the host). Rehearse it in the emulator first. Until every device has migrated, the readers of agent state (hal's USB mode, `takeover.sh`) fall back to the old paths.
+2. **Rename** the project to Aristotle: host scripts and docs, the cache directory (now `$ARISTOTLE_CACHE`, `devloop/env.sh`), the KUAL extension, and the device agent.
 3. **Repository**, mechanical moves with no behaviour change: `xtask` with `check`, `run` and `screenshot` first, then the rest of `devloop/host`; `devloop/` and `probe/` split into `device/` and `tools/`; `aristotle-hello`, `aristotle-touch`, `aristotle-bench`, `aristotle-pen` and `aristotle-observe` merged into `aristotle-devtools` (one binary each, the pen record format as a module, the scenarios beside them); `aristotle-reader` renamed `aristotle`; `aristotle-app` deleted, since the reader app runs the same screens on the device.
 4. **Structure**, in order: `aristotle-core`; then, in parallel, the hal `Device` trait and `WaveTable`, the i18n crate, `aristotle-dict` (out of the app's `dict` module), `aristotle-testkit`, and inbox folders; then the refresh policy, `aristotle-screens` with typed actions and translated strings (out of `aristotle-ui`, with the preview binary), the app shell with the `Screen` trait, the settings registry, and finally the render traits.
 5. **Frontends:** `aristotle-dash` and its host preview; the dashboards app with folder delivery; RTC sleep; Wi-Fi and HTTP fetch; external apps. `aristotle-sdk` follows once the `Screen` trait has gone a release without changes.

@@ -28,19 +28,17 @@ installation (`devloop/kindle/aristotle-usbnet/`):
 - **One file on the root filesystem.** The agent installs
   `/etc/upstart/aristotle-agent.conf`; everything it runs lives in
   `/var/local/aristotle`. KUAL > Aristotle > Remove agent takes all of it out
-  again: the job, the state directory with the agent's copy of the key,
-  migration backups, and the agent's key in KOReader's
-  `settings/SSH/authorized_keys` and in the extension. Only the log stays, as
-  `aristotle-agent.log` on the USB drive.
+  again: the job, the state directory with the agent's copy of the key, and
+  the agent's key in KOReader's `settings/SSH/authorized_keys` and in the
+  extension. Only the log stays, as `aristotle-agent.log` on the USB drive.
 - **A kill switch without SSH.** A file named `aristotle-disable` at the root
   of the USB drive keeps the agent from starting at the next boot: no USB
   network, no SSH, no watchdog, and USB left to the stock system. While the
   agent runs, the USB port is a network link; KUAL > Aristotle > USB drive
   mode for 10 minutes makes it a drive to create the file on.
 - **One device.** The scripts that change the device outside the USB drive
-  (installing the agent, the migration, the manual USB network, the
-  takeover) refuse to run on anything but a Kindle Paperwhite 4 (2018) on
-  firmware 5.13.x, read from `/proc/usid` and `/etc/prettyversion.txt`.
+  (installing the agent, the manual USB network, the takeover) refuse to run
+  on anything but a Kindle Paperwhite 4 (2018) on firmware 5.13.x, read from `/proc/usid` and `/etc/prettyversion.txt`.
   `ARISTOTLE_FORCE=1` overrides that, for developers who mean it.
 - **Wi-Fi is the stock system's by default.** In the default `off` mode the
   agent adds no Wi-Fi rules, and the stock firewall lets every process,
