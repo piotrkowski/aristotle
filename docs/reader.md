@@ -160,7 +160,7 @@ Saved positions (`position.rs`) outlive a layout:
 | `snapshot.rs` | Page snapshots: the page a book was left at, on disk (host-tested) |
 | `prewarm.rs` | Snapshots made ahead of time while the library is idle |
 | `open.rs` | Opening from a snapshot with the layout on a worker thread, `--bench-open` (host-tested) |
-| `prefs.rs` | Font size, spacing, margins, turn waveform, night mode, covers, screensaver delay, library view and sort, `reader.json` (host-tested) |
+| `prefs.rs` | Font size, spacing, margins, turn waveform, night mode, covers, screensaver delay, library view and sort, the UI language, highlights to `My Clippings.txt`, `reader.json` (host-tested) |
 | `reading.rs` | The reading interactions: holds, drags, popups, footnotes, highlights, bookmarks, lists, and how each reaches the panel |
 | `overlay.rs` | The trees drawn over the page: selection, popups, lists, "go to", the menu's reading row |
 | `selection.rs` | Word hit-testing and selections (host-tested) |
@@ -338,9 +338,9 @@ The note text is the target block (`<aside>`, `<p id>`, `<li id>`, Wolne Lektury
 
 Highlights and bookmarks are annotations in the library index (`library.json`, source `aristotle`): the text, the chapter, the start and end as renderer positions that survive a new font size (`epub:<spine item>:<offset>`, `kindle:<position>`, `page:<i>`), Kindle locations (150 bytes each) and the local time. Pages draw highlights as a light gray marker behind the words and bookmarks as a ribbon in the corner, also on the first page the open worker renders. The highlights list ("Highlights") shows highlights and bookmarks in reading order with chapter, location and date; a tap jumps there.
 
-Every new highlight is exported at once (`aristotle-library` `export`). A highlight, its removal or a bookmark redraws the page and refreshes its snapshot, so the next open shows it too. Test runs start the app with `--test-clippings PATH`: highlights then go to `PATH` and Markdown to `aristotle-notes/` beside it, never to the user's `My Clippings.txt`, which note-taking tools may import on every plug-in.
+Every new highlight is exported at once (`aristotle-library` `export`) to the two places below. A highlight, its removal or a bookmark redraws the page and refreshes its snapshot, so the next open shows it too. Test runs start the app with `--test-clippings PATH`: highlights then go to `PATH` and Markdown to `aristotle-notes/` beside it, never to the user's `My Clippings.txt`, which note-taking tools may import on every plug-in.
 
-- `/mnt/us/documents/My Clippings.txt`, appended in the stock reader's en_GB template (CRLF, a BOM only on creation), only what the file does not already hold, so tools that read that file over USB (note-taking importers, scripts) keep working unchanged. Deleting a highlight does not remove it from the file, as on the stock Kindle;
+- `/mnt/us/documents/My Clippings.txt`, appended in the stock reader's en_GB template (CRLF, a BOM only on creation), only what the file does not already hold, so tools that read that file over USB (note-taking importers, scripts) keep working unchanged. Deleting a highlight does not remove it from the file, as on the stock Kindle. This is the setting "Save highlights to My Clippings.txt" (Settings › Reading, `"clippings"` in `reader.json`), on by default like the stock reader. Turned off, Aristotle never writes the file: highlights stay in the library index and the Markdown notes. Turned on again, the next highlight also appends the ones made meanwhile, since only what the file lacks is written. `--test-clippings` writes its own file whatever the setting says;
 - `/mnt/us/aristotle-notes/<Title — Author>.md`, rewritten with the book's highlights in the shape of an Obsidian note (front matter `tytuł`, `autor`, `źródło`, `tags`; one quote per highlight with chapter, location and date).
 
 Tests write the export and parse it with a line-by-line port of a clippings-to-Obsidian parser (title and author, the location, the date, notes attached to highlights); an ignored test runs such a script itself on it (`ARISTOTLE_CLIPPINGS_SCRIPT`).
