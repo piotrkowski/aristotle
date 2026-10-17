@@ -2303,19 +2303,6 @@ fn update_menu_labels(ui: &mut Ui, r: &mut Reading) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ui_fonts_map_literata() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aristotle-render/assets/fonts");
-        let fonts = ui_fonts(&dir).unwrap();
-        assert_eq!(fonts.family_by_name("Literata"), Some(FamilyId(0)));
-        assert!(ui_fonts(&dir.join("missing")).is_err());
-    }
-}
-
 /// A fresh, empty directory for one test, under `$TMPDIR` (the build
 /// script points it at `$ARISTOTLE_CACHE/tmp`, not the RAM-backed /tmp).
 #[cfg(test)]
@@ -2332,4 +2319,17 @@ pub(crate) fn testdir(name: &str) -> PathBuf {
         .join(format!("{name}-{}-{n}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ui_fonts_map_literata() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aristotle-render/assets/fonts");
+        let fonts = ui_fonts(&dir).unwrap();
+        assert_eq!(fonts.family_by_name("Literata"), Some(FamilyId(0)));
+        assert!(ui_fonts(&dir.join("missing")).is_err());
+    }
 }

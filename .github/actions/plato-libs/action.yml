@@ -1,0 +1,62 @@
+name: Plato's C libraries
+description: >
+  Plato's static C libraries for one target, from tools/build-plato.sh
+  (PLATO_LIBS_ONLY=1), with Zig, under ARISTOTLE_CACHE. With the cache on,
+  they are restored when the third_party/plato commit, tools/build-plato.sh
+  (which pins Zig and every C source) and tools/mupdf-patches/ are unchanged,
+  and saved right after a build, so a later failing step does not lose them.
+
+inputs:
+  target:
+    description: armv7-unknown-linux-musleabihf (the device) or x86_64-unknown-linux-musl (the host)
+    required: true
+  cache:
+    description: "'false' always builds from source, as the release does"
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        case $TARGET in
+            armv7-unknown-linux-musleabihf) dir=main ;;
+            x86_64-unknown-linux-musl) dir=host-x86_64 ;;
+            *) echo "::error::unknown target $TARGET"; exit 1 ;;
+        esac
+        # The cache paths below are under ~/.cache/aristotle; pin the
+        # scripts to the same place.
+        echo "ARISTOTLE_CACHE=$HOME/.cache/aristotle" >> "$GITHUB_ENV"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+        echo "plato=$(git rev-parse HEAD:third_party/plato)" >> "$GITHUB_OUTPUT"
+
+    - id: restore
+      if: inputs.cache == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        # The build directory without Zig's object cache, and Zig itself,
+        # which the compiler wrappers in plato-build/*/bin call.
+        path: |
+          ~/.cache/aristotle/plato-build/${{ steps.key.outputs.dir }}
+          !~/.cache/aristotle/plato-build/${{ steps.key.outputs.dir }}/zig-cache
+          ~/.cache/aristotle/tools/zig
+        key: plato-libs-${{ inputs.target }}-${{ steps.key.outputs.plato }}-${{ hashFiles('tools/build-plato.sh', 'tools/mupdf-patches/**') }}
+
+    - if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        PLATO_TARGET: ${{ inputs.target }}
+        PLATO_LIBS_ONLY: "1"
+      run: JOBS=$(nproc) tools/build-plato.sh
+
+    - if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/aristotle/plato-build/${{ steps.key.outputs.dir }}
+          !~/.cache/aristotle/plato-build/${{ steps.key.outputs.dir }}/zig-cache
+          ~/.cache/aristotle/tools/zig
+        key: ${{ steps.restore.outputs.cache-primary-key }}

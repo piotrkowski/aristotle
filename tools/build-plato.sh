@@ -207,15 +207,25 @@ XAR="$B/bin/$PFX-ar"
 XRANLIB="$B/bin/$PFX-ranlib"
 
 # --- Sources -----------------------------------------------------------------
-PLATO_REV=$(git -C "$SUB" rev-parse HEAD 2>/dev/null) || {
+# A release's source tarball (tools/package.sh source) has no git metadata;
+# its REVISION file names the Plato commit the tree holds.
+if [ -e "$SUB/.git" ]; then
+    PLATO_REV=$(git -C "$SUB" rev-parse HEAD)
+elif [ -f "$REPO/REVISION" ] && [ -f "$SUB/crates/core/Cargo.toml" ]; then
+    PLATO_REV=$(sed -n 's/^plato //p' "$REPO/REVISION")
+else
     echo "third_party/plato is not checked out; run: git submodule update --init" >&2
     exit 1
-}
+fi
 if ! done_ plato-src; then
     log "Plato $PLATO_REV"
     [ ! -e "$B/plato" ] || { echo "$B/plato exists without a stamp; use a fresh PLATO_BUILD" >&2; exit 1; }
     mkdir "$B/plato"
-    git -C "$SUB" archive --format=tar "$PLATO_REV" | tar -x -C "$B/plato"
+    if [ -e "$SUB/.git" ]; then
+        git -C "$SUB" archive --format=tar "$PLATO_REV" | tar -x -C "$B/plato"
+    else
+        cp -R "$SUB/." "$B/plato/"
+    fi
     printf '%s\n' "$PLATO_REV" >> "$B/stamps/plato-src"
 fi
 # A build directory belongs to one Plato commit (stamps written before the
