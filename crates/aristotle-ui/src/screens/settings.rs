@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Settings: light, night mode, covers, sleep, the UI language, whether
-//! highlights go to `My Clippings.txt`, and what the device knows about
-//! itself. Offline only: there is no Wi-Fi, account or
-//! store section, because Aristotle has none of those.
+//! highlights go to `My Clippings.txt`, the network features (progress
+//! sync and catalogs, each a screen of its own in [`super::network`]), and
+//! what the device knows about itself. There is no store or Amazon
+//! account section, because Aristotle has none of those.
 //!
 //! Sections are whole blocks in a paged list, so the screen turns pages like
 //! every other list. Every control is a 9 mm target and answers on
@@ -14,10 +15,10 @@ use super::library::{chip, status_line, CoverMode, StatusLine};
 use crate::geom::{mm, Insets, MIN_TARGET};
 use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};
-use crate::theme::{margin, IconSize, Space, Styles, INK, RULE};
+use crate::theme::{margin, IconSize, Space, Styles, INK, INK_3, RULE};
 use crate::tree::{pages, progress, ActionId, Cross, Feedback, Kind, Node, NodeId, Tree};
 use crate::widgets::{Battery, Slider, Toggle};
-use aristotle_i18n::{fmt_bytes, fmt_decimal, tf, tr, Msg};
+use aristotle_i18n::{fmt_bytes, fmt_decimal, tf, tr, trn, Msg, Plural};
 
 pub mod action {
     use crate::tree::ActionId;
@@ -40,6 +41,10 @@ pub mod action {
     pub const LANGUAGE: ActionId = 70;
     /// Toggles "Save highlights to My Clippings.txt".
     pub const CLIPPINGS: ActionId = 80;
+    /// Opens the progress sync screen.
+    pub const SYNC: ActionId = 90;
+    /// Opens the catalogs.
+    pub const CATALOGS: ActionId = 91;
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
@@ -94,6 +99,10 @@ pub struct SystemView<'a> {
     pub time: &'a str,
     /// `None` when the device agent is not installed.
     pub usb: Option<Usb>,
+    /// The sync account, "anna at http://…", if one is set up.
+    pub sync: Option<&'a str>,
+    /// How many OPDS catalogs are set up.
+    pub catalogs: usize,
     /// "About" lines: a label and a value.
     pub about: &'a [(&'a str, String)],
 }
@@ -417,6 +426,53 @@ impl Settings {
             vec![clippings],
         ));
 
+        // Network: each feature opens its own screen.
+        let sync_hint = match v.sync {
+            Some(account) => account.to_string(),
+            None => tr(Msg::SettingsSyncOff).to_string(),
+        };
+        let chevron = t.icon(Icon::ChevronRight, IconSize::SMALL, INK_3);
+        let sync = row(
+            &mut t,
+            s,
+            Icon::Sync,
+            tr(Msg::SettingsSync),
+            Some(&sync_hint),
+            Some(chevron),
+        );
+        let sync = t.add(
+            Node::new(Kind::Padding(Insets::all(0)))
+                .action(action::SYNC)
+                .feedback(Feedback::Invert),
+            [sync],
+        );
+        let catalogs_hint = if v.catalogs == 0 {
+            tr(Msg::SettingsCatalogsNone).to_string()
+        } else {
+            trn(Plural::SettingsCatalogsCount, v.catalogs)
+        };
+        let chevron = t.icon(Icon::ChevronRight, IconSize::SMALL, INK_3);
+        let catalogs = row(
+            &mut t,
+            s,
+            Icon::Download,
+            tr(Msg::SettingsCatalogs),
+            Some(&catalogs_hint),
+            Some(chevron),
+        );
+        let catalogs = t.add(
+            Node::new(Kind::Padding(Insets::all(0)))
+                .action(action::CATALOGS)
+                .feedback(Feedback::Invert),
+            [catalogs],
+        );
+        sections.extend(section(
+            &mut t,
+            s,
+            tr(Msg::SettingsSectionNetwork),
+            vec![sync, catalogs],
+        ));
+
         // About.
         let mut lines = Vec::new();
         for (label, value) in v.about {
@@ -542,6 +598,8 @@ mod tests {
             date: "Saturday, 17 October 2026",
             time: "21:38",
             usb: Some(Usb::Network),
+            sync: Some("anna at http://192.168.15.201:17200"),
+            catalogs: 2,
             about,
         }
     }
@@ -644,5 +702,10 @@ mod tests {
         let (lang_page, lang) = find(&mut ui, &ids, action::LANGUAGE).expect("language chips");
         assert_eq!(lang_page, 1);
         assert!(clip_page > lang_page || clip.y > lang.y);
+        // The network rows come after it, each a whole target.
+        let (sync_page, sync) = find(&mut ui, &ids, action::SYNC).expect("sync row");
+        let (cat_page, _) = find(&mut ui, &ids, action::CATALOGS).expect("catalogs row");
+        assert!(sync.h >= MIN_TARGET);
+        assert!(sync_page >= clip_page && cat_page >= sync_page);
     }
 }
