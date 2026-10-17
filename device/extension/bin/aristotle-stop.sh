@@ -28,11 +28,11 @@ if initctl status aristotle-ui 2> /dev/null | grep -q start/running; then
     say "Stopping Aristotle..."
     sh "$CTL" app stop
 fi
-if pgrep -x aristotle > /dev/null; then
+if pidof aristotle > /dev/null; then
     say "Stopping Aristotle..."
     killall -TERM aristotle 2> /dev/null
     i=0
-    while pgrep -x aristotle > /dev/null && [ $i -lt 20 ]; do
+    while pidof aristotle > /dev/null && [ $i -lt 20 ]; do
         sleep 1
         i=$((i + 1))
     done

@@ -67,11 +67,19 @@ pub struct Sleep {
 
 impl Sleep {
     /// Follow powerd and take the screensaver over from blanket. Off the
-    /// device, or without `lipc-wait-event`, hold `preventScreenSaver`
-    /// instead, as earlier versions did.
+    /// device, without `lipc-wait-event`, or unless `ARISTOTLE_POWERD=1`
+    /// is set, hold `preventScreenSaver` instead, as earlier versions did:
+    /// suspending through powerd is not yet verified on the device, so it
+    /// is opt-in for now.
     pub fn start() -> Sleep {
         let prevent_was = power::screensaver_prevented().ok();
-        let events = match PowerEvents::listen() {
+        let wanted = std::env::var_os("ARISTOTLE_POWERD").is_some_and(|v| v == "1");
+        let listen = if wanted {
+            PowerEvents::listen()
+        } else {
+            Err(std::io::Error::other("ARISTOTLE_POWERD=1 not set"))
+        };
+        let events = match listen {
             Ok(ev) => {
                 if prevent_was != Some(false) {
                     if let Err(e) = power::prevent_screensaver(false) {

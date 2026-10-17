@@ -26,7 +26,7 @@ if [ ! -x "$APP/aristotle" ] || [ ! -f "$APP/run-aristotle.sh" ]; then
     say "aristotle: no app in /mnt/us/aristotle"
     exit 1
 fi
-if pgrep -x aristotle > /dev/null; then
+if pidof aristotle > /dev/null; then
     say "aristotle: already running"
     exit 0
 fi

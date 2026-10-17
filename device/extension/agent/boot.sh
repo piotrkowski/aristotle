@@ -104,34 +104,40 @@ net_up() {
     fi
     iptables -C INPUT -i usb0 -j ACCEPT 2> /dev/null || iptables -I INPUT -i usb0 -j ACCEPT
     iptables -C OUTPUT -o usb0 -j ACCEPT 2> /dev/null || iptables -I OUTPUT -o usb0 -j ACCEPT
-    if ! dropbear_alive; then
-        # The agent's copy (install.sh), or KOReader's if there is none.
-        if [ -x "$S/dropbear" ]; then
-            db=$S/dropbear
-            home=$S/ssh
-        elif [ -x "$KO/dropbear" ]; then
-            db=$KO/dropbear
-            home=$KO
-            log "ssh: no copy of dropbear in $S; using KOReader's (install the agent again)"
-        else
-            log "ssh: no dropbear available yet"
-            return 1
-        fi
-        mkdir -p "$home/settings/SSH"
-        cp "$S/authorized_keys" "$home/settings/SSH/authorized_keys" 2>> "$LOG"
-        chmod 600 "$home/settings/SSH/authorized_keys"
-        # KOReader's dropbear reads settings/SSH/authorized_keys relative to
-        # its working directory and keeps its host keys there (-R). -s: keys
-        # only; -p ADDRESS:PORT: listen on usb0's address only, never on
-        # Wi-Fi.
-        if (cd "$home" && "$db" -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
-            # dropbear writes its pid file after forking; give it a moment.
-            sleep 1
-            log "ssh: dropbear started (pid $(cat "$PIDFILE" 2> /dev/null))"
-        else
-            log "ssh: dropbear failed to start"
+    dropbear_alive && return 0
+    # The agent's copy (install.sh); KOReader's if there is none, or if the
+    # copy does not start, so SSH never depends on the copy alone.
+    if [ -x "$S/dropbear" ]; then
+        start_dropbear "$S/dropbear" "$S/ssh" && return 0
+        log "ssh: the agent's copy of dropbear did not start; trying KOReader's"
+    fi
+    if [ -x "$KO/dropbear" ]; then
+        [ -x "$S/dropbear" ] || log "ssh: no copy of dropbear in $S; using KOReader's (install the agent again)"
+        start_dropbear "$KO/dropbear" "$KO" && return 0
+    else
+        log "ssh: no dropbear available yet"
+    fi
+    return 1
+}
+
+# start_dropbear BINARY HOME
+start_dropbear() {
+    mkdir -p "$2/settings/SSH"
+    cp "$S/authorized_keys" "$2/settings/SSH/authorized_keys" 2>> "$LOG"
+    chmod 600 "$2/settings/SSH/authorized_keys"
+    # KOReader's dropbear reads settings/SSH/authorized_keys relative to its
+    # working directory and keeps its host keys there (-R). -s: keys only;
+    # -p ADDRESS:PORT: listen on usb0's address only, never on Wi-Fi.
+    if (cd "$2" && "$1" -E -R -s -p "$DEV_IP:22" -P "$PIDFILE" >> "$LOG" 2>&1); then
+        # dropbear writes its pid file after forking; give it a moment.
+        sleep 1
+        if dropbear_alive; then
+            log "ssh: dropbear started from $1 (pid $(cat "$PIDFILE" 2> /dev/null))"
+            return 0
         fi
     fi
+    log "ssh: $1 failed to start"
+    return 1
 }
 
 net_down() {
