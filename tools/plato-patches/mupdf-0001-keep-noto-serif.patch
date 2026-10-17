@@ -1,0 +1,42 @@
+KEEP_NOTO_SERIF: keep Noto Serif (Latin, Greek with polytonic, Cyrillic)
+when TOFU drops the other Noto fonts. It is MuPDF's fallback for those
+scripts in reflowed text (TXT, and MOBI books mobi.rs can't convert),
+whose base-14 fonts only cover monotonic Greek. Used by
+tools/build-plato.sh with MUPDF_FONTS=latin-greek.
+
+--- a/Makefile
++++ b/Makefile
+@@ -240,6 +240,10 @@
+ 
+ ifneq ($(filter -DTOFU_SIL,$(CFLAGS)),)
+   FONT_BIN := $(filter-out resources/fonts/sil/%.cff,$(FONT_BIN))
++endif
++
++ifneq ($(filter -DKEEP_NOTO_SERIF,$(CFLAGS)),)
++  FONT_BIN := $(sort $(FONT_BIN) resources/fonts/noto/NotoSerif-Regular.otf)
+ endif
+ 
+ FONT_GEN := $(FONT_BIN:%=generated/%.c)
+--- a/source/fitz/font-table.h
++++ b/source/fitz/font-table.h
+@@ -79,15 +79,17 @@
+ FONT(sil,	CharisSIL_BoldItalic_cff,	"Charis SIL",		ANY_SCRIPT,	FZ_LANG_UNSET,	NO_SUBFONT,	BOLD|ITALIC)
+ #endif
+ 
+-#ifndef TOFU_NOTO
+-FONT(urw,	NimbusBoxes_Regular_cff,	"Nimbus Boxes",		ANY_SCRIPT,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+-
++#if !defined(TOFU_NOTO) || defined(KEEP_NOTO_SERIF)
+ FONT(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_LATIN,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_GREEK,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_CYRILLIC,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_COMMON,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_INHERITED,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoSerif_Regular_otf,	"Noto Serif",	UCDN_SCRIPT_UNKNOWN,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
++#endif
++
++#ifndef TOFU_NOTO
++FONT(urw,	NimbusBoxes_Regular_cff,	"Nimbus Boxes",		ANY_SCRIPT,	FZ_LANG_UNSET,	NO_SUBFONT,	REGULAR)
+ 
+ FONT(noto,	NotoNastaliqUrdu_Regular_otf,	"Noto Nastaliq Urdu",	UCDN_SCRIPT_ARABIC,	FZ_LANG_ur,	NO_SUBFONT,	REGULAR)
+ ALIAS(noto,	NotoNastaliqUrdu_Regular_otf,	"Noto Nastaliq Urdu",	UCDN_SCRIPT_ARABIC,	FZ_LANG_urd,	NO_SUBFONT,	REGULAR)

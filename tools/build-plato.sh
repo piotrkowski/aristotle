@@ -23,11 +23,15 @@
 #
 # What goes in (sizes and reasons: docs/reader.md, "Size budget"):
 #
-#   MUPDF_FONTS=base14   (default) MuPDF embeds only the 14 standard PDF fonts
-#                        (URW Nimbus, cut to Latin, Greek and Cyrillic), the
-#                        substitutes for PDFs that do not embed theirs. No
-#                        Noto fonts, no CJK font or CMaps, no Charis SIL;
+#   MUPDF_FONTS=latin-greek  (default) MuPDF embeds the 14 standard PDF fonts
+#                        (URW Nimbus, cut to Latin, monotonic Greek and
+#                        Cyrillic), the substitutes for PDFs that do not
+#                        embed theirs, and Noto Serif, its fallback for
+#                        polytonic Greek in TXT and MOBI (patch mupdf-0001).
+#                        No other Noto fonts, no CJK font or CMaps, no
+#                        Charis SIL (MuPDF's HTML layout then uses Times);
 #                        Plato's engine gets no fallback fonts (patch 0005).
+#   MUPDF_FONTS=base14   the same without Noto Serif.
 #   MUPDF_FONTS=full     Plato's set: Noto for every script, Droid Sans
 #                        Fallback for CJK, Charis SIL, the CJK CMaps (+17 MB).
 #   MUPDF_FORMATS=minimal (default) MuPDF opens PDF, images (EPUB pictures),
@@ -68,13 +72,14 @@ TOOLS=${ARISTOTLE_TOOLS:-$HOME/.cache/aristotle/tools}
 JOBS=${JOBS:-2}
 PLATO_REV=7da89f296e58c7426692abb6fda16431b9631e60
 
-MUPDF_FONTS=${MUPDF_FONTS:-base14}
+MUPDF_FONTS=${MUPDF_FONTS:-latin-greek}
 MUPDF_FORMATS=${MUPDF_FORMATS:-minimal}
 PLATO_DJVU=${PLATO_DJVU:-0}
 case $MUPDF_FONTS in
+    latin-greek) MUPDF_XCFLAGS="-DTOFU -DTOFU_CJK -DNO_CJK -DKEEP_NOTO_SERIF" ;;
     base14) MUPDF_XCFLAGS="-DTOFU -DTOFU_CJK -DNO_CJK" ;;
     full) MUPDF_XCFLAGS= ;;
-    *) echo "MUPDF_FONTS must be base14 or full" >&2; exit 1 ;;
+    *) echo "MUPDF_FONTS must be latin-greek, base14 or full" >&2; exit 1 ;;
 esac
 case $MUPDF_FORMATS in
     minimal) MUPDF_XCFLAGS="$MUPDF_XCFLAGS -DFZ_ENABLE_XPS=0 -DFZ_ENABLE_SVG=0 -DFZ_ENABLE_CBZ=0
