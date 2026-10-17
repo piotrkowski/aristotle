@@ -39,6 +39,31 @@ jobs:
       - name: Device agent tests (host-side, stubbed)
         run: sh devloop/kindle/tests/migrate.sh && sh devloop/kindle/tests/net.sh
 
+  # The default members for the device: static armv7 musl, linked by rust-lld
+  # with Rust's own musl (.cargo/config.toml), so no C cross toolchain is
+  # needed. The native members need Plato's C libraries and are left out, as
+  # in the check job.
+  device:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - run: rustup target add armv7-unknown-linux-musleabihf
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: armv7-unknown-linux-musleabihf
+      - run: cargo build --release --locked --target armv7-unknown-linux-musleabihf
+      - name: Binaries are static
+        run: |
+          for f in $(find target/armv7-unknown-linux-musleabihf/release -maxdepth 1 -type f -executable); do
+              if readelf -lW "$f" | grep -q INTERP; then
+                  echo "$f has a program interpreter (not static)" >&2
+                  exit 1
+              fi
+          done
+
   # deny.toml: licences, bans and sources of every crate in Cargo.lock, and the
   # RustSec advisories. A new advisory can appear without any change here, so
   # that check is reported but does not fail the run.
