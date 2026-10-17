@@ -45,7 +45,12 @@ enum Screen {
 }
 
 fn fb_rect(r: Rect) -> FbRect {
-    FbRect { top: r.y.max(0) as u32, left: r.x.max(0) as u32, width: r.w.max(0) as u32, height: r.h.max(0) as u32 }
+    FbRect {
+        top: r.y.max(0) as u32,
+        left: r.x.max(0) as u32,
+        width: r.w.max(0) as u32,
+        height: r.h.max(0) as u32,
+    }
 }
 
 fn fb_waveform(w: Waveform) -> FbWaveform {
@@ -56,7 +61,9 @@ fn fb_waveform(w: Waveform) -> FbWaveform {
 /// pure black and white.
 fn blit(fb: &mut Framebuffer, ui: &Ui, rect: Rect, bw: bool) {
     let c = ui.screen();
-    let Some(r) = rect.intersect(&Rect::new(0, 0, c.width as i32, c.height as i32)) else { return };
+    let Some(r) = rect.intersect(&Rect::new(0, 0, c.width as i32, c.height as i32)) else {
+        return;
+    };
     let stride = c.stride as usize;
     let start = r.y as usize * stride + r.x as usize;
     if bw {
@@ -103,10 +110,17 @@ impl TurnStrategy {
 }
 
 /// Send one frame's damage to the panel.
-fn present(fb: &mut Framebuffer, display: &Display, ui: &Ui, damage: &[Damage], turn: TurnStrategy) -> io::Result<()> {
+fn present(
+    fb: &mut Framebuffer,
+    display: &Display,
+    ui: &Ui,
+    damage: &[Damage],
+    turn: TurnStrategy,
+) -> io::Result<()> {
     let screen_area = (SCREEN_WIDTH * SCREEN_HEIGHT) as f32;
     for d in damage {
-        let page_turn = d.waveform == Waveform::GL16 && (d.rect.w * d.rect.h) as f32 >= screen_area * PAGE_TURN_SHARE;
+        let page_turn = d.waveform == Waveform::GL16
+            && (d.rect.w * d.rect.h) as f32 >= screen_area * PAGE_TURN_SHARE;
         if page_turn {
             // Page turns drive every pixel of the whole screen, as stock does:
             // a smaller or partial update leaves the previous page's ghost.
@@ -120,7 +134,11 @@ fn present(fb: &mut Framebuffer, display: &Display, ui: &Ui, damage: &[Damage], 
                 fb.wait(m)?;
             }
             blit(fb, ui, d.rect, false);
-            let wf = if turn == TurnStrategy::FullGl16 { FbWaveform::GL16 } else { STOCK_PAGE };
+            let wf = if turn == TurnStrategy::FullGl16 {
+                FbWaveform::GL16
+            } else {
+                STOCK_PAGE
+            };
             display.damage_full(all, wf, &[]);
         } else if d.waveform == Waveform::GC16 {
             blit(fb, ui, d.rect, false);
@@ -174,7 +192,9 @@ fn main() -> io::Result<()> {
         let now = monotonic_us();
         let timeout = ui
             .next_deadline(now)
-            .map_or(Duration::from_millis(200), |t| Duration::from_micros(t.saturating_sub(now).max(1000)));
+            .map_or(Duration::from_millis(200), |t| {
+                Duration::from_micros(t.saturating_sub(now).max(1000))
+            });
         let mut events = Vec::new();
         for ev in touch.poll(timeout)? {
             events.extend(ui.handle_touch(ui_event(&ev)));
@@ -188,9 +208,18 @@ fn main() -> io::Result<()> {
             let mut next = None;
             match &mut screen {
                 Screen::Library(lib) => match ev {
-                    UiEvent::LongPress(p) if p.y < QUIT_ZONE_HEIGHT => return quit(&mut fb, &display),
-                    UiEvent::Action { id, .. } if id == library::action::RESUME || id >= library::action::BOOK => {
-                        let (tree, reader) = Reader::build(&mut ui.text, &styles, [FamilyId(0); 3], Settings::default());
+                    UiEvent::LongPress(p) if p.y < QUIT_ZONE_HEIGHT => {
+                        return quit(&mut fb, &display)
+                    }
+                    UiEvent::Action { id, .. }
+                        if id == library::action::RESUME || id >= library::action::BOOK =>
+                    {
+                        let (tree, reader) = Reader::build(
+                            &mut ui.text,
+                            &styles,
+                            [FamilyId(0); 3],
+                            Settings::default(),
+                        );
                         ui.set_tree_with(tree, Refresh::Full);
                         next = Some(Screen::Reader(reader));
                     }
@@ -204,7 +233,8 @@ fn main() -> io::Result<()> {
                 Screen::Reader(reader) => {
                     let before = reader.settings.light;
                     if reader.handle(&mut ui, ev) == Command::Library {
-                        let (tree, lib) = Library::build(&mut ui.text, &styles, &books, library::Filter::All);
+                        let (tree, lib) =
+                            Library::build(&mut ui.text, &styles, &books, library::Filter::All);
                         ui.set_tree_with(tree, Refresh::Full);
                         ui.layout();
                         lib.sync(&mut ui.tree);
