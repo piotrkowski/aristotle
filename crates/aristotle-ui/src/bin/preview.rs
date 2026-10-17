@@ -20,12 +20,15 @@ use aristotle_ui::canvas::{Canvas, Painter};
 use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};
 use aristotle_ui::icons::{self, Icon};
 use aristotle_ui::input::{Phase, TouchEvent};
+use aristotle_ui::keyboard::{self, Key, Layer};
 use aristotle_ui::screens::library::{
     self, sample_items, CoverMode, Filter, Item, Library, Place, Shelf, StatusLine, View,
 };
 use aristotle_ui::screens::reader::{self, Reader, Settings, Zone};
 use aristotle_ui::screens::settings::{self as settings_screen, BatteryInfo, SystemView, Usb};
 use aristotle_ui::screens::sleep;
+use aristotle_ui::screens::text_input::{self, TextInput};
+use aristotle_ui::screens::wifi::{self, ListState, WifiScreen, WifiView};
 use aristotle_ui::text::{
     layout_paragraph, Align, FamilyId, Fonts, NoHyphenation, Paragraph, ParagraphLayout,
     TextEngine, TextStyle,
@@ -362,6 +365,7 @@ fn settings_screens(out: &Path) {
         time: "21:38",
         usb: Some(Usb::Network),
         about: &about,
+        wifi: Some(tr(Msg::WifiOff)),
     };
     let mut text = TextEngine::new(Fonts::embedded());
     let styles = Styles::new(FamilyId(0));
@@ -418,6 +422,210 @@ fn settings_screens(out: &Path) {
     save(ui.screen(), &out.join("settings-page2-charging-night.png"));
 }
 
+/// A text input screen in a fresh `Ui`, rendered once.
+fn text_input_ui(spec: &text_input::Spec) -> (Ui, TextInput) {
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, input) = TextInput::build(&mut text, &Styles::new(FamilyId(0)), spec);
+    let mut ui = Ui::new(tree, text, W, H);
+    ui.layout();
+    ui.render();
+    (ui, input)
+}
+
+/// Taps the key `slot`: down (rendered, the A2 step), up (handled).
+/// Returns the damage of both steps.
+fn press_key(
+    ui: &mut Ui,
+    input: &mut TextInput,
+    slot: usize,
+    ms: u64,
+) -> (Vec<Damage>, Vec<Damage>) {
+    let c = input.keyboard.centre(&ui.tree, slot);
+    touch(ui, Phase::Down, c.x, c.y, ms);
+    let down = ui.render();
+    for ev in touch(ui, Phase::Up, c.x, c.y, ms + 60) {
+        input.handle(&mut ui.tree, &ev);
+    }
+    let up = ui.render();
+    (down, up)
+}
+
+fn slot_of(layer: Layer, key: Key) -> usize {
+    keyboard::keys(layer)
+        .iter()
+        .position(|k| *k == key)
+        .expect("key on layer")
+}
+
+fn text_input_screens(out: &Path) {
+    let name = "Dom Wokulskiego";
+    let title = aristotle_i18n::tf!(Msg::WifiPasswordTitle, name = name);
+    let spec = text_input::Spec {
+        hint: Some(tr(Msg::WifiPasswordHint)),
+        password: true,
+        submit: tr(Msg::WifiConnect),
+        max_chars: 63,
+        ..text_input::Spec::new(STATUS, &title)
+    };
+    let (mut ui, mut input) = text_input_ui(&spec);
+    day_night(&mut ui, out, "keyboard");
+    let mut ms = 0;
+    for c in "izabela".chars() {
+        press_key(
+            &mut ui,
+            &mut input,
+            slot_of(Layer::Letters, Key::Char(c)),
+            ms,
+        );
+        ms += 1000;
+    }
+    // The next key: finger down, then up, with the damage of each step.
+    let s = slot_of(Layer::Letters, Key::Char('l'));
+    let c = input.keyboard.centre(&ui.tree, s);
+    touch(&mut ui, Phase::Down, c.x, c.y, ms);
+    let d = ui.render();
+    log("keyboard: key down", &ui, &d);
+    save(ui.screen(), &out.join("keyboard-pressed.png"));
+    let o = damage_overlay(&mut ui, &d, "Touch-down on a key: the key alone, with A2");
+    save(&o, &out.join("keyboard-pressed-damage.png"));
+    for ev in touch(&mut ui, Phase::Up, c.x, c.y, ms + 60) {
+        input.handle(&mut ui.tree, &ev);
+    }
+    let d = ui.render();
+    log("keyboard: key up", &ui, &d);
+    let o = damage_overlay(
+        &mut ui,
+        &d,
+        "Release: the key comes back and a dot appears, one DU update",
+    );
+    save(&o, &out.join("keyboard-typed-damage.png"));
+    day_night(&mut ui, out, "keyboard-password");
+    // Shown, with a message under the field.
+    let ev = UiEvent::Action {
+        id: text_input::action::REVEAL,
+        node: input.field,
+        at: Point::default(),
+    };
+    input.handle(&mut ui.tree, &ev);
+    input.set_message(&mut ui.tree, Some(tr(Msg::WifiPasswordShort)));
+    ui.render();
+    save(ui.screen(), &out.join("keyboard-password-shown.png"));
+    // Shift, then the Polish layer.
+    press_key(
+        &mut ui,
+        &mut input,
+        slot_of(Layer::Letters, Key::Shift),
+        ms + 2000,
+    );
+    save(ui.screen(), &out.join("keyboard-shift.png"));
+    press_key(
+        &mut ui,
+        &mut input,
+        slot_of(Layer::Letters, Key::Polish),
+        ms + 3000,
+    );
+    let d = ui.render();
+    log("keyboard: Polish layer", &ui, &d);
+    save(ui.screen(), &out.join("keyboard-polish.png"));
+    // The symbol layers.
+    let (mut ui, mut input) = text_input_ui(&text_input::Spec {
+        initial: "https://dash.example.org:8443/",
+        ..text_input::Spec::new(STATUS, "Server address")
+    });
+    press_key(
+        &mut ui,
+        &mut input,
+        slot_of(Layer::Letters, Key::ToSymbols),
+        0,
+    );
+    day_night(&mut ui, out, "keyboard-symbols");
+    press_key(
+        &mut ui,
+        &mut input,
+        slot_of(Layer::Symbols, Key::ToMore),
+        1000,
+    );
+    save(ui.screen(), &out.join("keyboard-more.png"));
+}
+
+fn wifi_ui(v: &WifiView) -> (Ui, WifiScreen) {
+    let mut text = TextEngine::new(Fonts::embedded());
+    let (tree, ids) = WifiScreen::build(&mut text, &Styles::new(FamilyId(0)), v);
+    let mut ui = Ui::new(tree, text, W, H);
+    ui.layout();
+    ids.sync(&mut ui.tree);
+    (ui, ids)
+}
+
+fn wifi_screens(out: &Path) {
+    let nets = wifi::sample_networks();
+    let connected = aristotle_i18n::tf!(
+        Msg::WifiConnectedIp,
+        name = "Soplicowo",
+        ip = "192.168.1.23"
+    );
+    let v = WifiView {
+        status: STATUS,
+        on: true,
+        state: &connected,
+        busy: false,
+        list: ListState::Networks,
+        networks: &nets,
+        policy: wifi::Policy::Stock,
+    };
+    let (mut ui, _) = wifi_ui(&v);
+    day_night(&mut ui, out, "wifi");
+    let off = WifiView {
+        on: false,
+        state: tr(Msg::WifiOff),
+        list: ListState::Off,
+        networks: &[],
+        ..v
+    };
+    let (mut ui, _) = wifi_ui(&off);
+    day_night(&mut ui, out, "wifi-off");
+    let scanning = WifiView {
+        state: tr(Msg::WifiOn),
+        busy: true,
+        list: ListState::Scanning,
+        networks: &[],
+        policy: wifi::Policy::Scoped {
+            hosts: 2,
+            no_probe: false,
+        },
+        ..v
+    };
+    let (mut ui, _) = wifi_ui(&scanning);
+    ui.render();
+    save(ui.screen(), &out.join("wifi-scoped-scanning.png"));
+    let mut armed = nets.clone();
+    armed[4].forget_armed = true;
+    let wrong = aristotle_i18n::tf!(Msg::WifiErrorPassword, name = "Dom Wokulskiego");
+    let failed = WifiView {
+        state: &wrong,
+        networks: &armed,
+        policy: wifi::Policy::Scoped {
+            hosts: 1,
+            no_probe: true,
+        },
+        ..v
+    };
+    let (mut ui, _) = wifi_ui(&failed);
+    ui.render();
+    save(ui.screen(), &out.join("wifi-error-forget.png"));
+    // The settings row that leads here, and a state change as damage.
+    let (mut ui, _) = wifi_ui(&scanning);
+    ui.render();
+    let (tree, ids) = WifiScreen::build(&mut ui.text, &Styles::new(FamilyId(0)), &v);
+    ui.set_tree_with(tree, aristotle_ui::tree::Refresh::Auto);
+    ui.layout();
+    ids.sync(&mut ui.tree);
+    let d = ui.render();
+    log("wifi: scan finished", &ui, &d);
+    let o = damage_overlay(&mut ui, &d, "Scan finished: the list replaces the message");
+    save(&o, &out.join("wifi-scanned-damage.png"));
+}
+
 fn sleep_screens(out: &Path) {
     let books = library::sample_books();
     let styles = Styles::new(FamilyId(0));
@@ -435,7 +643,7 @@ fn icons_sheet(out: &Path) {
     let mut text = TextEngine::new(Fonts::embedded());
     let mut c = Canvas::new(W, H);
     let all = Rect::new(0, 0, W as i32, H as i32);
-    let cols = 6;
+    let cols = 7;
     let cell_w = W as i32 / cols;
     let cell_h = 196;
     let top = 60;
@@ -748,6 +956,7 @@ fn targets(out: &Path) {
         time: "21:38",
         usb: Some(Usb::Network),
         about: &about,
+        wifi: Some(tr(Msg::WifiOff)),
     };
     let mut text = TextEngine::new(Fonts::embedded());
     let (tree, ids) = settings_screen::Settings::build(&mut text, &Styles::new(FamilyId(0)), &view);
@@ -756,6 +965,24 @@ fn targets(out: &Path) {
     dump_targets(&mut ui, "settings-1", &mut s);
     ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
     dump_targets(&mut ui, "settings-2", &mut s);
+    ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
+    dump_targets(&mut ui, "settings-3", &mut s);
+    let (mut ui, _) = text_input_ui(&text_input::Spec {
+        password: true,
+        ..text_input::Spec::new(STATUS, "Password")
+    });
+    dump_targets(&mut ui, "keyboard", &mut s);
+    let nets = wifi::sample_networks();
+    let (mut ui, _) = wifi_ui(&WifiView {
+        status: STATUS,
+        on: true,
+        state: "",
+        busy: false,
+        list: ListState::Networks,
+        networks: &nets,
+        policy: wifi::Policy::Stock,
+    });
+    dump_targets(&mut ui, "wifi", &mut s);
     let mut t = Tree::new();
     let page = t.spacer(1);
     let spec = MenuSpec {
@@ -804,6 +1031,8 @@ fn render_all(out: &Path) {
     covers_sheet(out);
     library_screens(out);
     settings_screens(out);
+    text_input_screens(out);
+    wifi_screens(out);
     sleep_screens(out);
     reader_screens(out, &fonts_dir);
     targets(out);
