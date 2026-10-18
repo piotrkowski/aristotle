@@ -106,6 +106,7 @@ name = "aristotle-render"
 version = "0.1.0"
 dependencies = [
  "aristotle-hal",
+ "aristotle-library",
  "libc",
  "percent-encoding",
  "plato-core",

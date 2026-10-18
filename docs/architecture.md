@@ -35,7 +35,7 @@ See the [glossary](glossary.md) for hardware, rendering, and device terms.
 | `aristotle` | App event loop, screens, reading sessions, snapshots, and dictionaries |
 | `aristotle-observe` | Touch injection, panel logs, and latency benchmarks |
 
-`aristotle-ui` and `aristotle-library` depend on `aristotle-i18n`, not the [HAL](glossary.md#hal), the hardware layer. The renderer uses the HAL and `plato-core`. The app combines these crates, while `aristotle-observe` runs as a separate tool.
+`aristotle-ui` and `aristotle-library` depend on `aristotle-i18n`, not the [HAL](glossary.md#hal), the hardware layer. The renderer uses the HAL, `plato-core`, and the library's format detection. The app combines these crates, while `aristotle-observe` runs as a separate tool.
 
 Plain `cargo build`, `cargo test`, and `cargo clippy` omit `aristotle-render` and `aristotle`, which link C libraries. Cargo still needs the Plato submodule checked out. The network crate's optional TLS feature, `tls`, also builds C through `ring`, its cryptography library.
 

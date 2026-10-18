@@ -172,7 +172,7 @@ For books declaring several languages, `lang.rs` samples 192 KiB of text and com
 
 ## Formats and positions
 
-`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles [PalmDOC](glossary.md#palmdoc) compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but [HUFF/CDIC](glossary.md#huffcdic) is unsupported by both engines and [KF8](glossary.md#kf8)-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for extension-dependent routing.
+`mobi.rs` converts DRM-free MOBI 7 to cached EPUB for Plato's layout. It handles [PalmDOC](glossary.md#palmdoc) compression, UTF-8, CP1252, images, page breaks, and `filepos` links. Conversion failures fall back to MuPDF, but [HUFF/CDIC](glossary.md#huffcdic) is unsupported by both engines and [KF8](glossary.md#kf8)-only reading is unverified. Plain PalmDOC containers use MuPDF rather than the converter. `--no-convert` forces MuPDF. Encrypted books are not readable. See [Format support](formats.md) for content-based routing.
 
 Plato locations are byte offsets in book text. MuPDF locations are page indices. Saved EPUB positions use a spine item and offset. Converted MOBI uses Kindle byte positions and a `.posmap` beside the cached EPUB. `PosMap::position_at_or_after` saves page starts without rounding back a page.
 
