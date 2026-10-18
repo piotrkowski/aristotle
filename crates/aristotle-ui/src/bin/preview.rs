@@ -365,6 +365,7 @@ fn settings_screens(out: &Path) {
         sync: Some("anna at http://192.168.15.201:17200"),
         catalogs: 2,
         about: &about,
+        exit_message: None,
     };
     let mut text = TextEngine::new(Fonts::embedded());
     let styles = Styles::new(FamilyId(0));
@@ -840,6 +841,7 @@ fn targets(out: &Path) {
         sync: Some("anna at http://192.168.15.201:17200"),
         catalogs: 2,
         about: &about,
+        exit_message: None,
     };
     let mut text = TextEngine::new(Fonts::embedded());
     let (tree, ids) = settings_screen::Settings::build(&mut text, &Styles::new(FamilyId(0)), &view);

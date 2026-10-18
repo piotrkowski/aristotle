@@ -48,7 +48,7 @@ lay_out() {
     if [ -s "$APP_BUNDLE" ]; then
         mkdir -p "$1"
         tar -xzf "$APP_BUNDLE" -C "$1"
-        for f in aristotle run-aristotle.sh SOURCE.txt licenses/README.txt; do
+        for f in aristotle run-aristotle.sh open-kual.sh SOURCE.txt licenses/README.txt; do
             [ -e "$1/aristotle/$f" ] || { echo "$APP_BUNDLE has no aristotle/$f" >&2; exit 1; }
         done
         echo "app: $APP_BUNDLE"
@@ -60,7 +60,7 @@ lay_out() {
     fi
     mkdir -p "$1/extensions/aristotle"
     cp -R "$REPO/device/extension/." "$1/extensions/aristotle/"
-    cp "$REPO/device/app/takeover.sh" "$1/extensions/aristotle/"
+    cp "$REPO/device/app/takeover.sh" "$REPO/device/app/open-kual.sh" "$1/extensions/aristotle/"
 }
 
 work() {

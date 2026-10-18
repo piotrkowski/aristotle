@@ -6,7 +6,7 @@ Paths below are relative to the Kindle's USB drive unless they start with `/`. E
 
 ## Back up reading data
 
-1. Return to Aristotle's library and hold **Library** for one second to quit. Wait for the stock interface.
+1. Select **Settings > Return to Kindle**. Wait for the stock interface.
 2. With the agent, choose a [longer copy window](#extend-the-usb-copy-window) before switching to drive mode if ten minutes is not enough.
 3. Connect the Kindle in [USB drive mode](first-book.md#copy-the-book).
 4. Create a dated backup folder on the computer.

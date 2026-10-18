@@ -45,6 +45,8 @@ pub mod action {
     pub const SYNC: ActionId = 90;
     /// Opens the catalogs.
     pub const CATALOGS: ActionId = 91;
+    pub const RETURN_KINDLE: ActionId = 92;
+    pub const OPEN_KUAL: ActionId = 93;
 }
 
 /// Light presets: a name and a step of `aristotle_hal::power::light_raw`'s
@@ -105,6 +107,8 @@ pub struct SystemView<'a> {
     pub catalogs: usize,
     /// "About" lines: a label and a value.
     pub about: &'a [(&'a str, String)],
+    /// A failed exit or USB request, otherwise the normal exit hint.
+    pub exit_message: Option<&'a str>,
 }
 
 /// Handles to the nodes the app updates in place.
@@ -226,6 +230,29 @@ impl Settings {
         let g = t.gap(Space::XS, 1);
         let header = t.add(Node::row(0), [back, g, title]);
         let header = t.pad(Insets::new(0, 0, 0, -26), header);
+        let kindle = chip(
+            &mut t,
+            s,
+            tr(Msg::SettingsReturnKindle),
+            false,
+            action::RETURN_KINDLE,
+        );
+        let kindle = t.fixed(None, Some(MIN_TARGET), Some(kindle));
+        let kual = chip(
+            &mut t,
+            s,
+            tr(Msg::SettingsOpenKual),
+            false,
+            action::OPEN_KUAL,
+        );
+        let kual = t.fixed(None, Some(MIN_TARGET), Some(kual));
+        let exits = t.add(Node::row(Space::M), [kindle, kual]);
+        let hint = t.label(
+            v.exit_message.unwrap_or_else(|| tr(Msg::SettingsExitHint)),
+            s.small(),
+        );
+        let exits = t.add(Node::column(Space::S), [exits, hint]);
+        let exits = t.pad(Insets::vh(Space::S, 0), exits);
 
         let mut sections = Vec::new();
         let mut light_node = None;
@@ -511,7 +538,7 @@ impl Settings {
         let pager_label = t.text(Paragraph::plain("", s.small(), Align::Center));
         let pager_label = t.add(Node::column(0).flex(1), [pager_label]);
         let pager = t.add(Node::row(0), [prev, pager_label, next]);
-        let col = t.add(Node::column(0), [status, header, list, pager]);
+        let col = t.add(Node::column(0), [status, header, exits, list, pager]);
         let root = t.pad(Insets::new(0, margin(), mm(1.5), margin()), col);
         t.set_root(root);
         let ids = Settings {
@@ -601,6 +628,7 @@ mod tests {
             sync: Some("anna at http://192.168.15.201:17200"),
             catalogs: 2,
             about,
+            exit_message: None,
         }
     }
 
@@ -670,6 +698,40 @@ mod tests {
         assert!(ui.tree.rect(night).h >= MIN_TARGET);
     }
 
+    #[test]
+    fn exit_buttons_are_touch_targets_on_every_page_in_both_languages() {
+        for code in ["en", "pl"] {
+            aristotle_i18n::with_language(code, || {
+                let about = sample_about();
+                let mut text = TextEngine::new(Fonts::embedded());
+                let (tree, ids) =
+                    Settings::build(&mut text, &Styles::new(FamilyId(0)), &view(&about));
+                let mut ui = Ui::new(tree, text, SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32);
+                ui.layout();
+                let (_, count) = ui.tree.page(ids.list);
+                for page in 0..count {
+                    ui.tree.set_page(ids.list, page);
+                    ui.layout();
+                    for action in [action::RETURN_KINDLE, action::OPEN_KUAL] {
+                        let id = (0..ui.tree.len())
+                            .map(|i| NodeId(i as u32))
+                            .find(|id| ui.tree.node(*id).action == Some(action))
+                            .unwrap();
+                        let r = ui.tree.rect(id);
+                        assert!(r.h >= MIN_TARGET, "{code} action {action}: {r:?}");
+                        assert!(r.y < SCREEN_HEIGHT / 3);
+                        assert!(r.x >= 0 && r.right() <= SCREEN_WIDTH);
+                        let hit = ui.tree.hit(crate::geom::Point {
+                            x: r.x + r.w / 2,
+                            y: r.y + r.h / 2,
+                        });
+                        assert!(matches!(hit, crate::tree::Hit::Target(n) if n == id));
+                    }
+                }
+            });
+        }
+    }
+
     /// The page on which `action` is a target, and its rectangle.
     fn find(ui: &mut Ui, ids: &Settings, action: ActionId) -> Option<(usize, crate::geom::Rect)> {
         let (_, count) = ui.tree.page(ids.list);
@@ -696,11 +758,10 @@ mod tests {
         ui.layout();
         let (clip_page, clip) = find(&mut ui, &ids, action::CLIPPINGS).expect("clippings row");
         assert!(clip.h >= MIN_TARGET);
-        // The rows before it keep their pages: night on the first, the
-        // language on the second (device scenarios tap them).
+        // The pinned exit actions stay visible while the settings page.
         assert_eq!(find(&mut ui, &ids, action::NIGHT).map(|f| f.0), Some(0));
         let (lang_page, lang) = find(&mut ui, &ids, action::LANGUAGE).expect("language chips");
-        assert_eq!(lang_page, 1);
+        assert!(lang_page > 0);
         assert!(clip_page > lang_page || clip.y > lang.y);
         // The network rows come after it, each a whole target.
         let (sync_page, sync) = find(&mut ui, &ids, action::SYNC).expect("sync row");

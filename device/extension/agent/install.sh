@@ -76,8 +76,9 @@ if [ $untrusted = 1 ]; then
     done
 fi
 cp "$HERE/boot.sh" "$HERE/aristotlectl" "$HERE/net.sh" "$HERE/ui-boot.sh" "$S/"
-cp "$EXT/takeover.sh" "$EXT/guard.sh" "$S/"
+cp "$EXT/takeover.sh" "$EXT/guard.sh" "$EXT/open-kual.sh" "$S/"
 chmod 700 "$S/boot.sh" "$S/aristotlectl" "$S/net.sh" "$S/ui-boot.sh" "$S/takeover.sh"
+chmod 700 "$S/open-kual.sh"
 # The stub runs as Amazon's daemon through a read-only bind mount; no write
 # bits, so the framework's chmod g=u cannot add any.
 cp "$HERE/ota-stub" "$S/ota-stub"

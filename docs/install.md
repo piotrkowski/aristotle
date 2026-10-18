@@ -44,7 +44,9 @@ The zip contains:
 
 `aristotle/SOURCE.txt` identifies the source build.
 
-In Aristotle's library, hold **Library** for one second to quit. The boot splash before the stock interface returns lasted 30 to 60 seconds on the tested PW4. A reboot restores stock unless you have enabled Aristotle at boot.
+In **Settings**, select **Return to Kindle** to save and quit. **Open KUAL** returns to the stock interface, then opens the installed KUAL booklet. Both buttons stay at the top of every settings page and do not need the agent. Holding **Library** for one second in the library still quits.
+
+The boot splash before the stock interface returns lasted 30 to 60 seconds on the tested PW4. The KUAL helper opened the installed booklet after stock returned on that device. The Settings buttons have host tests only. A reboot restores stock unless you have enabled Aristotle at boot.
 
 Continue with [Your first book](first-book.md). For later releases, follow [Back up and update](maintenance.md#update-the-app), including the separate internal copy used by autostart.
 

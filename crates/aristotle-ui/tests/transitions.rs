@@ -79,6 +79,7 @@ fn settings_tree(text: &mut TextEngine, night: bool, light: u32) -> (Tree, set_u
         sync: None,
         catalogs: 0,
         about: &about,
+        exit_message: None,
     };
     set_ui::Settings::build(text, &styles(), &v)
 }
@@ -265,7 +266,11 @@ fn settings_controls_are_one_quiet_update() {
     ui.layout();
     ids.sync(&mut ui.tree);
     let u = one_quiet(&ui.render());
-    assert!(u.rect.bottom() < SCREEN_HEIGHT / 2, "{u:?}");
+    let night = (0..ui.tree.len())
+        .map(|i| aristotle_ui::tree::NodeId(i as u32))
+        .find(|id| ui.tree.node(*id).action == Some(set_ui::action::NIGHT))
+        .unwrap();
+    assert!(u.rect.bottom() <= ui.tree.rect(night).y, "{u:?}");
     // The night switch: exactly one flash into the inverted state, and the
     // screen is inverted.
     let (tree, ids) = settings_tree(&mut ui.text, true, 10);

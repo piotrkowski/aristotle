@@ -58,6 +58,11 @@
   },
   "settings": {
     "title": "Settings",
+    "return_kindle": "Return to Kindle",
+    "open_kual": "Open KUAL",
+    "exit_hint": "Saves progress. The Kindle interface can take a minute to return.",
+    "kual_unavailable": "KUAL is unavailable here. Return to Kindle and open KUAL there.",
+    "usb_failed": "USB mode did not change. Return to Kindle and start USB network in KUAL.",
     "section_screen": "Screen",
     "section_power": "Power",
     "section_device": "Device",

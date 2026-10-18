@@ -32,6 +32,7 @@ HEALTHY_AFTER=${HEALTHY_AFTER:-120}
 MOUNT_WAIT=${MOUNT_WAIT:-30}
 APP=$S/app/aristotle
 TAKEOVER=$R/var/run/aristotle-takeover
+open_kual=0
 
 log() {
     printf '%s ui: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"
@@ -60,6 +61,9 @@ set_fails() {
 stock() {
     log "stock GUI: $*"
     sh "$S/takeover.sh" stop >> "$LOG" 2>&1
+    if [ "$open_kual" = 1 ]; then
+        sh "$S/open-kual.sh" >> "$LOG" 2>&1 || log "KUAL unavailable; stock GUI left running"
+    fi
     exit 0
 }
 
@@ -150,6 +154,9 @@ while :; do
     # A launch that stays up for HEALTHY_AFTER seconds is a good one.
     (sleep "$HEALTHY_AFTER" && set_fails 0) &
     healthy=$!
+    ARISTOTLE_EXIT_ACTIONS=0
+    [ ! -r "$S/open-kual.sh" ] || ARISTOTLE_EXIT_ACTIONS=1
+    export ARISTOTLE_EXIT_ACTIONS
     "$APP" "$@" >> "$S/app.log" 2>&1 &
     pid=$!
     echo "$pid" > "$S/app.pid"
@@ -170,6 +177,11 @@ while :; do
             exit 0
         fi
         stock "stopped by aristotlectl (exit $rc)"
+    fi
+    if [ "$rc" = 20 ]; then
+        set_fails 0
+        open_kual=1
+        stock "Aristotle requested KUAL"
     fi
     if [ "$rc" = 0 ]; then
         set_fails 0
