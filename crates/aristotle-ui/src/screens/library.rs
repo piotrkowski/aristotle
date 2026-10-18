@@ -22,6 +22,7 @@
 //! Labels come from `aristotle-i18n`, in the UI language.
 
 use super::icon_button;
+use crate::components::chip;
 use crate::geom::{mm, Insets, MIN_TARGET};
 use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};
@@ -331,23 +332,6 @@ pub fn status_line(t: &mut Tree, s: &Styles, line: &StatusLine) -> (NodeId, Node
     let status = t.add(Node::row(0), status);
     let both = t.add(Node::new(Kind::Stack), [status, busy_c]);
     (t.fixed(None, Some(mm(5.5)), Some(both)), busy)
-}
-
-/// A pill-shaped chip; the selected one is solid black.
-pub fn chip(t: &mut Tree, s: &Styles, label: &str, selected: bool, id: ActionId) -> NodeId {
-    let style = if selected {
-        s.ui_bold()
-    } else {
-        s.ui().gray(INK_2)
-    };
-    let l = t.label(label, style);
-    t.add(
-        Node::new(Kind::Padding(Insets::vh(10, 26)))
-            .border(if selected { 0 } else { 2 }, RULE, 40)
-            .inverted(selected)
-            .action(id),
-        [l],
-    )
 }
 
 /// Underlined text tabs.
