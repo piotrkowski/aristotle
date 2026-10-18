@@ -22,7 +22,7 @@
 //! Labels come from `aristotle-i18n`, in the UI language.
 
 use super::icon_button;
-use crate::components::chip;
+use crate::components::{chip, CHIP_PADDING_X};
 use crate::geom::{mm, Insets, MIN_TARGET};
 use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};
@@ -353,8 +353,9 @@ fn tabs(
         let line = t.add(
             Node::new(Kind::Fixed {
                 w: Some(w),
-                h: Some(5),
+                h: Some(s.density.px(5)),
             })
+            .in_pixels()
             .bg(if selected { INK } else { 255 }),
             [],
         );
@@ -395,6 +396,16 @@ impl Library {
 
     /// Builds the library tree for `shelf`.
     pub fn build_shelf(text: &mut TextEngine, s: &Styles, shelf: &Shelf) -> (Tree, Self) {
+        Self::build_shelf_for_width(text, s, shelf, crate::geom::SCREEN_WIDTH)
+    }
+
+    /// Wraps shelf filters to keep their labels visible at the supplied width.
+    pub fn build_shelf_for_width(
+        text: &mut TextEngine,
+        s: &Styles,
+        shelf: &Shelf,
+        width: i32,
+    ) -> (Tree, Self) {
         let mut t = Tree::new();
         let (status, busy) = status_line(&mut t, s, &shelf.status);
         let mut column = vec![status];
@@ -481,8 +492,22 @@ impl Library {
                 view: View::Books,
                 filter,
             } => {
+                let available = (width - 2 * s.density.px(margin())).max(1);
+                let mut rows = Vec::new();
                 let mut chips = Vec::new();
+                let mut used = 0;
                 for (i, f) in Filter::ALL.iter().enumerate() {
+                    let style = if *f == filter { s.ui_bold() } else { s.ui() };
+                    let chip_width = text.measure(f.label(), &style).ceil() as i32
+                        + 2 * s.density.px(CHIP_PADDING_X);
+                    if !chips.is_empty() && used + s.density.px(Space::S) + chip_width > available {
+                        rows.push(t.add(Node::row(Space::S), std::mem::take(&mut chips)));
+                        used = 0;
+                    }
+                    if !chips.is_empty() {
+                        used += s.density.px(Space::S);
+                    }
+                    used += chip_width;
                     chips.push(chip(
                         &mut t,
                         s,
@@ -491,7 +516,8 @@ impl Library {
                         action::FILTER + i as ActionId,
                     ));
                 }
-                let chips = t.add(Node::row(Space::S), chips);
+                rows.push(t.add(Node::row(Space::S), chips));
+                let chips = t.add(Node::column(Space::XL), rows);
                 column.push(t.pad(Insets::new(Space::M, 0, Space::XS, 0), chips));
                 Some(filter)
             }
@@ -971,6 +997,56 @@ mod tests {
                     assert!(rect.h >= MIN_TARGET, "{view:?}: {rect:?}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn filters_keep_their_labels_and_touch_targets_on_narrow_screens() {
+        for lang in ["en", "pl"] {
+            aristotle_i18n::with_language(lang, || {
+                for (width, height, dpi) in [
+                    (800, 1200, 300),
+                    (1072, 1448, 300),
+                    (1236, 1648, 300),
+                    (600, 800, 167),
+                    (758, 1024, 212),
+                ] {
+                    let profile = crate::geom::Screen::new(width, height, dpi).unwrap();
+                    for selected in Filter::ALL {
+                        let mut text = TextEngine::new(Fonts::embedded());
+                        let styles = Styles::new(FamilyId(0)).with_density(profile.density);
+                        let shelf = home(&[], View::Books, selected, CoverMode::None);
+                        let (tree, _) = Library::build_shelf_for_width(
+                            &mut text,
+                            &styles,
+                            &shelf,
+                            width as i32,
+                        );
+                        let mut ui = Ui::with_screen(tree, text, profile);
+                        ui.layout();
+                        for (i, f) in Filter::ALL.iter().enumerate() {
+                            let action = action::FILTER + i as ActionId;
+                            let id = (0..ui.tree.len())
+                                .map(|n| NodeId(n as u32))
+                                .find(|n| ui.tree.node(*n).action == Some(action))
+                                .unwrap();
+                            let rect = ui.tree.rect(id);
+                            assert_eq!(rect.intersect(&ui.bounds()), Some(rect));
+                            let style = if *f == selected {
+                                styles.ui_bold()
+                            } else {
+                                styles.ui()
+                            };
+                            let label = ui.text.measure(f.label(), &style).ceil() as i32;
+                            assert!(
+                                rect.w >= label + 2 * profile.density.px(CHIP_PADDING_X),
+                                "{lang} {width}: {f:?} {rect:?}"
+                            );
+                            assert_eq!(ui.tree.hit(rect.center()), crate::tree::Hit::Target(id));
+                        }
+                    }
+                }
+            });
         }
     }
 

@@ -192,11 +192,23 @@ English is the default. `crates/aristotle-i18n/locales/en.json` defines the mess
 export CARGO_TARGET_DIR="$ARISTOTLE_CACHE/target-ui"
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview
 cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --lang all OUT_DIR
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --size 1236x1648 OUT_DIR
+cargo run --release -p aristotle-ui --bin aristotle-ui-preview -- --size 600x800 --dpi 167 OUT_DIR
 cargo run --release -p aristotle-ui --example render-bench
 cargo test -p aristotle-ui
 ```
 
 Previews include day and night PNGs, `*-damage.png` overlays, and `targets.txt` with control coordinates. `ARISTOTLE_STOCK_HOME=capture.png` adds a stock-library comparison. Check all languages after label changes.
+
+`--size WIDTHxHEIGHT` and `--dpi DPI` select the canvas, native text density, prototype pagination, and gesture thresholds. For UI and real reader checks across several profiles, run the [host geometry matrix](reader.md#check-other-screen-sizes-on-the-host).
+
+### Reference units and native pixels
+
+`aristotle-screen::Screen` holds native pixel dimensions and a validated `Density`. `Ui::with_screen` applies that density when it installs a tree. Fonts are rasterized at their native size, not resized from a 300 DPI bitmap.
+
+Node gaps, padding, borders, icons, and fixed dimensions are authored in reference pixels at 300 DPI. `Styles::with_density` also makes text measurements use the selected density. Custom widgets use `TextEngine::density()` for their intrinsic dimensions and drawing constants. Millimetres and points retain their physical size across profiles.
+
+Dimensions measured from native text or book pages must not be converted again. Use `Tree::fixed_pixels`, `Tree::gap_pixels`, or `Node::in_pixels` for those values. A replacement tree is converted once when installed. The UI and reader recognizers use millimetre-based movement thresholds, while their time limits are unchanged.
 
 ## E-ink rendering
 

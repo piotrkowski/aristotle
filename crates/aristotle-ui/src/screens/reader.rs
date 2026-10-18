@@ -328,7 +328,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let top = t.fixed(None, Some(120), Some(top));
     let top = t.pad(Insets::vh(0, m - 16), top);
     let line = t.rule(2, INK);
-    let extra = t.gap(1, spec.top_extra.max(0));
+    let extra = t.gap_pixels(1, spec.top_extra.max(0));
     let top = t.add(Node::column(0).bg(255), [top, extra, line]);
 
     // Bottom sheet.
@@ -435,10 +435,12 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
         let toggle = t.custom(Toggle { on: s.night });
         night_toggle = Some(toggle);
         let moon = t.icon(Icon::Moon, 40, INK);
-        let hint = t.label(tr(Msg::MenuNightHint), st.small());
+        let mut hint = Paragraph::plain(tr(Msg::MenuNightHint), st.small(), Align::Left);
+        hint.style.max_lines = Some(1);
+        let hint = t.text(hint);
+        let hint = t.add(Node::column(0).flex(1), [hint]);
         let g = t.gap(14, 1);
-        let fill = t.spacer(1);
-        let night = t.add(Node::row(0), [moon, g, hint, fill, toggle]);
+        let night = t.add(Node::row(0), [moon, g, hint, toggle]);
         let night = t.add(
             Node::new(Kind::Padding(Insets::vh(0, 0)))
                 .action(action::NIGHT)
@@ -452,7 +454,7 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
     let rows = t.add(Node::column(14), rows);
     let rows = t.pad(Insets::new(20, m, 34, m), rows);
     let line = t.rule(2, INK);
-    let extra = t.gap(1, spec.bottom_extra.max(0));
+    let extra = t.gap_pixels(1, spec.bottom_extra.max(0));
     let sheet = t.add(Node::column(0).bg(255), [line, extra, rows]);
 
     let fill = t.spacer(1);
@@ -547,11 +549,17 @@ const BOOK_PAGES: usize = 684;
 const WORDS_PER_MINUTE: f32 = 230.0;
 
 impl Reader {
-    fn build_blocks(text: &mut TextEngine, families: &[FamilyId; 3], s: &Settings) -> Vec<Block> {
+    fn build_blocks(
+        text: &mut TextEngine,
+        families: &[FamilyId; 3],
+        s: &Settings,
+        screen_width: i32,
+        density: crate::geom::Density,
+    ) -> Vec<Block> {
         let fam = families[s.family.min(2)];
-        let size = SIZES[s.size.min(SIZES.len() - 1)];
+        let size = density.scale(SIZES[s.size.min(SIZES.len() - 1)]);
         let lh = SPACING[s.spacing.min(2)];
-        let width = (SCREEN_WIDTH - 2 * MARGINS[s.margins.min(2)]) as f32;
+        let width = (screen_width - 2 * density.px(MARGINS[s.margins.min(2)])) as f32;
         let body = TextStyle::new(fam, size).line_height(lh).oldstyle();
         let pitch = (size * lh).round();
         let hy = PolishSyllables::default();
@@ -616,8 +624,29 @@ impl Reader {
         families: [FamilyId; 3],
         settings: Settings,
     ) -> (Tree, Self) {
-        let blocks = Rc::new(Self::build_blocks(text, &families, &settings));
-        let body_h = (SCREEN_HEIGHT - HEADER - FOOTER) as f32;
+        Self::build_for_size(
+            text,
+            st,
+            families,
+            settings,
+            Size::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+        )
+    }
+
+    /// Builds the prototype at the supplied dimensions and the style's density.
+    pub fn build_for_size(
+        text: &mut TextEngine,
+        st: &Styles,
+        families: [FamilyId; 3],
+        settings: Settings,
+        size: Size,
+    ) -> (Tree, Self) {
+        let density = st.density;
+        let blocks = Rc::new(Self::build_blocks(
+            text, &families, &settings, size.w, density,
+        ));
+        let body_height = size.h - density.px(HEADER) - density.px(FOOTER);
+        let body_h = body_height as f32;
         let pages = paginate(&blocks, body_h);
         let m = MARGINS[settings.margins.min(2)];
         let mut t = Tree::new();
@@ -633,13 +662,14 @@ impl Reader {
         let page = t.custom(TextPage {
             blocks: blocks.clone(),
             slices: pages[0].clone(),
-            margin: m,
+            margin: density.px(m),
         });
         let page = t.add(
             Node::new(Kind::Fixed {
                 w: None,
-                h: Some(SCREEN_HEIGHT - HEADER - FOOTER),
-            }),
+                h: Some(body_height),
+            })
+            .in_pixels(),
             [page],
         );
         let footer_left = t.label("", st.small().gray(INK_3));
@@ -842,8 +872,10 @@ impl Reader {
         if s != self.settings {
             // Keep the reader's place: the page holding the same first
             // paragraph line is close enough for a prototype.
-            let styles = Styles::new(self.families[0]);
-            let (tree, mut fresh) = Reader::build(&mut ui.text, &styles, self.families, s);
+            let styles = Styles::new(self.families[0]).with_density(ui.profile().density);
+            let size = ui.bounds().size();
+            let (tree, mut fresh) =
+                Reader::build_for_size(&mut ui.text, &styles, self.families, s, size);
             fresh.set_menu_quiet(self.menu_open, tree, ui);
             *self = fresh;
         }
@@ -986,6 +1018,73 @@ mod tests {
         r.handle(&mut ui, ev[0]);
         assert!(!r.menu_open());
         assert_eq!(r.current, 0);
+    }
+
+    #[test]
+    fn page_turns_and_relayout_keep_the_selected_screen_size() {
+        let mut counts = Vec::new();
+        for (w, h, dpi) in [
+            (800, 1200, 300),
+            (1072, 1448, 300),
+            (1236, 1648, 300),
+            (600, 800, 167),
+            (758, 1024, 212),
+        ] {
+            let profile = crate::geom::Screen::new(w, h, dpi).unwrap();
+            let d = profile.density;
+            let size = Size::new(w as i32, h as i32);
+            let mut text = TextEngine::new(Fonts::embedded());
+            let fam = FamilyId(0);
+            let (tree, mut r) = Reader::build_for_size(
+                &mut text,
+                &Styles::new(fam).with_density(d),
+                [fam; 3],
+                Settings::default(),
+                size,
+            );
+            counts.push(r.page_count());
+            let mut ui = Ui::with_screen(tree, text, profile);
+            ui.render();
+            assert_eq!(ui.tree.rect(r.page).h, size.h - d.px(HEADER) - d.px(FOOTER));
+            let p = Point {
+                x: size.w * 4 / 5,
+                y: size.h / 2,
+            };
+            for ev in tap(&mut ui, p.x, p.y) {
+                r.handle(&mut ui, ev);
+            }
+            assert_eq!(r.current, 1);
+            let damage = ui.render();
+            assert!(!damage.is_empty());
+            assert!(damage
+                .iter()
+                .all(|d| d.rect.intersect(&ui.bounds()) == Some(d.rect)));
+            r.set_menu(&mut ui.tree, true);
+            ui.render();
+            let toggle = ui.tree.rect(r.night_toggle);
+            assert!(!toggle.is_empty());
+            assert_eq!(toggle.intersect(&ui.bounds()), Some(toggle));
+            let node = r.size_steps;
+            r.handle(
+                &mut ui,
+                UiEvent::Action {
+                    id: action::SIZE_UP,
+                    node,
+                    at: p,
+                },
+            );
+            ui.render();
+            assert_eq!(r.settings.size, Settings::default().size + 1);
+            assert!(r.menu_open());
+            assert_eq!(ui.tree.rect(r.page).h, size.h - d.px(HEADER) - d.px(FOOTER));
+            let width = (size.w - 2 * d.px(MARGINS[r.settings.margins])) as f32;
+            let widest = r.blocks.iter().map(|b| b.layout.width).fold(0.0, f32::max);
+            assert!(
+                widest <= width + 1.0,
+                "screen {size:?}, measure {width}, widest {widest}"
+            );
+        }
+        assert!(counts[0] > counts[2], "{counts:?}");
     }
 
     #[test]

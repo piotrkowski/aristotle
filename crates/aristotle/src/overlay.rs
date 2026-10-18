@@ -69,6 +69,7 @@ impl Widget for SelectionMarks {
     }
 
     fn paint(&self, _r: Rect, cx: &mut PaintCx) {
+        let d = cx.text.density();
         let p = &mut *cx.painter;
         for b in &self.boxes {
             // A little air around the glyphs, as a marker pen would leave.
@@ -79,9 +80,19 @@ impl Widget for SelectionMarks {
             return;
         }
         if let Some(((x0, t0, b0), (x1, t1, b1))) = crate::selection::handles(&self.boxes) {
-            for (x, top, bottom) in [(x0 - 4, t0, b0), (x1 + 4, t1, b1)] {
-                p.fill_rect(Rect::new(x - 3, top - 2, 6, bottom - top + 14), INK);
-                p.fill_circle(Point { x, y: bottom + 22 }, 14.0, INK);
+            for (x, top, bottom) in [(x0 - d.px(4), t0, b0), (x1 + d.px(4), t1, b1)] {
+                p.fill_rect(
+                    Rect::new(x - d.px(3), top - d.px(2), d.px(6), bottom - top + d.px(14)),
+                    INK,
+                );
+                p.fill_circle(
+                    Point {
+                        x,
+                        y: bottom + d.px(22),
+                    },
+                    d.scale(14.0),
+                    INK,
+                );
             }
         }
     }
@@ -146,7 +157,9 @@ const CHUNK: usize = 320;
 pub const POPUP_H: i32 = 700;
 
 fn body_style(st: &Styles) -> TextStyle {
-    TextStyle::new(st.family, pt(BODY_PT)).line_height(1.32)
+    TextStyle::new(st.family, pt(BODY_PT))
+        .at_density(st.density)
+        .line_height(1.32)
 }
 
 /// Split a block into pieces of at most about [`CHUNK`] characters, at
@@ -426,7 +439,7 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
     };
     let sheet = t.add(Node::column(0).bg(255), sheet_children);
     let sheet = if has_body {
-        t.fixed(None, Some(spec.height), Some(sheet))
+        t.fixed_pixels(None, Some(spec.height), Some(sheet))
     } else {
         sheet
     };
@@ -692,7 +705,7 @@ pub fn nav_bar(t: &mut Tree, st: &Styles, top_extra: i32) -> NodeId {
     let row = t.pad(Insets::vh(0, m - 16), row);
     let line = t.rule(2, INK);
     let bar = t.add(Node::column(0).bg(255), [row, line]);
-    let above = t.gap(1, 122 + top_extra.max(0));
+    let above = t.gap_pixels(1, st.density.px(122) + top_extra.max(0));
     let fill = t.spacer(1);
     t.add(Node::column(0).hidden(true), [above, bar, fill])
 }

@@ -13,7 +13,7 @@
 //! highlight must already be on its way to the panel by the time the finger
 //! lifts, or the user waits a whole waveform for any sign of life.
 
-use crate::geom::{mm, Point};
+use crate::geom::Point;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -79,10 +79,16 @@ pub struct GestureConfig {
 
 impl Default for GestureConfig {
     fn default() -> Self {
+        Self::for_density(crate::geom::Density::default())
+    }
+}
+
+impl GestureConfig {
+    pub fn for_density(density: crate::geom::Density) -> Self {
         Self {
-            tap_slop: mm(4.0),
+            tap_slop: density.mm(4.0),
             long_press_us: 500_000,
-            swipe_min: mm(8.0),
+            swipe_min: density.mm(8.0),
             axis_ratio: 1.5,
         }
     }

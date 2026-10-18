@@ -53,6 +53,21 @@ pub struct Style {
 }
 
 impl Style {
+    pub fn with_screen(mut self, screen: aristotle_screen::Screen, stride: usize) -> Self {
+        assert!(
+            stride >= screen.width as usize,
+            "stride must cover the screen"
+        );
+        let ratio = screen.density.dpi() as f32 / self.dpi as f32;
+        self.text_top = (self.text_top as f32 * ratio).round() as u32;
+        self.text_bottom = (self.text_bottom as f32 * ratio).round() as u32;
+        self.width = screen.width;
+        self.height = screen.height;
+        self.stride = stride;
+        self.dpi = screen.density.dpi();
+        self
+    }
+
     /// Defaults for the PW4, chosen for Polish prose:
     ///
     /// - Literata: designed for e-reading, sturdy serifs and a large x-height

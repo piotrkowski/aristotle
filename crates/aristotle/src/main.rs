@@ -11,7 +11,7 @@
 //! aristotle [--data DIR] [--library DIR] [--root DIR] [--fonts DIR] [--turn-mode N]
 //!           [--night-method software|hardware] [--no-scan] [--bench-open TITLE]
 //!           [--open TITLE] [--dict DIR]... [--index-dicts] [--test-clippings PATH]
-//!           [--preview OUT BOOK]
+//!           [--preview OUT BOOK] [--preview-layout OUT BOOK WIDTH HEIGHT]
 //!
 //!   --data DIR      renderer data (fonts/, css/, hyphenation-patterns/,
 //!                   serif/); default: data/ next to the binary
@@ -41,6 +41,8 @@
 //!   --preview OUT BOOK  drive the reading interactions on BOOK with
 //!                   synthetic touches on an in-memory panel and write PNGs
 //!                   to OUT (host; see preview.rs)
+//!   --preview-layout OUT BOOK WIDTH HEIGHT  check reading at a pixel size (default: 300 DPI)
+//!   --dpi DPI       density for --preview-layout (default: 300)
 //! ```
 //!
 //! Run it with the stock GUI stopped: `device/app/run-aristotle.sh`.
@@ -89,7 +91,7 @@ use aristotle_library::{Library, ScanOptions, Status};
 use aristotle_render::page::Page;
 use aristotle_render::plato_core::anyhow::{bail, format_err, Context, Error};
 use aristotle_render::style::Style;
-use aristotle_ui::geom::{Rect, Size, MIN_TARGET};
+use aristotle_ui::geom::{Density, Rect, Screen as ScreenProfile, Size};
 use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{self as ui_lib, CoverMode, Filter, View};
 use aristotle_ui::screens::reader::{
@@ -154,6 +156,8 @@ struct Args {
     bench_open: Option<String>,
     dicts: Vec<PathBuf>,
     preview: Option<(PathBuf, PathBuf)>,
+    preview_size: Option<Size>,
+    preview_density: Density,
     open: Option<String>,
     index_dicts: bool,
     test_clippings: Option<PathBuf>,
@@ -172,7 +176,7 @@ fn usage() -> &'static str {
     "usage: aristotle [--data DIR] [--library DIR] [--root DIR] [--fonts DIR] [--turn-mode 9|7] \
      [--night-method software|hardware] [--no-scan] [--bench-open TITLE] [--open TITLE] \
      [--dict DIR]... [--index-dicts] [--test-clippings PATH] [--lang en|pl] \
-     [--preview OUT BOOK]"
+     [--preview OUT BOOK] [--preview-layout OUT BOOK WIDTH HEIGHT] [--dpi DPI]"
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -192,6 +196,8 @@ fn parse_args() -> Result<Args, Error> {
         bench_open: None,
         dicts: Vec::new(),
         preview: None,
+        preview_size: None,
+        preview_density: Density::default(),
         open: None,
         index_dicts: false,
         test_clippings: None,
@@ -222,9 +228,19 @@ fn parse_args() -> Result<Args, Error> {
             "--dict" => a.dicts.push(cwd.join(value("--dict")?)),
             "--index-dicts" => a.index_dicts = true,
             "--test-clippings" => a.test_clippings = Some(cwd.join(value("--test-clippings")?)),
-            "--preview" => {
-                let out = cwd.join(value("--preview")?);
-                let book = cwd.join(value("--preview")?);
+            "--preview" | "--preview-layout" => {
+                let out = cwd.join(value(&arg)?);
+                let book = cwd.join(value(&arg)?);
+                a.preview_size = if arg == "--preview-layout" {
+                    let w = value(&arg)?.parse::<i32>()?;
+                    let h = value(&arg)?.parse::<i32>()?;
+                    if !(600..=4096).contains(&w) || !(800..=4096).contains(&h) {
+                        bail!("preview width must be 600..4096, height must be 800..4096");
+                    }
+                    Some(Size::new(w, h))
+                } else {
+                    None
+                };
                 a.preview = Some((out, book));
             }
             "--lang" => {
@@ -234,9 +250,16 @@ fn parse_args() -> Result<Args, Error> {
                 }
                 a.lang = Some(code);
             }
+            "--dpi" => {
+                a.preview_density =
+                    Density::new(value("--dpi")?.parse()?).map_err(|e| format_err!("{e}"))?
+            }
             "-h" | "--help" => bail!("{}", usage()),
             other => bail!("unknown argument {other}\n{}", usage()),
         }
+    }
+    if a.preview_density != Density::default() && a.preview_size.is_none() {
+        bail!("--dpi requires --preview-layout; device density stays at 300 DPI");
     }
     Ok(a)
 }
@@ -384,6 +407,8 @@ fn build_app(
 ) -> Result<App, Error> {
     let (w, h) = panel.size();
     aristotle_i18n::set_language(&prefs.language);
+    let profile =
+        ScreenProfile::new(w, h, args.preview_density.dpi()).map_err(|e| format_err!("{e}"))?;
     let lib = Library::open(&args.library)?;
     let saver = Saver::new(&args.library);
     perf!(
@@ -400,11 +425,10 @@ fn build_app(
         ..Nav::default()
     };
     // The data directory is the current directory by now.
-    let ui = Ui::new(
+    let ui = Ui::with_screen(
         Tree::new(),
         TextEngine::new(ui_fonts(Path::new("serif"))?),
-        w,
-        h,
+        profile,
     );
     perf!("startup: UI fonts ready");
     let mut app = App {
@@ -422,7 +446,7 @@ fn build_app(
         debounce: Debounce::default(),
         prefs,
         ui,
-        styles: Styles::new(FamilyId(0)),
+        styles: Styles::new(FamilyId(0)).with_density(profile.density),
         covers: Covers::default(),
         screen: Screen::Settings { ids: None, page: 0 },
         nav,
@@ -645,7 +669,7 @@ fn map_file(path: &Path) -> std::io::Result<&'static [u8]> {
 
 /// The quit target: the library title, hit-tested at least 9 mm high.
 fn quit_zone(ui: &Ui, title: NodeId) -> Rect {
-    ui.tree.rect(title).expand_to(MIN_TARGET)
+    ui.tree.rect(title).expand_to(ui.profile().density.mm(9.0))
 }
 
 /// The index of `id` in `first..first + n`, if it is there.
@@ -656,6 +680,12 @@ fn in_range(id: u32, first: u32, n: usize) -> Option<usize> {
 }
 
 impl App {
+    fn page_style(&self) -> Style {
+        self.prefs
+            .style()
+            .with_screen(self.ui.profile(), self.panel.stride())
+    }
+
     /// Render and send UI chrome changes.
     fn render_ui(&mut self) -> Result<(), Error> {
         self.render_ui_with(Content::Chrome)
@@ -737,10 +767,12 @@ impl App {
         let model = ShelfModel::build(&self.lib, &self.nav, mode, &mut self.covers);
         let facts = Facts::status(&self.battery);
         self.clock = facts.clock.clone();
-        let (tree, view) = ui_lib::Library::build_shelf(
+        let width = self.ui.bounds().w;
+        let (tree, view) = ui_lib::Library::build_shelf_for_width(
             &mut self.ui.text,
             &self.styles,
             &model.shelf(facts.status_line(), mode),
+            width,
         );
         self.ui.set_tree_with(tree, refresh);
         self.ui.layout();
@@ -1216,9 +1248,10 @@ impl App {
             && self.pending.is_none()
             && self.asleep.is_none()
         {
+            let style = self.page_style();
             self.prewarm.tick(
                 &self.lib,
-                &self.prefs.style(),
+                &style,
                 &self.mobi_cache,
                 self.speed.secs_per_page(),
             );
@@ -1456,7 +1489,7 @@ impl App {
         };
         self.sync_before_open(id);
         let t0 = Instant::now();
-        let style = self.prefs.style();
+        let style = self.page_style();
         let src = match Source::new(&self.lib, &rec, &self.mobi_cache) {
             Ok(mut s) => {
                 s.secs_per_page = self.speed.secs_per_page();
@@ -1553,7 +1586,7 @@ impl App {
         self.lib
             .mark_opened(&p.id, aristotle_library::library::now());
         self.debounce.changed(Instant::now());
-        let gestures = TurnGestures::new(self.ui.bounds());
+        let gestures = TurnGestures::with_density(self.ui.bounds(), self.ui.profile().density);
         let old = std::mem::replace(&mut self.screen, Screen::Opening);
         self.enter_reader(session, menu, page_node, nav, settings, gestures);
         drop(old);
@@ -1624,7 +1657,7 @@ impl App {
             page_node,
             nav,
             settings,
-            gestures: TurnGestures::new(self.ui.bounds()),
+            gestures: TurnGestures::with_density(self.ui.bounds(), self.ui.profile().density),
         }));
         Ok(())
     }
@@ -2293,11 +2326,12 @@ impl App {
     /// Lay the book out again in the style of the preferences and show it
     /// with the menu open: one full mode-9 update.
     pub(crate) fn relayout(&mut self, settings: Settings) -> Result<(), Error> {
+        let style = self.page_style();
         let Screen::Reader(r) = &mut self.screen else {
             return Ok(());
         };
         let t = Instant::now();
-        r.session.restyle(self.prefs.style())?;
+        r.session.restyle(style)?;
         let page = r.session.page(r.session.current)?;
         let t_layout = t.elapsed();
         r.settings = settings;
@@ -2444,7 +2478,8 @@ fn fit_menu(
     ui.tree.set_hidden(menu.root, false);
     ui.tree.set_hidden(*nav, false);
     ui.layout();
-    let top = ui.tree.rect(menu.top).bottom() - menu.top_extra + overlay::NAV_H;
+    let top =
+        ui.tree.rect(menu.top).bottom() - menu.top_extra + ui.profile().density.px(overlay::NAV_H);
     let sheet = ui.tree.rect(menu.sheet).y + menu.bottom_extra;
     let extents = mask_extents(
         &page.data,
@@ -2453,7 +2488,7 @@ fn fit_menu(
         page.height as usize,
         top,
         sheet,
-        120,
+        ui.profile().density.px(120),
     );
     if extents != (menu.top_extra, menu.bottom_extra) {
         let (tree, m, pn, nv) =
@@ -2538,6 +2573,14 @@ mod tests {
 
     /// The app on an in-memory panel, as `--preview` runs it.
     fn memory_app(library: &Path, root: &Path) -> App {
+        memory_app_sized(library, root, 1072, 1448)
+    }
+
+    fn memory_app_sized(library: &Path, root: &Path, w: u32, h: u32) -> App {
+        memory_app_profile(library, root, ScreenProfile::new(w, h, 300).unwrap())
+    }
+
+    fn memory_app_profile(library: &Path, root: &Path, profile: ScreenProfile) -> App {
         let args = Args {
             data: PathBuf::new(),
             library: library.to_path_buf(),
@@ -2548,6 +2591,8 @@ mod tests {
             bench_open: None,
             dicts: Vec::new(),
             preview: None,
+            preview_size: None,
+            preview_density: profile.density,
             open: None,
             index_dicts: false,
             test_clippings: None,
@@ -2556,7 +2601,7 @@ mod tests {
             accounts: library.join("accounts"),
             fonts: library.join("fonts"),
         };
-        let panel = Panel::memory(1072, 1448, prefs::STOCK_TURN);
+        let panel = Panel::memory(profile.width, profile.height, prefs::STOCK_TURN);
         build_app(
             &args,
             panel,
@@ -3021,9 +3066,64 @@ mod tests {
         to
     }
 
-    /// Reopening a book from its snapshot is one update, also when the
-    /// snapshot's footer is out of date: made ahead of time before the page
-    /// numbers were known (or at another reading speed).
+    #[test]
+    fn reading_and_relayout_use_the_panel_size_and_stride() {
+        let Some(data) = render_data() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "no render data directory in CI"
+            );
+            eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
+            return;
+        };
+        aristotle_render::use_data_dir(&data).unwrap();
+        let dir = testdir("screen-sizes");
+        let root = dir.join("books");
+        let library = dir.join("library");
+        std::fs::create_dir_all(&root).unwrap();
+        write_book(&root.join("reopened.epub"));
+        let mut lib = Library::open(&library).unwrap();
+        lib.scan(&root, &ScanOptions::default()).unwrap();
+        lib.save().unwrap();
+        for (w, h, dpi) in [
+            (800, 1200, 300),
+            (1072, 1448, 300),
+            (1236, 1648, 300),
+            (600, 800, 167),
+            (758, 1024, 212),
+        ] {
+            let profile = ScreenProfile::new(w, h, dpi).unwrap();
+            let mut app = memory_app_profile(&library, &root, profile);
+            app.open_by_title("Reopened").unwrap();
+            wait(&mut app, |a| matches!(a.screen, Screen::Reader(_)));
+            for size in [3, 2] {
+                app.prefs.size = size;
+                let settings = app.prefs.menu_settings(0.5);
+                app.relayout(settings).unwrap();
+                let stride = app.panel.stride();
+                let Screen::Reader(r) = &mut app.screen else {
+                    panic!("no book open")
+                };
+                assert_eq!((r.session.style.width, r.session.style.height), (w, h));
+                assert_eq!(r.session.style.stride, stride);
+                assert_eq!(r.session.style.dpi, dpi);
+                assert_eq!(r.session.style.text_top, profile.density.px(104) as u32);
+                let page = r.session.page(r.session.current).unwrap();
+                assert_eq!((page.width, page.height, page.stride), (w, h, stride));
+                let bounds = Rect::new(0, 0, w as i32, h as i32);
+                if let Panel::Memory(m) = &app.panel {
+                    assert!(m
+                        .updates
+                        .iter()
+                        .all(|u| u.rect.intersect(&bounds) == Some(u.rect)));
+                }
+            }
+            app.leave().unwrap();
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Reopening from a snapshot takes one update, even with an outdated footer.
     #[test]
     fn reopening_from_a_snapshot_is_one_update() {
         // A snapshot made before the page numbers were known (Chrome), and

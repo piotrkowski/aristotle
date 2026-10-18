@@ -30,7 +30,7 @@ use aristotle_library::index::AnnotationKind;
 use aristotle_render::book::{Bounds, Engine, Link, Position, TocItem, Word};
 use aristotle_render::plato_core::anyhow::Error;
 use aristotle_render::richtext::{Block, RichText, Run};
-use aristotle_ui::geom::{Point, Rect, MIN_TARGET};
+use aristotle_ui::geom::{Point, Rect};
 use aristotle_ui::input::Direction;
 use aristotle_ui::tree::{ActionId, NodeId, Refresh, Tree};
 use aristotle_ui::ui::UiEvent;
@@ -42,7 +42,6 @@ use crate::marks;
 use crate::overlay::{self, act, ListRow, Place, PopupSpec, SelectionMarks};
 use crate::panel::Content;
 use crate::selection::{self, Selection};
-use crate::turns::bookmark_corner;
 use crate::{perf, App, Screen};
 
 /// How long a long press waits for the dictionary before it shows the
@@ -239,9 +238,10 @@ impl App {
             .max()
             .unwrap_or(body.y)
             - body.y;
-        let unused = body.h - used - 8;
+        let density = self.ui.profile().density;
+        let unused = body.h - used - density.px(8);
         let height = t.rect(sheet).h;
-        (unused > 24).then(|| (height - unused).max(self.ui.bounds().h / 4))
+        (unused > density.px(24)).then(|| (height - unused).max(self.ui.bounds().h / 4))
     }
 
     /// [`App::rebuild_reader`]'s one pass; `fit` caps the popup's height.
@@ -261,7 +261,8 @@ impl App {
         let dicts = if shown.is_empty() {
             dicts
         } else {
-            let row = (self.ui.bounds().w - 2 * aristotle_ui::theme::margin()) as f32;
+            let row =
+                (self.ui.bounds().w - 2 * styles.density.px(aristotle_ui::theme::margin())) as f32;
             let style = styles.ui_bold();
             let text = &mut self.ui.text;
             let widths: Vec<f32> = shown
@@ -269,7 +270,7 @@ impl App {
                 .filter_map(|&i| dicts.get(i))
                 .map(|d| text.measure(d, &style))
                 .collect();
-            let max = overlay::tab_width(&widths, row - overlay::TITLE_MIN);
+            let max = overlay::tab_width(&widths, row - styles.density.scale(overlay::TITLE_MIN));
             dicts
                 .iter()
                 .map(|d| overlay::fit_label(d, max, |s| text.measure(s, &style)))
@@ -342,12 +343,12 @@ impl App {
             // common word's senses fit on one popup page; then fitted to
             // the content.
             let room = match (word, place) {
-                (Some((_, bottom)), Place::Bottom) => h - bottom - 70,
-                (Some((top, _)), Place::Top) => top - 70,
-                (None, _) => overlay::POPUP_H,
+                (Some((_, bottom)), Place::Bottom) => h - bottom - styles.density.px(70),
+                (Some((top, _)), Place::Top) => top - styles.density.px(70),
+                (None, _) => styles.density.px(overlay::POPUP_H),
             };
             let max = fit.unwrap_or(room.clamp(h / 4, h * 3 / 4));
-            let height = popup_height(&page_words, place, h, max);
+            let height = popup_height(&page_words, place, h, max, styles.density);
             let built = match overlay {
                 Overlay::Dict {
                     lookup,
@@ -419,7 +420,7 @@ impl App {
                             (tr(Msg::CommonClose), act::CANCEL),
                         ],
                         place: Place::Bottom,
-                        height: popup_height(&page_words, Place::Bottom, h, max),
+                        height: popup_height(&page_words, Place::Bottom, h, max, styles.density),
                     },
                 )),
                 Overlay::Annotation { target, .. } => {
@@ -439,7 +440,13 @@ impl App {
                             suggestions: Vec::new(),
                             actions,
                             place: Place::Bottom,
-                            height: popup_height(&page_words, Place::Bottom, h, max),
+                            height: popup_height(
+                                &page_words,
+                                Place::Bottom,
+                                h,
+                                max,
+                                styles.density,
+                            ),
                         },
                     ))
                 }
@@ -457,7 +464,7 @@ impl App {
                             (tr(Msg::ReaderSyncStay), act::CANCEL),
                         ],
                         place: Place::Bottom,
-                        height: popup_height(&page_words, Place::Bottom, h, max),
+                        height: popup_height(&page_words, Place::Bottom, h, max, styles.density),
                     },
                 )),
                 Overlay::Toc { items, current, .. } => {
@@ -655,6 +662,7 @@ impl App {
     /// After the page on the panel changed: quiet zones for the gestures
     /// (links, the bookmark corner).
     pub(crate) fn page_changed(&mut self) {
+        let target = self.ui.profile().density.mm(9.0) * 2 / 3;
         let Some(r) = self.reading() else {
             return;
         };
@@ -662,7 +670,7 @@ impl App {
         let links = r.session.links(loc);
         let zones = links
             .iter()
-            .map(|l| rect(&l.rect).expand_to(MIN_TARGET * 2 / 3))
+            .map(|l| rect(&l.rect).expand_to(target))
             .collect();
         r.gestures.set_quiet(zones);
     }
@@ -868,7 +876,8 @@ impl App {
     /// A tap in a quiet zone: the bookmark corner or a link.
     pub(crate) fn quiet_tap(&mut self, p: Point) -> Result<(), Error> {
         let screen = self.ui.bounds();
-        if bookmark_corner(screen).contains(p) {
+        let density = self.ui.profile().density;
+        if crate::turns::bookmark_corner_at(screen, density).contains(p) {
             return self.toggle_bookmark();
         }
         let Some(r) = self.reading() else {
@@ -878,7 +887,7 @@ impl App {
         let links = r.session.links(loc);
         let Some(link) = links
             .iter()
-            .filter(|l| rect(&l.rect).expand_to(MIN_TARGET * 2 / 3).contains(p))
+            .filter(|l| rect(&l.rect).expand_to(density.mm(9.0) * 2 / 3).contains(p))
             .min_by_key(|l| l.rect.dist2(p.x, p.y))
             .cloned()
         else {
@@ -1743,7 +1752,13 @@ fn dict_popup(
 /// Height of a popup sheet that ends between two lines of the page
 /// instead of cutting through one: [`overlay::POPUP_H`], or a little less
 /// when its edge would cross a line.
-fn popup_height(words: &[Word], place: Place, screen_h: i32, max: i32) -> i32 {
+fn popup_height(
+    words: &[Word],
+    place: Place,
+    screen_h: i32,
+    max: i32,
+    density: aristotle_ui::geom::Density,
+) -> i32 {
     let edge = match place {
         Place::Bottom => screen_h - max,
         Place::Top => max,
@@ -1763,7 +1778,7 @@ fn popup_height(words: &[Word], place: Place, screen_h: i32, max: i32) -> i32 {
         Place::Bottom => {
             let above = words
                 .iter()
-                .filter(|x| x.rect.y0 < w.rect.y0 - 10)
+                .filter(|x| x.rect.y0 < w.rect.y0 - density.px(10))
                 .map(|x| x.rect.y1)
                 .max()
                 .unwrap_or(w.rect.y0);
@@ -1772,5 +1787,5 @@ fn popup_height(words: &[Word], place: Place, screen_h: i32, max: i32) -> i32 {
         // End the sheet under the crossed line's box.
         Place::Top => w.rect.y1 + 1,
     }
-    .clamp(max, max + 80)
+    .clamp(max, max + density.px(80))
 }

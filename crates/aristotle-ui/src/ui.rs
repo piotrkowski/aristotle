@@ -100,6 +100,7 @@ pub enum UiEvent {
 }
 
 pub struct Ui {
+    profile: crate::geom::Screen,
     pub tree: Tree,
     pub text: TextEngine,
     /// What the panel should show: the tree painted, inverted in night mode.
@@ -131,7 +132,19 @@ pub struct Ui {
 
 impl Ui {
     pub fn new(tree: Tree, text: TextEngine, width: u32, height: u32) -> Self {
+        Self::with_screen(
+            tree,
+            text,
+            crate::geom::Screen::new(width, height, 300).expect("valid screen"),
+        )
+    }
+
+    pub fn with_screen(mut tree: Tree, mut text: TextEngine, profile: crate::geom::Screen) -> Self {
+        let (width, height) = (profile.width, profile.height);
+        tree.set_density(profile.density);
+        text.density = profile.density;
         Self {
+            profile,
             tree,
             text,
             canvas: Canvas::new(width, height),
@@ -141,7 +154,9 @@ impl Ui {
             full_refresh_every: 6,
             pages_since_full: 0,
             full_pending: true,
-            gestures: GestureRecognizer::default(),
+            gestures: GestureRecognizer::new(crate::input::GestureConfig::for_density(
+                profile.density,
+            )),
             pressed: None,
             snapshot: Vec::new(),
             repaint_all: None,
@@ -151,6 +166,10 @@ impl Ui {
             clean_pending: false,
             floor: None,
         }
+    }
+
+    pub fn profile(&self) -> crate::geom::Screen {
+        self.profile
     }
 
     /// The pixels the panel should show after the last render.
@@ -172,7 +191,8 @@ impl Ui {
     /// `Refresh::Auto` the whole screen is repainted but only the pixels
     /// that differ are sent, so rebuilding a screen from scratch (say, after
     /// changing a library filter) costs no more than the visible change.
-    pub fn set_tree_with(&mut self, tree: Tree, refresh: Refresh) -> Tree {
+    pub fn set_tree_with(&mut self, mut tree: Tree, refresh: Refresh) -> Tree {
+        tree.set_density(self.profile.density);
         self.pressed = None;
         match refresh {
             Refresh::Full => self.full_pending = true,

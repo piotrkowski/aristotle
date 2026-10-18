@@ -22,9 +22,9 @@ use swash::zeno::{Angle, Format, Transform, Vector};
 /// How a piece of text looks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextStyle {
+    density: crate::geom::Density,
     pub family: FamilyId,
-    /// Font size in pixels (the em square). Use [`crate::geom::pt`] to
-    /// convert from points.
+    /// Font size in native pixels after applying the screen density.
     pub size: f32,
     pub bold: bool,
     pub italic: bool,
@@ -45,6 +45,7 @@ pub struct TextStyle {
 impl TextStyle {
     pub fn new(family: FamilyId, size: f32) -> Self {
         Self {
+            density: crate::geom::Density::default(),
             family,
             size,
             bold: false,
@@ -78,7 +79,7 @@ impl TextStyle {
     }
 
     pub fn tracking(mut self, t: f32) -> Self {
-        self.tracking = t;
+        self.tracking = self.density.scale(t);
         self
     }
 
@@ -92,8 +93,24 @@ impl TextStyle {
         self
     }
 
+    /// Sets the size in reference pixels at 300 DPI.
     pub fn size(mut self, size: f32) -> Self {
+        self.size = self.density.scale(size);
+        self
+    }
+
+    /// Sets an already measured native pixel size.
+    pub fn size_pixels(mut self, size: f32) -> Self {
         self.size = size;
+        self
+    }
+
+    /// Changes density without scaling native metrics twice.
+    pub fn at_density(mut self, density: crate::geom::Density) -> Self {
+        let ratio = density.dpi() as f32 / self.density.dpi() as f32;
+        self.size *= ratio;
+        self.tracking *= ratio;
+        self.density = density;
         self
     }
 }
@@ -191,6 +208,7 @@ struct GlyphImage {
 /// Shapes, measures and draws text. Owns the fonts and the glyph cache.
 pub struct TextEngine {
     pub fonts: Fonts,
+    pub(crate) density: crate::geom::Density,
     shape: ShapeContext,
     scale: ScaleContext,
     cache: HashMap<GlyphKey, Option<GlyphImage>>,
@@ -204,6 +222,7 @@ impl TextEngine {
     pub fn new(fonts: Fonts) -> Self {
         let mut e = Self {
             fonts,
+            density: crate::geom::Density::default(),
             shape: ShapeContext::new(),
             scale: ScaleContext::new(),
             cache: HashMap::new(),
@@ -212,6 +231,10 @@ impl TextEngine {
         };
         e.set_darkening(0.8);
         e
+    }
+
+    pub fn density(&self) -> crate::geom::Density {
+        self.density
     }
 
     /// Sets the language used for `locl` shaping features (default Polish).

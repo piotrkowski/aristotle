@@ -109,6 +109,7 @@ version = "0.1.0"
 dependencies = [
  "aristotle-hal",
  "aristotle-library",
+ "aristotle-screen",
  "libc",
  "percent-encoding",
  "plato-core",
@@ -116,10 +117,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aristotle-screen"
+version = "0.1.0"
+
+[[package]]
 name = "aristotle-ui"
 version = "0.1.0"
 dependencies = [
  "aristotle-i18n",
+ "aristotle-screen",
  "png",
  "swash",
  "unicode-linebreak",

@@ -121,8 +121,8 @@ fn message_line(t: &mut Tree, s: &Styles, text: &str) -> (NodeId, NodeId) {
     p.style.max_lines = Some(2);
     let style = s.ui();
     let msg = t.text(p);
-    let two_lines = (style.size * style.line_height * 2.0).ceil() as i32 + 4;
-    let fixed = t.fixed(None, Some(two_lines), Some(msg));
+    let two_lines = (style.size * style.line_height * 2.0).ceil() as i32 + s.density.px(4);
+    let fixed = t.fixed_pixels(None, Some(two_lines), Some(msg));
     (t.pad(Insets::new(Space::XS, 0, Space::XS, 0), fixed), msg)
 }
 

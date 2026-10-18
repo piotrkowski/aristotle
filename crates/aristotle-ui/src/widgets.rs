@@ -179,8 +179,8 @@ impl Cover {
         BINDINGS[(fnv(key) % BINDINGS.len() as u32) as usize]
     }
 
-    fn large(&self) -> bool {
-        self.size.w >= 150
+    fn large(&self, density: crate::geom::Density) -> bool {
+        self.size.w >= density.px(150)
     }
 }
 
@@ -197,7 +197,7 @@ impl Widget for Cover {
             let (_, ink) = self.binding();
             let w = s.w as f32;
             let index = self.mark.series_index.map(series_number);
-            if self.large() {
+            if self.large(text.density()) {
                 let inner = w * 0.72;
                 let mut title = TextStyle::new(self.family, w * 0.13)
                     .bold()
@@ -256,6 +256,7 @@ impl Widget for Cover {
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let density = cx.text.density();
         if let Some(img) = &self.scaled {
             // Bottom-aligned and centred, like a book standing on a shelf;
             // a hairline keeps white covers from dissolving into the page.
@@ -271,17 +272,17 @@ impl Widget for Cover {
             return;
         }
         let (bg, ink) = self.binding();
-        let radius = (r.w as f32 * 0.03).max(3.0);
+        let radius = (r.w as f32 * 0.03).max(density.scale(3.0));
         let p = &mut *cx.painter;
         p.fill_round_rect(r, radius, bg);
         if bg == WHITE {
             // A white card needs an edge on white paper.
-            p.stroke_round_rect(r, radius, 2.0, INK);
+            p.stroke_round_rect(r, radius, density.scale(2.0), INK);
         }
         let w = r.w as f32;
         let h = r.h as f32;
         let x = r.x as f32 + w * 0.12;
-        if self.large() {
+        if self.large(density) {
             // An inner frame, like a border blocked on a cloth binding.
             let inset = (w * 0.06).round() as i32;
             p.stroke_rect(r.outset(-inset), 2, ink);
@@ -322,16 +323,20 @@ pub struct Battery {
 }
 
 impl Widget for Battery {
-    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
-        c.constrain(Size::new(46, 26))
+    fn measure(&mut self, c: Constraints, text: &mut TextEngine) -> Size {
+        c.constrain(Size::new(text.density().px(46), text.density().px(26)))
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let d = cx.text.density();
         let p = &mut *cx.painter;
-        let body = Rect::new(r.x, r.y, r.w - 6, r.h);
-        p.stroke_round_rect(body, 4.0, 3.0, INK);
-        p.fill_rect(Rect::new(body.right() + 2, r.y + r.h / 3, 4, r.h / 3), INK);
-        let inner = body.outset(-6);
+        let body = Rect::new(r.x, r.y, r.w - d.px(6), r.h);
+        p.stroke_round_rect(body, d.scale(4.0), d.scale(3.0), INK);
+        p.fill_rect(
+            Rect::new(body.right() + d.px(2), r.y + r.h / 3, d.px(4), r.h / 3),
+            INK,
+        );
+        let inner = body.outset(-d.px(6));
         if self.charging {
             let s = inner.h as f32 / 7.0;
             let (x, y) = (inner.center().x as f32, inner.y as f32);
@@ -357,14 +362,14 @@ impl Widget for Battery {
 pub struct BusyMark;
 
 impl Widget for BusyMark {
-    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
-        c.constrain(Size::new(72, 28))
+    fn measure(&mut self, c: Constraints, text: &mut TextEngine) -> Size {
+        c.constrain(Size::new(text.density().px(72), text.density().px(28)))
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
         let p = &mut *cx.painter;
         p.fill_rect(r, BLACK);
-        let d = 8;
+        let d = cx.text.density().px(8);
         let gap = (r.w - 3 * d) / 4;
         for i in 0..3 {
             let x = r.x + gap + i * (d + gap);
@@ -380,21 +385,22 @@ pub struct Toggle {
 }
 
 impl Widget for Toggle {
-    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
-        c.constrain(Size::new(104, 58))
+    fn measure(&mut self, c: Constraints, text: &mut TextEngine) -> Size {
+        c.constrain(Size::new(text.density().px(104), text.density().px(58)))
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let d = cx.text.density();
         let p = &mut *cx.painter;
         let radius = r.h as f32 / 2.0;
-        let knob_r = r.h as f32 / 2.0 - 9.0;
+        let knob_r = r.h as f32 / 2.0 - d.scale(9.0);
         let cy = r.y + r.h / 2;
         if self.on {
             p.fill_round_rect(r, radius, INK);
             let cx = r.right() - r.h / 2;
             p.fill_circle(Point { x: cx, y: cy }, knob_r, WHITE);
         } else {
-            p.stroke_round_rect(r, radius, 4.0, INK);
+            p.stroke_round_rect(r, radius, d.scale(4.0), INK);
             let cx = r.x + r.h / 2;
             p.fill_circle(Point { x: cx, y: cy }, knob_r, INK);
         }
@@ -422,21 +428,22 @@ impl Slider {
 }
 
 impl Widget for Slider {
-    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
-        c.constrain(Size::new(c.max.w, 56))
+    fn measure(&mut self, c: Constraints, text: &mut TextEngine) -> Size {
+        c.constrain(Size::new(c.max.w, text.density().px(56)))
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let d = cx.text.density();
         let p = &mut *cx.painter;
         let pad = r.h / 2;
         let cy = r.y + r.h / 2;
         let x0 = r.x + pad;
         let w = r.w - 2 * pad;
         let kx = x0 + (w as f32 * self.value.clamp(0.0, 1.0)).round() as i32;
-        p.fill_rect(Rect::new(x0, cy - 1, w, 3), RULE);
-        p.fill_rect(Rect::new(x0, cy - 3, kx - x0, 7), INK);
-        p.fill_circle(Point { x: kx, y: cy }, 20.0, INK);
-        p.fill_circle(Point { x: kx, y: cy }, 11.0, WHITE);
+        p.fill_rect(Rect::new(x0, cy - d.px(1), w, d.px(3)), RULE);
+        p.fill_rect(Rect::new(x0, cy - d.px(3), kx - x0, d.px(7)), INK);
+        p.fill_circle(Point { x: kx, y: cy }, d.scale(20.0), INK);
+        p.fill_circle(Point { x: kx, y: cy }, d.scale(11.0), WHITE);
     }
 }
 
@@ -448,16 +455,17 @@ pub struct Steps {
 }
 
 impl Widget for Steps {
-    fn measure(&mut self, c: Constraints, _: &mut TextEngine) -> Size {
-        c.constrain(Size::new(c.max.w, 56))
+    fn measure(&mut self, c: Constraints, text: &mut TextEngine) -> Size {
+        c.constrain(Size::new(c.max.w, text.density().px(56)))
     }
 
     fn paint(&self, r: Rect, cx: &mut PaintCx) {
+        let density = cx.text.density();
         let p = &mut *cx.painter;
         let n = self.count.max(1) as i32;
         let step = r.w / n;
         for i in 0..n {
-            let d = 10.0 + 14.0 * i as f32 / (n - 1).max(1) as f32;
+            let d = density.scale(10.0 + 14.0 * i as f32 / (n - 1).max(1) as f32);
             let c = Point {
                 x: r.x + step * i + step / 2,
                 y: r.y + r.h / 2,
@@ -466,7 +474,7 @@ impl Widget for Steps {
                 p.fill_circle(c, d / 2.0, INK);
             } else {
                 p.fill_circle(c, d / 2.0, INK);
-                p.fill_circle(c, d / 2.0 - 2.5, WHITE);
+                p.fill_circle(c, d / 2.0 - density.scale(2.5), WHITE);
             }
         }
     }

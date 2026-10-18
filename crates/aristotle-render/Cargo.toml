@@ -12,6 +12,7 @@ description = "E-book page renderer for Aristotle on the PW4, built on Plato's d
 # tools/build-render.sh; see README.md and docs/reader.md.
 
 [dependencies]
+aristotle-screen = { path = "../aristotle-screen" }
 aristotle-hal = { path = "../aristotle-hal" }
 aristotle-library = { path = "../aristotle-library" }
 libc = "0.2"

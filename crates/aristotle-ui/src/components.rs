@@ -5,6 +5,9 @@ use crate::geom::Insets;
 use crate::theme::{Styles, INK_2, RULE};
 use crate::tree::{ActionId, Feedback, Kind, Node, NodeId, Tree};
 
+/// Horizontal padding inside a chip, in reference pixels.
+pub const CHIP_PADDING_X: i32 = 26;
+
 /// Builds an interactive chip with persistent selection and press inversion.
 /// Paint size follows the label; `Tree::hit` expands small targets to 9 mm.
 /// Leave room for the expanded target around the chip, not inside its capsule.
@@ -16,7 +19,7 @@ pub fn chip(t: &mut Tree, s: &Styles, label: &str, selected: bool, id: ActionId)
     };
     let l = t.label(label, style);
     t.add(
-        Node::new(Kind::Padding(Insets::vh(10, 26)))
+        Node::new(Kind::Padding(Insets::vh(10, CHIP_PADDING_X)))
             .border(if selected { 0 } else { 2 }, RULE, 40)
             .inverted(selected)
             .feedback(Feedback::Invert)

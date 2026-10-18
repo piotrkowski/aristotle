@@ -101,6 +101,33 @@ tools/host/make-reading-test-epub.py "$ARISTOTLE_CACHE/proba-czytania.epub"
 
 The test book contains original Polish text, Greek and Latin words, and footnotes. The preview writes step PNGs, `updates.txt`, test clippings, and a device scenario in `reading.txt`. Regenerate scenario coordinates after typography or language changes. `tools/scenarios/aristotle-open.txt` covers opening, turning, the menu, and cancellation.
 
+### Check other screen sizes on the host
+
+Build the host C libraries once, then run the geometry matrix:
+
+```sh
+PLATO_TARGET=x86_64-unknown-linux-musl PLATO_LIBS_ONLY=1 tools/build-plato.sh
+tools/host/preview-matrix.sh
+```
+
+The script generates an original test book and builds the host app and UI preview. Its synthetic profiles are 600 × 800 at 167 DPI, 758 × 1024 at 212 DPI, and 800 × 1200, 1072 × 1448, and 1236 × 1648 at 300 DPI. Results go to `$ARISTOTLE_CACHE/ui-preview/geometry/`, or the directory passed as the first argument. Each profile has a directory named `WIDTHxHEIGHT-DPIdpi`.
+
+Each size has UI screenshots for every language and reading screenshots in English and Polish. The reading scenario opens the book, turns a page, changes the font size, enables night mode, returns to the library, and reopens the book. It fails if the reader's geometry differs from the panel or an update leaves its bounds.
+
+After the default matrix run, check one size with your own public-domain or test book:
+
+```sh
+. tools/env.sh
+bundle="$ARISTOTLE_CACHE/ui-preview/geometry/bundle"
+export ARISTOTLE_ACCOUNTS_DIR="$ARISTOTLE_CACHE/ui-preview/layout/accounts"
+"$bundle/aristotle" \
+	--data "$bundle/data" \
+	--library "$ARISTOTLE_CACHE/ui-preview/layout" \
+	--preview-layout "$ARISTOTLE_CACHE/ui-preview/layout" BOOK.epub 600 800 --dpi 167
+```
+
+The book must have at least two pages. Preview widths are 600 to 4096 pixels, heights are 800 to 4096 pixels, and densities are 72 to 1200 DPI. The UI, book renderer, and gesture thresholds use the same screen profile. `--dpi` does not override density on the device. These are host checks, not device support claims. They do not emulate firmware, touch drivers, panel timing, or ghosting. The device guard and PW4 refresh strategy are unchanged.
+
 ### Running it on the device
 
 ```sh
