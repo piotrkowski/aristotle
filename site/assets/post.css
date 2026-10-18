@@ -341,6 +341,14 @@ article > p {
   transform: translate(-50%, -50%);
 }
 
+.hotspot-marker {
+  position: absolute;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 .demo-cue {
   position: absolute;
   border-bottom: 2px solid #365c82;
@@ -352,24 +360,31 @@ article > p {
   border-color: #a9c7e6;
 }
 
-.show-actions .hotspot {
-  outline: 1px solid #365c82;
-  outline-offset: -2px;
+.show-actions .hotspot-marker {
+  border-color: #365c82;
   background: rgb(54 92 130 / 0.1);
 }
 
-.show-actions [data-night="true"] .hotspot {
-  outline-color: #a9c7e6;
+.show-actions [data-night="true"] .hotspot-marker {
+  border-color: #a9c7e6;
   background: rgb(169 199 230 / 0.12);
 }
 
 .hotspot:focus-visible {
+  outline: none;
+}
+
+.hotspot:focus-visible + .hotspot-marker {
   outline: 2px solid #365c82;
   outline-offset: -2px;
 }
 
+[data-night="true"] .hotspot:focus-visible + .hotspot-marker {
+  outline-color: #a9c7e6;
+}
+
 @media (hover: hover) {
-  .hotspot:hover {
+  .hotspot:hover + .hotspot-marker {
     background: rgb(128 128 128 / 0.1);
   }
 }
