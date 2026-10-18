@@ -58,6 +58,8 @@ pub struct MobiInfo {
     pub compression: u16,
     pub encoding: u32,
     pub version: u32,
+    /// Uncompressed MOBI 7 text bytes declared by the PalmDOC header.
+    pub text_length: u32,
     pub encrypted: bool,
     /// Record index where a KF8 part starts, in joint MOBI/KF8 files.
     pub kf8_boundary: Option<u32>,
@@ -226,11 +228,12 @@ pub fn parse_with(data: &[u8], text: bool) -> Result<Mobi, Error> {
     let short = || format_err!("truncated MOBI header");
     let mut info = MobiInfo {
         compression: u16_at(r0, 0).ok_or_else(short)?,
+        text_length: u32_at(r0, 4).ok_or_else(short)?,
         encrypted: u16_at(r0, 12).ok_or_else(short)? != 0,
         encoding: 1252,
         ..Default::default()
     };
-    let text_length = u32_at(r0, 4).ok_or_else(short)? as usize;
+    let text_length = info.text_length as usize;
     let text_records = u16_at(r0, 8).ok_or_else(short)? as usize;
     let (mut extra_flags, mut first_image) = (0u16, None);
     if r0.get(16..20) == Some(b"MOBI".as_slice()) {
@@ -1037,6 +1040,7 @@ mod tests {
         );
         assert_eq!(format!("{a:?}"), format!("{b:?}"));
         assert_eq!(a.title.as_deref(), Some("Lalka"));
+        assert_eq!(a.text_length, b"<p>Tekst.</p>".len() as u32);
         // And the cache path is the same with or without the conversion.
         let cache = testdir("head-cache");
         let (epub, _, now) = cached_epub(&path, &cache).unwrap();
@@ -1044,6 +1048,7 @@ mod tests {
         let (again, info, now) = cached_epub(&path, &cache).unwrap();
         assert_eq!((again, now), (epub, false));
         assert_eq!(info.title.as_deref(), Some("Lalka"));
+        assert_eq!(info.text_length, a.text_length);
     }
 
     /// Stock Kindle positions (bytes of MOBI text) must land on the same
