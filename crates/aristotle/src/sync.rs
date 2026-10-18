@@ -18,7 +18,9 @@
 //! Failures never interrupt reading: they are logged and shown on the sync
 //! screen.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use aristotle_i18n::{tf, tr, Msg};
@@ -56,15 +58,60 @@ pub struct Opened {
     pub token: u64,
     pub format: Format,
     pub path: PathBuf,
-    /// The locator stored when the book opened: no push if it is still
-    /// the same at the close.
+    /// The initial locator or the last successfully sent locator.
     pub at_open: Option<Locator>,
+    acknowledged: u64,
+    pending: BTreeMap<u64, Locator>,
+}
+
+impl Opened {
+    fn needs_push(&self, locator: &Locator) -> bool {
+        self.at_open.as_ref() != Some(locator) || self.pending.values().any(|p| p != locator)
+    }
+}
+
+pub struct PushReceipt {
+    pub book: String,
+    pub token: u64,
+    pub sequence: u64,
+    pub locator: Locator,
+}
+
+pub enum PushOutcome {
+    Unsupported,
+    Superseded,
+    Finished(Result<(), kosync::Error>),
+}
+
+type PushKey = (String, String, String);
+
+#[derive(Clone, Default)]
+struct PushGate(Arc<Mutex<BTreeMap<PushKey, u64>>>);
+
+impl PushGate {
+    fn run(
+        &self,
+        key: PushKey,
+        sequence: u64,
+        send: impl FnOnce() -> Result<(), kosync::Error>,
+    ) -> PushOutcome {
+        let mut latest = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = latest.entry(key).or_default();
+        if sequence <= *previous {
+            return PushOutcome::Superseded;
+        }
+        *previous = sequence;
+        PushOutcome::Finished(send())
+    }
 }
 
 #[derive(Default)]
 pub struct SyncState {
     pub opened: Option<Opened>,
     next_token: u64,
+    next_push: u64,
+    last_push_result: u64,
+    push_gate: PushGate,
     /// The progress a book had before this open touched it: what a pulled
     /// position is compared with.
     pub before_open: Option<(String, Option<Progress>)>,
@@ -127,59 +174,86 @@ fn push_progress(format: Format, path: &std::path::Path, locator: &Locator) -> O
 /// What a push needs, owned for the worker.
 struct Push {
     account: kosync::Account,
-    book: String,
+    receipt: PushReceipt,
+    gate: PushGate,
     format: Format,
     path: PathBuf,
-    locator: Locator,
     fraction: f32,
     device_id: String,
 }
 
 impl Push {
     fn run(self) -> Done {
-        let Some(progress) = push_progress(self.format, &self.path, &self.locator) else {
+        let Some(progress) = push_progress(self.format, &self.path, &self.receipt.locator) else {
             return Done::Pushed {
-                book: self.book,
-                result: None,
+                receipt: self.receipt,
+                outcome: PushOutcome::Unsupported,
             };
         };
         let p = Position {
-            document: lk::document(&self.book).to_string(),
+            document: lk::document(&self.receipt.book).to_string(),
             progress,
             percentage: kosync::percentage(self.fraction),
             device: DEVICE.into(),
             device_id: self.device_id,
             timestamp: None,
         };
-        let r = Kosync::new(Net::policy())
-            .push(&self.account, &p)
-            .map(|_| ());
+        let key = (
+            self.account.server.clone(),
+            self.account.username.clone(),
+            p.document.clone(),
+        );
+        let outcome = self.gate.run(key, self.receipt.sequence, || {
+            Kosync::new(Net::policy())
+                .push(&self.account, &p)
+                .map(|_| ())
+        });
         perf!(
             "sync: push {} {:?} {:.4}: {}",
             p.document,
             p.progress,
             p.percentage,
-            match &r {
-                Ok(()) => "ok".to_string(),
-                Err(e) => e.to_string(),
+            match &outcome {
+                PushOutcome::Finished(Ok(())) => "ok".to_string(),
+                PushOutcome::Finished(Err(e)) => e.to_string(),
+                PushOutcome::Superseded => "superseded".to_string(),
+                PushOutcome::Unsupported => unreachable!(),
             }
         );
         Done::Pushed {
-            book: self.book,
-            result: Some(r),
+            receipt: self.receipt,
+            outcome,
         }
     }
 }
 
 impl App {
-    pub(crate) fn on_pushed(&mut self, book: &str, result: Option<Result<(), kosync::Error>>) {
-        if result.is_none() {
-            perf!("sync: nothing KOReader could use for {book}; not sent");
+    pub(crate) fn on_pushed(&mut self, receipt: PushReceipt, outcome: PushOutcome) {
+        let opened = self
+            .sync
+            .opened
+            .as_mut()
+            .filter(|o| o.id == receipt.book && o.token == receipt.token);
+        if let Some(o) = opened {
+            o.pending.remove(&receipt.sequence);
+            if matches!(outcome, PushOutcome::Finished(Ok(()))) && receipt.sequence > o.acknowledged
+            {
+                o.at_open = Some(receipt.locator);
+                o.acknowledged = receipt.sequence;
+            }
         }
-        self.sync.message = match result {
-            None => tr(Msg::SyncStateNotSent).to_string(),
-            Some(Ok(())) => tr(Msg::SyncStateSent).to_string(),
-            Some(Err(e)) => describe_sync(&e),
+        if matches!(outcome, PushOutcome::Superseded) {
+            return;
+        }
+        if receipt.sequence <= self.sync.last_push_result {
+            return;
+        }
+        self.sync.last_push_result = receipt.sequence;
+        self.sync.message = match outcome {
+            PushOutcome::Unsupported => tr(Msg::SyncStateNotSent).to_string(),
+            PushOutcome::Finished(Ok(())) => tr(Msg::SyncStateSent).to_string(),
+            PushOutcome::Finished(Err(e)) => describe_sync(&e),
+            PushOutcome::Superseded => unreachable!(),
         };
     }
 
@@ -221,6 +295,8 @@ impl App {
             format,
             path: path.clone(),
             at_open,
+            acknowledged: 0,
+            pending: BTreeMap::new(),
         });
         self.sync.offer = None;
         let Some(account) = self.sync_account() else {
@@ -255,9 +331,8 @@ impl App {
         });
     }
 
-    /// Send the position of the open book if it moved. `closing` forgets
-    /// the book; otherwise (the screensaver) it stays open with this as
-    /// its new starting point. `wait` sends on this thread (quitting).
+    /// Send changed progress; only successful completion advances the baseline.
+    /// `closing` forgets the book; `wait` sends on this thread when quitting.
     pub(crate) fn sync_push(&mut self, closing: bool, wait: bool) {
         let Some(account) = self.sync_account() else {
             if closing {
@@ -269,16 +344,27 @@ impl App {
             return;
         };
         let Some(p) = self.lib.book(&o.id).and_then(|b| b.progress.clone()) else {
+            if closing {
+                self.sync.opened = None;
+            }
             return;
         };
-        let moved = o.at_open.as_ref() != Some(&p.locator);
-        o.at_open = Some(p.locator.clone());
+        let moved = o.needs_push(&p.locator);
+        self.sync.next_push += 1;
+        if moved {
+            o.pending.insert(self.sync.next_push, p.locator.clone());
+        }
         let push = Push {
             account,
-            book: o.id.clone(),
+            receipt: PushReceipt {
+                book: o.id.clone(),
+                token: o.token,
+                sequence: self.sync.next_push,
+                locator: p.locator,
+            },
+            gate: self.sync.push_gate.clone(),
             format: o.format,
             path: o.path.clone(),
-            locator: p.locator,
             fraction: p.fraction,
             device_id: self.net.accounts.device_id(),
         };
@@ -547,6 +633,44 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn older_requests_cannot_overwrite_newer_progress_on_the_server() {
+        let gate = PushGate::default();
+        let key = ("server".into(), "user".into(), "book".into());
+        assert!(matches!(
+            gate.run(key.clone(), 2, || Ok(())),
+            PushOutcome::Finished(Ok(()))
+        ));
+        assert!(matches!(
+            gate.run(key, 1, || panic!("obsolete push sent")),
+            PushOutcome::Superseded
+        ));
+        let other = ("server".into(), "user".into(), "other book".into());
+        assert!(matches!(
+            gate.run(other, 1, || Ok(())),
+            PushOutcome::Finished(Ok(()))
+        ));
+    }
+
+    #[test]
+    fn returning_to_the_baseline_still_supersedes_a_pending_different_position() {
+        let baseline = Locator::Page { index: 0 };
+        let mut opened = Opened {
+            id: "book".into(),
+            token: 1,
+            format: Format::Pdf,
+            path: PathBuf::new(),
+            at_open: Some(baseline.clone()),
+            acknowledged: 0,
+            pending: BTreeMap::new(),
+        };
+        assert!(!opened.needs_push(&baseline));
+        opened.pending.insert(1, Locator::Page { index: 5 });
+        assert!(opened.needs_push(&baseline));
+        opened.pending.clear();
+        assert!(!opened.needs_push(&baseline));
+    }
 
     fn remote(device: &str, id: &str, pct: f64, ts: Option<i64>) -> Position {
         Position {

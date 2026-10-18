@@ -2779,6 +2779,71 @@ mod tests {
         app.leave().unwrap();
     }
 
+    #[test]
+    fn a_failed_screensaver_push_retries_without_more_reading() {
+        use crate::sync::{PushOutcome, PushReceipt};
+        let Some((library, root, id)) = reopen_fixture(false) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        reopen(&mut app, "Reopened");
+        let token = app.sync.opened.as_ref().unwrap().token;
+        let baseline = app.sync.opened.as_ref().unwrap().at_open.clone();
+        let moved = aristotle_library::Locator::Epub {
+            spine: 0,
+            offset: 1,
+        };
+        assert_ne!(baseline.as_ref(), Some(&moved));
+        let mut p = app.lib.book(&id).unwrap().progress.clone().unwrap();
+        p.locator = moved.clone();
+        p.fraction = 0.1;
+        app.lib.set_progress(&id, p);
+        app.net.accounts.sync = Some(aristotle_net::store::SyncSettings {
+            server: "not a URL".into(),
+            username: "test".into(),
+            key: "test".into(),
+            auto: true,
+        });
+        for _ in 0..2 {
+            app.sync_push(false, false);
+            assert!(app.net.busy(), "unchanged progress was not retried");
+            wait(&mut app, |a| !a.net.busy());
+            assert_eq!(app.sync.opened.as_ref().unwrap().at_open, baseline);
+        }
+        let receipt = |token, sequence, locator| PushReceipt {
+            book: id.clone(),
+            token,
+            sequence,
+            locator,
+        };
+        app.on_pushed(
+            receipt(token, 10, moved.clone()),
+            PushOutcome::Finished(Ok(())),
+        );
+        assert_eq!(
+            app.sync.opened.as_ref().unwrap().at_open.as_ref(),
+            Some(&moved)
+        );
+        let stale = aristotle_library::Locator::Epub {
+            spine: 0,
+            offset: 0,
+        };
+        app.on_pushed(
+            receipt(token, 9, stale.clone()),
+            PushOutcome::Finished(Ok(())),
+        );
+        app.on_pushed(
+            receipt(token.wrapping_sub(1), 11, stale),
+            PushOutcome::Finished(Ok(())),
+        );
+        assert_eq!(
+            app.sync.opened.as_ref().unwrap().at_open.as_ref(),
+            Some(&moved)
+        );
+        app.net.accounts.sync = None;
+        app.leave().unwrap();
+    }
+
     fn touch(app: &mut App, phase: HalPhase, x: u32, y: u32, time_us: u64) {
         let ev = aristotle_hal::input::TouchEvent {
             phase,

@@ -801,7 +801,7 @@ impl App {
                     token,
                     result,
                 } => self.on_pulled(book, token, result)?,
-                Done::Pushed { book, result } => self.on_pushed(&book, result),
+                Done::Pushed { receipt, outcome } => self.on_pushed(receipt, outcome),
                 Done::Feed { token, result } => self.on_feed(token, result)?,
                 Done::Progress {
                     token,

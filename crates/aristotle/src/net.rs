@@ -47,9 +47,8 @@ pub enum Done {
         result: Result<Option<(kosync::Position, crate::sync::Remote)>, kosync::Error>,
     },
     Pushed {
-        book: String,
-        /// `None` when there was nothing KOReader could use.
-        result: Option<Result<(), kosync::Error>>,
+        receipt: crate::sync::PushReceipt,
+        outcome: crate::sync::PushOutcome,
     },
     /// A feed for the catalog screens (`token` says which request).
     Feed {
