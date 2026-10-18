@@ -1040,46 +1040,51 @@ impl App {
 
     // --- Event loop -------------------------------------------------------
 
-    fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
-        loop {
-            if STOP.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            let now = monotonic_us();
-            let mut timeout = Duration::from_secs(1);
-            if let Some(t) = self.ui.next_deadline(now) {
-                timeout = timeout.min(Duration::from_micros(t.saturating_sub(now).max(1000)));
-            }
-            if let Some(d) = self.debounce.deadline() {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
-            if let Some(d) = self.sleep_deadline() {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
+    fn poll_timeout(&self, now_us: u64, now: Instant) -> Duration {
+        let mut timeout = Duration::from_secs(1);
+        if let Some(t) = self.ui.next_deadline(now_us) {
+            timeout = timeout.min(Duration::from_micros(t.saturating_sub(now_us).max(1000)));
+        }
+        if let Some(d) = self.debounce.deadline() {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if let Some(d) = self.sleep_deadline() {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if self.asleep.is_none() {
             if let Screen::Reader(r) = &self.screen {
                 if r.session.paginating() {
                     timeout = timeout.min(Duration::from_millis(250));
                 }
-                // A long press fires while the finger rests.
-                if let Some(t) = r.gestures.next_deadline(now) {
+                if let Some(t) = r.gestures.next_deadline(now_us) {
                     timeout = timeout.min(Duration::from_micros(t.max(1000)));
                 }
                 if matches!(r.overlay, Overlay::Waiting { .. }) {
                     timeout = timeout.min(Duration::from_millis(20));
                 }
             }
-            if self.opening.is_some() || self.pending.is_some() {
-                timeout = timeout.min(Duration::from_millis(10));
+        }
+        if self.opening.is_some() || self.pending.is_some() {
+            timeout = timeout.min(Duration::from_millis(10));
+        }
+        if self.net.busy() {
+            timeout = timeout.min(Duration::from_millis(100));
+        }
+        if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        timeout
+    }
+
+    fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
+        loop {
+            if STOP.load(Ordering::Relaxed) {
+                return Ok(());
             }
-            if self.net.busy() {
-                timeout = timeout.min(Duration::from_millis(100));
-            }
-            if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
-            if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
+            let timeout = self.poll_timeout(monotonic_us(), Instant::now());
             let (events, _) =
                 match touch.poll_with(timeout.max(Duration::from_millis(1)), self.sleep_ctl.fd()) {
                     Ok(e) => e,
@@ -2714,6 +2719,73 @@ mod tests {
             app.wake(true).unwrap();
             assert!(updates(&app).len() > before);
             assert!(matches!(app.screen, Screen::Network(_)));
+        }
+    }
+
+    #[test]
+    fn asleep_reader_workers_do_not_shorten_polling_but_network_completions_do() {
+        let Some((library, root, id)) = reopen_fixture(true) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        app.open_by_title("Reopened").unwrap();
+        wait(&mut app, |app| matches!(app.screen, Screen::Reader(_)));
+        let mut source =
+            Source::new(&app.lib, app.lib.book(&id).unwrap(), &app.mobi_cache).unwrap();
+        source.data_dir = testdir("sleep-paginator");
+        let prepared = Session::prepare(source, app.prefs.style(), false).unwrap();
+        let Screen::Reader(reader) = &mut app.screen else {
+            panic!("reader required");
+        };
+        reader.session = Session::from_prepared(prepared).unwrap();
+        assert!(reader.session.paginating());
+
+        for waiting in [false, true] {
+            for by_powerd in [false, true] {
+                let Screen::Reader(reader) = &mut app.screen else {
+                    panic!("reader required");
+                };
+                reader.overlay = if waiting {
+                    Overlay::Waiting {
+                        sel: selection::Selection {
+                            anchor: (0, 0),
+                            start: 0,
+                            end: 0,
+                        },
+                        words: Rc::new(Vec::new()),
+                    }
+                } else {
+                    Overlay::None
+                };
+                let now_us = monotonic_us();
+                let now = Instant::now();
+                app.prewarm.input();
+                app.debounce.saved();
+                app.last_touch = now;
+                let awake = if waiting { 20 } else { 250 };
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(awake));
+
+                app.fall_asleep(by_powerd).unwrap();
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                let (release, blocked) = std::sync::mpsc::channel();
+                app.net.spawn("sleep-timeout", move |_| {
+                    blocked.recv().unwrap();
+                    net::Done::Login {
+                        register: false,
+                        result: Ok(()),
+                    }
+                });
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(100));
+                release.send(()).unwrap();
+                wait(&mut app, |app| !app.net.busy());
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                let Screen::Reader(reader) = &app.screen else {
+                    panic!("reader retained");
+                };
+                assert!(reader.session.paginating());
+                assert_eq!(matches!(reader.overlay, Overlay::Waiting { .. }), waiting);
+                app.wake(by_powerd).unwrap();
+            }
         }
     }
 
