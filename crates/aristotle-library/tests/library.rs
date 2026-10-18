@@ -246,6 +246,151 @@ fn by_title<'a>(lib: &'a Library, title: &str) -> &'a aristotle_library::BookRec
 }
 
 #[test]
+fn legacy_cbz_metadata_refreshes_once_and_keeps_reading_state() {
+    let base = testdir("cbz-refresh");
+    let root = base.join("documents");
+    let data = base.join("data");
+    write(
+        &root.join("Comic.cbz"),
+        &zip(&[
+            ("page10.png", &png(12, 16, 224)),
+            ("page2.png", &png(12, 16, 32)),
+            ("unused.webp", b"x"),
+        ]),
+    );
+    write(&root.join("Bitmap.cbz"), &zip(&[("page1.BMP", b"BM")]));
+    write(&root.join("Webp.cbz"), &zip(&[("page1.webp", b"x")]));
+    let mut library = Library::open(&data).unwrap();
+    let scan = library.scan(&root, &ScanOptions::default()).unwrap();
+    assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+    let id = by_title(&library, "Comic").id.clone();
+    let progress = Progress {
+        fraction: 0.5,
+        locator: Locator::Page { index: 1 },
+        updated: 1_000,
+        source: None,
+        page: None,
+    };
+    library.mark_opened(&id, 1_000);
+    library.set_progress(&id, progress.clone());
+    library.save().unwrap();
+
+    let path = data.join("library.json");
+    let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("cbz_metadata_version");
+    let webp_stamp = legacy["ignored"][0].clone();
+    let books = legacy["books"].as_array_mut().unwrap();
+    let comic = books.iter_mut().find(|b| b["id"] == id).unwrap();
+    comic["meta"]["pages"] = 99.into();
+    comic["cover"] = serde_json::Value::Null;
+    let mut webp = comic.clone();
+    webp["id"] = "legacy-webp".into();
+    for key in ["path", "size", "mtime", "mtime_ns"] {
+        webp[key] = webp_stamp[key].clone();
+    }
+    let bitmap = books
+        .iter()
+        .position(|b| b["path"] == "Bitmap.cbz")
+        .unwrap();
+    let record: aristotle_library::BookRecord =
+        serde_json::from_value(books.remove(bitmap)).unwrap();
+    let stamp = serde_json::to_value(record.file).unwrap();
+    books.push(webp);
+    legacy["ignored"] = serde_json::json!([stamp]);
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    let mut library = Library::open(&data).unwrap();
+    let scan = library.scan(&root, &ScanOptions::default()).unwrap();
+    assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+    assert_eq!((scan.updated, scan.added), (1, 1));
+    assert_eq!(scan.removed, 1);
+    let comic = library.book(&id).unwrap();
+    assert_eq!(comic.meta.pages, Some(2));
+    assert_eq!(comic.progress, Some(progress.clone()));
+    assert_eq!(comic.last_opened, Some(1_000));
+    assert_eq!(comic.status, Status::Reading);
+    let cache = aristotle_library::cover::CoverCache::new(data.join("covers"), Default::default());
+    assert_eq!(comic.cover, Some(cache.key(&png(12, 16, 32))));
+    let thumbnail = read_pgm(&library.cover_path(comic).unwrap()).unwrap();
+    assert_eq!(thumbnail.width, 200);
+    assert_eq!(by_title(&library, "Bitmap").meta.pages, Some(1));
+    let removed = library
+        .index()
+        .removed
+        .iter()
+        .find(|b| b.id == "legacy-webp")
+        .unwrap();
+    assert_eq!(removed.progress, Some(progress.clone()));
+    library.save().unwrap();
+
+    let mut library = Library::open(&data).unwrap();
+    let scan = library.scan(&root, &ScanOptions::default()).unwrap();
+    assert_eq!((scan.unchanged, scan.updated, scan.added), (2, 0, 0));
+    assert!(scan.parse_time.is_zero());
+
+    let original = fs::read(root.join("Comic.cbz")).unwrap();
+    let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("cbz_metadata_version");
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+    fs::write(root.join("Comic.cbz"), b"PK\x03\x04broken").unwrap();
+    let mut library = Library::open(&data).unwrap();
+    let scan = library.scan(&root, &ScanOptions::default()).unwrap();
+    assert_eq!(scan.errors.len(), 1);
+    assert_eq!(library.book(&id).unwrap().progress, Some(progress.clone()));
+    assert_eq!(library.index().cbz_metadata_version, 0);
+    library.save().unwrap();
+    fs::write(root.join("Comic.cbz"), original).unwrap();
+    let mut library = Library::open(&data).unwrap();
+    assert!(library
+        .scan(&root, &ScanOptions::default())
+        .unwrap()
+        .errors
+        .is_empty());
+    assert_eq!(library.book(&id).unwrap().progress, Some(progress));
+    assert_eq!(library.index().cbz_metadata_version, 1);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn cbz_refresh_preserves_duplicate_copy_ids() {
+    let base = testdir("cbz-duplicate-refresh");
+    let root = base.join("documents");
+    let data = base.join("data");
+    let comic = zip(&[("page2.png", &png(12, 16, 32))]);
+    write(&root.join("First.cbz"), &comic);
+    write(&root.join("Second.cbz"), &comic);
+    let mut library = Library::open(&data).unwrap();
+    library.scan(&root, &ScanOptions::default()).unwrap();
+    library.save().unwrap();
+
+    let path = data.join("library.json");
+    let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("cbz_metadata_version");
+    let first = legacy["books"][0]["id"].clone();
+    legacy["books"][0]["id"] = legacy["books"][1]["id"].clone();
+    legacy["books"][1]["id"] = first;
+    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    let mut library = Library::open(&data).unwrap();
+    let first = by_title(&library, "First").id.clone();
+    let second = by_title(&library, "Second").id.clone();
+    library.scan(&root, &ScanOptions::default()).unwrap();
+    assert_eq!(by_title(&library, "First").id, first);
+    assert_eq!(by_title(&library, "Second").id, second);
+    assert_ne!(first, second);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn scan_describes_every_format() {
     let base = testdir("formats");
     let root = base.join("documents");

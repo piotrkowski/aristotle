@@ -30,6 +30,9 @@ pub const INDEX_FILE: &str = "library.json";
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Index {
     pub version: u32,
+    /// CBZ parser version used by the last completed scan.
+    #[serde(default)]
+    pub cbz_metadata_version: u32,
     /// Library root the paths are relative to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,

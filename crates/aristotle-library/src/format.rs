@@ -154,7 +154,7 @@ fn sniff_zip(path: &Path, head: &[u8], ext: &str) -> Result<Option<Format>> {
     let images = zip
         .entries()
         .iter()
-        .filter(|e| crate::cover::is_image_name(&e.name))
+        .filter(|e| crate::cbz::is_page_name(&e.name))
         .count();
     if (ext == "cbz" || ext == "zip") && images > 0 && images * 2 >= zip.entries().len() {
         return Ok(Some(Format::Cbz));

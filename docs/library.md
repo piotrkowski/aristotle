@@ -18,10 +18,12 @@ The device book root is `/mnt/us/documents`. Detection uses file contents, not j
 | [MOBI](glossary.md#mobi), [AZW3](glossary.md#azw3) | PalmDB `BOOKMOBI` | Record 0 and [EXTH](glossary.md#exth) | EXTH 201 |
 | [PalmDOC](glossary.md#palmdoc) | `TEXtREAd` | Database name | None |
 | PDF | `%PDF-` in the first 1 KiB | Info dictionary and page count | None |
-| CBZ | `.cbz` or `.zip` with at least half its entries images | `ComicInfo.xml` and page count | First image |
+| CBZ | `.cbz` or `.zip` with at least half its entries reader-supported images | `ComicInfo.xml` and page count | First page when JPEG or PNG |
 | TXT | `.txt` with text bytes or UTF-16 BOM | File and folder names | None |
 
 The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, [`My Clippings.txt`](glossary.md#my-clippingstxt), and directory symlinks. Kindle dictionaries stay out of the library. DRM-encrypted MOBI is listed with `drm: true` but cannot be read.
+
+CBZ page names use case-insensitive ASCII natural ordering, so `page2.png` precedes `page10.png`. BMP, GIF, JPEG, JPEG 2000, JPEG XR, JBIG2, PNG, PNM, PKM, and TIFF page names match the bundled MuPDF reader. WebP entries are not pages. A one-time scan refreshes older CBZ metadata and retries previously ignored comic archives without discarding reading state.
 
 [KFX](glossary.md#kfx), CBR and CB7 comic archives, FB2 (FictionBook), DjVu scanned documents, and Kindle Topaz books are unsupported. Index support does not imply reader support ([Reader formats](reader.md#formats-and-positions)).
 
@@ -190,7 +192,7 @@ Automatic sync fetches progress on open with a 5-second timeout. A different rem
 
 ### Catalogs (OPDS 1.2)
 
-OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
+OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. CBZ opens in the default reader; KF8-only AZW3 reading remains unverified ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
 
 Downloads go to `documents/<catalog name>/<title> - <author>.<ext>`. Each is limited to 200 MiB and leaves at least 20 MiB free. A hidden `.part` file is synced and renamed on success. Failure or cancellation removes it. Existing files are not replaced. The library scans after download.
 
