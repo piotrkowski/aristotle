@@ -19,8 +19,9 @@
 //! (T2) it emits `readyToSuspend` and suspends a few seconds after that;
 //! the e-ink picture stays. The next press emits `outOfScreenSaver` and the
 //! app redraws. `touchScreenSaverTimeout 1` restarts T1. powerd ignores the
-//! button while `preventScreenSaver` is 1, and while it thinks USB drive
-//! mode is on, which on our unit includes the USB network [dev].
+//! button while `preventScreenSaver` is 1 or its drive-mode enum is 3 [firmware].
+//! Drive-mode enum 1 means off; an ignored button during USB networking did not prove its cause [dev].
+//! Firmware also requires KAF frameworkStarted and no blanket splash module.
 
 use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
