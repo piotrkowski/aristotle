@@ -69,6 +69,11 @@ current release-driven gestures with original test text. Read the
 updates, including waveform, full mode, rectangle, and completion time.
 It saves no framebuffer, book text, account data, or library path.
 `replay --json` reports microsecond values and an explicit `valid` field.
+For injected taps, holds, swipes, and drags, `up_us` is sampled immediately
+before enqueueing the release SYN event. The target can respond before the
+injector returns without losing its post-release first-update sample.
+Older traces retain their recorded timestamps. Replay does not infer or
+repair scheduling delays in those timestamps.
 Missing completion metrics are `null`. Replay exits unsuccessfully for
 incomplete captures, log overruns, unsupported schemas, or invalid timestamps.
 

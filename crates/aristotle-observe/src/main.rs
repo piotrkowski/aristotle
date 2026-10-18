@@ -93,6 +93,15 @@ struct Injector {
     tracking_id: i32,
 }
 
+fn enqueue_release(
+    clock: impl FnOnce() -> u64,
+    enqueue: impl FnOnce() -> io::Result<()>,
+) -> io::Result<u64> {
+    let released_us = clock();
+    enqueue()?;
+    Ok(released_us)
+}
+
 impl Injector {
     fn open() -> io::Result<Self> {
         let (path, _) = find_touchscreen()?;
@@ -136,25 +145,25 @@ impl Injector {
         self.emit(EV_ABS, ABS_MT_POSITION_Y, y as i32)
     }
 
-    fn up(&mut self) -> io::Result<()> {
+    fn up(&mut self) -> io::Result<u64> {
         self.emit(EV_ABS, ABS_MT_SLOT, 0)?;
         self.emit(EV_ABS, ABS_MT_PRESSURE, 0)?;
         self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)?;
-        self.emit(EV_SYN, 0, 0)
+        enqueue_release(monotonic_us, || self.emit(EV_SYN, 0, 0))
     }
 
-    fn tap(&mut self, x: u32, y: u32, hold_ms: u64) -> io::Result<()> {
+    fn tap(&mut self, x: u32, y: u32, hold_ms: u64) -> io::Result<u64> {
         self.down(x, y)?;
         thread::sleep(Duration::from_millis(hold_ms));
         self.up()
     }
 
-    fn swipe(&mut self, from: (u32, u32), to: (u32, u32), ms: u64) -> io::Result<()> {
+    fn swipe(&mut self, from: (u32, u32), to: (u32, u32), ms: u64) -> io::Result<u64> {
         self.drag(from, to, 0, ms)
     }
 
     /// Down at `from`, rest `hold` ms, move to `to` over `ms`, lift.
-    fn drag(&mut self, from: (u32, u32), to: (u32, u32), hold: u64, ms: u64) -> io::Result<()> {
+    fn drag(&mut self, from: (u32, u32), to: (u32, u32), hold: u64, ms: u64) -> io::Result<u64> {
         let steps = (ms / 16).max(2);
         self.down(from.0, from.1)?;
         thread::sleep(Duration::from_millis(hold));
@@ -377,23 +386,23 @@ fn run_script(path: &str, trace_path: Option<&str>) -> io::Result<()> {
             Some("label") => obs.label = words[1..].join(" "),
             Some("tap") => {
                 let down = monotonic_us();
-                inj.tap(n(1), n(2), 60)?;
-                obs.injected((n(1), n(2)), down, monotonic_us());
+                let up = inj.tap(n(1), n(2), 60)?;
+                obs.injected((n(1), n(2)), down, up);
             }
             Some("hold") => {
                 let down = monotonic_us();
-                inj.tap(n(1), n(2), n(3) as u64)?;
-                obs.injected((n(1), n(2)), down, monotonic_us());
+                let up = inj.tap(n(1), n(2), n(3) as u64)?;
+                obs.injected((n(1), n(2)), down, up);
             }
             Some("swipe") => {
                 let down = monotonic_us();
-                inj.swipe((n(1), n(2)), (n(3), n(4)), n(5) as u64)?;
-                obs.injected((n(1), n(2)), down, monotonic_us());
+                let up = inj.swipe((n(1), n(2)), (n(3), n(4)), n(5) as u64)?;
+                obs.injected((n(1), n(2)), down, up);
             }
             Some("drag") => {
                 let down = monotonic_us();
-                inj.drag((n(1), n(2)), (n(3), n(4)), n(5) as u64, n(6) as u64)?;
-                obs.injected((n(1), n(2)), down, monotonic_us());
+                let up = inj.drag((n(1), n(2)), (n(3), n(4)), n(5) as u64, n(6) as u64)?;
+                obs.injected((n(1), n(2)), down, up);
             }
             Some("wait") => obs.pump_for(n(1) as u64)?,
             Some("snap") => snap(words.get(1).copied().unwrap_or("snap"))?,
@@ -561,7 +570,7 @@ fn main() -> io::Result<()> {
             trace_path(args.get(2..).unwrap_or_default())?,
         ),
         Some("replay") => trace::replay(&args[1..]),
-        Some("tap") => Injector::open()?.tap(n(1), n(2), 60),
+        Some("tap") => Injector::open()?.tap(n(1), n(2), 60).map(|_| ()),
         Some("raw") => raw(n(1).max(1) as u64),
         Some("caps") => caps(),
         Some("bench") => bench::run(&args[1..]),
@@ -572,5 +581,50 @@ fn main() -> io::Result<()> {
             );
             std::process::exit(2);
         }
+    }
+}
+
+#[cfg(test)]
+mod injection_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn release_response_before_injector_returns_stays_a_post_release_sample() {
+        let clock = Cell::new(980_000);
+        let response_start = Cell::new(0);
+        let released_us = enqueue_release(
+            || clock.get(),
+            || {
+                clock.set(990_000);
+                response_start.set(clock.get());
+                clock.set(1_000_000);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(released_us, 980_000);
+        let interactions = [Interaction {
+            label: "fast-response".into(),
+            down_us: 940_000,
+            up_us: released_us,
+            x: 900,
+            y: 800,
+        }];
+        let updates = [kmsg::Update {
+            start_us: response_start.get(),
+            end_us: Some(1_500_000),
+            ..Default::default()
+        }];
+        let rows = report::measure(&interactions, &updates, 0, capture::End::default());
+        assert_eq!(rows[0].pre_release, 0);
+        assert_eq!(rows[0].first_start_us, Some(10_000));
+        assert_eq!(rows[0].first_done_us, Some(520_000));
+    }
+
+    #[test]
+    fn failed_release_enqueue_does_not_return_a_measurement_timestamp() {
+        let result = enqueue_release(|| 980_000, || Err(io::Error::other("write failed")));
+        assert!(result.is_err());
     }
 }
