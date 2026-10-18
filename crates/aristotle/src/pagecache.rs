@@ -31,7 +31,7 @@ use aristotle_render::style::Style;
 
 /// Bump when an aristotle-render or Plato change can move page breaks for
 /// the same style; old files are then ignored (and new ones written).
-pub const LAYOUT_VERSION: u32 = 3;
+pub const LAYOUT_VERSION: u32 = 4;
 
 pub const PAGES_DIR: &str = "pages";
 

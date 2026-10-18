@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use aristotle_render::book::{Book, Position};
+use aristotle_render::book::{Book, Engine, Position};
 use aristotle_render::mobi::{write_epub, Mobi, MobiInfo};
 use aristotle_render::style::Style;
 
@@ -166,6 +166,72 @@ fn mobi_file(title: &str, text: &str) -> Vec<u8> {
         out.extend_from_slice(r);
     }
     out
+}
+
+#[test]
+fn recognized_content_overrides_the_filename() {
+    let Some(data) = data_dir() else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "no render data directory in CI"
+        );
+        eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
+        return;
+    };
+    aristotle_render::use_data_dir(&data).unwrap();
+    let epub = sample_epub();
+    let dir = epub.parent().unwrap();
+    let cache = dir.join("converted");
+    let style = Style::pw4();
+    let mobi = mobi_file(
+        "Format test",
+        "<html><body><p>A format test.</p></body></html>",
+    );
+
+    for filename in [
+        "renamed.mobi",
+        "renamed.azw3",
+        "renamed.pdf",
+        "renamed.kepub",
+        "extensionless",
+    ] {
+        let path = dir.join(filename);
+        std::fs::copy(&epub, &path).unwrap();
+        let mut book = Book::open(&path, &style, Some(&cache)).unwrap();
+        assert_eq!(book.engine(), Engine::Plato, "{filename}");
+        assert!(book.mobi().is_none(), "{filename}");
+        let start = book.locate(0).unwrap();
+        assert!(!book.words(start).is_empty(), "{filename}");
+    }
+
+    for filename in [
+        "mobi7.azw3",
+        "mobi.epub",
+        "mobi.pdf",
+        "mobi-without-extension",
+    ] {
+        let path = dir.join(filename);
+        std::fs::write(&path, &mobi).unwrap();
+        let mut book = Book::open(&path, &style, Some(&cache)).unwrap();
+        assert_eq!(book.engine(), Engine::Plato, "{filename}");
+        assert!(book.mobi().is_some(), "{filename}");
+        let start = book.locate(0).unwrap();
+        assert!(!book.words(start).is_empty(), "{filename}");
+    }
+
+    let pdf = b"%PDF-1.4\n1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n\
+        2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj\n\
+        3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 100 100]>> endobj\n\
+        trailer <</Root 1 0 R>>\n%%EOF\n";
+    for filename in ["pdf.epub", "pdf.mobi", "pdf-without-extension"] {
+        let path = dir.join(filename);
+        std::fs::write(&path, pdf).unwrap();
+        let mut book = Book::open(&path, &style, Some(&cache)).unwrap();
+        assert_eq!(book.engine(), Engine::Fixed, "{filename}");
+        assert_eq!(book.known_page_count(), Some(1), "{filename}");
+        assert!(book.render_body(0).is_some(), "{filename}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 /// A converted MOBI saves stock Kindle positions through its position map.

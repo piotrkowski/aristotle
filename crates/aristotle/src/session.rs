@@ -203,10 +203,13 @@ impl Session {
         );
         let t = Instant::now();
         let target = src.exact.unwrap_or_else(|| {
-            progress::positions(src.saved.as_ref())
-                .iter()
-                .find_map(|p| book.location_of(p))
-                .unwrap_or(0)
+            progress::positions(
+                src.saved.as_ref(),
+                progress::stock_positions_compatible(&book),
+            )
+            .iter()
+            .find_map(|p| book.location_of(p))
+            .unwrap_or(0)
         });
         let current = book
             .page_start(target)

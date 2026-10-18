@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use plato_core::anyhow::{format_err, Error};
 use plato_core::document::epub::EpubDocument;
 use plato_core::document::html::layout::{hyph_lang, DEFAULT_HYPH_LANG, HYPHENATION_PATTERNS};
+use plato_core::document::pdf::PdfOpener;
 use plato_core::document::{self, file_kind, Document, Location, TocEntry};
 use plato_core::framebuffer::Pixmap;
 use plato_core::metadata::TextAlign;
@@ -202,10 +203,14 @@ impl Book {
     /// relative to the current directory, so call [`crate::use_data_dir`]
     /// first.
     pub fn open(path: &Path, style: &Style, cache_dir: Option<&Path>) -> Result<Book, Error> {
-        let mut kind = file_kind(path).unwrap_or_default();
+        let detected = aristotle_library::format::sniff(path)
+            .map_err(|e| format_err!("{}: {e}", path.display()))?;
+        let mut kind = detected
+            .map(|f| f.name().to_string())
+            .unwrap_or_else(|| file_kind(path).unwrap_or_default());
         let mut source = path.to_path_buf();
         let mut mobi = None;
-        let is_mobi = matches!(kind.as_str(), "mobi" | "azw" | "prc");
+        let is_mobi = kind == "mobi";
         if let (true, Some(dir)) = (is_mobi, cache_dir) {
             match crate::mobi::cached_epub(path, dir) {
                 Ok((epub, info, converted_now)) => {
@@ -240,6 +245,14 @@ impl Book {
                 epub.set_language(language.clone());
             }
             Box::new(epub)
+        } else if detected.is_some() {
+            let mut opener = PdfOpener::new().ok_or_else(|| format_err!("can't create MuPDF"))?;
+            if matches!(kind.as_str(), "mobi" | "azw3" | "txt") {
+                opener.load_user_stylesheet();
+            }
+            Box::new(opener.open(path).ok_or_else(|| {
+                format_err!("can't open {} (detected kind {:?})", path.display(), kind)
+            })?)
         } else {
             document::open(path)
                 .ok_or_else(|| format_err!("can't open {} (kind {:?})", path.display(), kind))?

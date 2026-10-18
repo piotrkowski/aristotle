@@ -13,6 +13,7 @@ description = "E-book page renderer for Aristotle on the PW4, built on Plato's d
 
 [dependencies]
 aristotle-hal = { path = "../aristotle-hal" }
+aristotle-library = { path = "../aristotle-library" }
 libc = "0.2"
 # Same version as plato-core, to decode spine hrefs exactly as it does.
 percent-encoding = "2.3.2"
