@@ -796,7 +796,11 @@ impl App {
                         self.show_network(Refresh::Auto)?;
                     }
                 }
-                Done::Pulled { book, result } => self.on_pulled(book, result)?,
+                Done::Pulled {
+                    book,
+                    token,
+                    result,
+                } => self.on_pulled(book, token, result)?,
                 Done::Pushed { book, result } => match result {
                     None => perf!("sync: nothing KOReader could use for {book}; not sent"),
                     Some(Ok(())) => {}
