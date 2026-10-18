@@ -584,10 +584,10 @@ pub fn extract_cbz(path: &Path, want_cover: bool) -> Result<Extracted> {
     let mut images: Vec<_> = zip
         .entries()
         .iter()
-        .filter(|e| crate::cover::is_image_name(&e.name))
+        .filter(|e| crate::cbz::is_page_name(&e.name))
         .cloned()
         .collect();
-    images.sort_by(|a, b| a.name.cmp(&b.name));
+    images.sort_by(|a, b| crate::cbz::page_order(&a.name, &b.name));
     let mut ex = Extracted::default();
     ex.meta.pages = Some(images.len() as u32);
     if let Ok(info) = zip.read("ComicInfo.xml") {
@@ -616,7 +616,14 @@ pub fn extract_cbz(path: &Path, want_cover: bool) -> Result<Extracted> {
     }
     if want_cover {
         if let Some(first) = images.first() {
-            ex.cover = zip.read_entry(first).ok();
+            if let Ok(bytes) = zip.read_entry(first) {
+                if matches!(
+                    crate::cover::sniff_image(&bytes),
+                    Some(crate::cover::ImageKind::Jpeg | crate::cover::ImageKind::Png)
+                ) {
+                    ex.cover = Some(bytes);
+                }
+            }
         }
     }
     Ok(ex)

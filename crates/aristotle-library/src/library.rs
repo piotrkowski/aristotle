@@ -263,8 +263,18 @@ impl Library {
             .into_iter()
             .map(|b| (b.file.path.clone(), b))
             .collect();
+        let refresh_cbz = self.index.cbz_metadata_version < crate::cbz::METADATA_VERSION;
         let old_ignored: HashMap<String, FileStamp> = std::mem::take(&mut self.index.ignored)
             .into_iter()
+            .filter(|s| {
+                !refresh_cbz
+                    || !Path::new(&s.path)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| {
+                            e.eq_ignore_ascii_case("cbz") || e.eq_ignore_ascii_case("zip")
+                        })
+            })
             .map(|s| (s.path.clone(), s))
             .collect();
         let mut books = Vec::new();
@@ -272,7 +282,7 @@ impl Library {
         let mut pending: Vec<(Found, Option<BookRecord>)> = Vec::new();
         for f in found {
             if let Some(b) = old_books.remove(&f.stamp.path) {
-                if b.file.same_file(&f.stamp) {
+                if b.file.same_file(&f.stamp) && !(refresh_cbz && b.format == Format::Cbz) {
                     books.push(b);
                     report.unchanged += 1;
                 } else {
@@ -294,19 +304,36 @@ impl Library {
         let mut vanished: HashMap<String, BookRecord> =
             old_books.into_values().map(|b| (b.id.clone(), b)).collect();
         let mut taken_ids: HashSet<String> = books.iter().map(|b| b.id.clone()).collect();
+        taken_ids.extend(pending.iter().filter_map(|(f, previous)| {
+            previous
+                .as_ref()
+                .filter(|b| refresh_cbz && b.format == Format::Cbz && b.file.same_file(&f.stamp))
+                .map(|b| b.id.clone())
+        }));
         let now = now();
+        let mut cbz_refresh_failed = false;
 
         for (f, prev) in pending {
             let t0 = Instant::now();
             let fmt = match format::sniff(&f.abs) {
                 Ok(Some(fmt)) => fmt,
                 Ok(None) => {
+                    if let Some(previous) = prev {
+                        self.index.removed.push(previous);
+                        report.removed += 1;
+                    }
                     ignored.push(f.stamp);
                     report.ignored += 1;
                     continue;
                 }
                 Err(e) => {
                     report.errors.push((f.stamp.path.clone(), e.to_string()));
+                    if let Some(previous) = prev.filter(|p| refresh_cbz && p.format == Format::Cbz)
+                    {
+                        cbz_refresh_failed = true;
+                        taken_ids.insert(previous.id.clone());
+                        books.push(previous);
+                    }
                     continue;
                 }
             };
@@ -321,6 +348,12 @@ impl Library {
                 Ok(v) => v,
                 Err(e) => {
                     report.errors.push((f.stamp.path.clone(), e.to_string()));
+                    if let Some(previous) = prev.filter(|p| refresh_cbz && p.format == Format::Cbz)
+                    {
+                        cbz_refresh_failed = true;
+                        taken_ids.insert(previous.id.clone());
+                        books.push(previous);
+                    }
                     continue;
                 }
             };
@@ -345,7 +378,12 @@ impl Library {
                 report.cover_time += t1.elapsed();
             }
             // Identical copies of one file share an ID; keep IDs unique.
-            if taken_ids.contains(&id) {
+            if let Some(previous) = prev
+                .as_ref()
+                .filter(|b| refresh_cbz && b.format == Format::Cbz && b.file.same_file(&f.stamp))
+            {
+                id = previous.id.clone();
+            } else if taken_ids.contains(&id) {
                 let base = id.clone();
                 let mut n = 2;
                 while taken_ids.contains(&id) {
@@ -385,7 +423,7 @@ impl Library {
             }
             books.push(rec);
         }
-        report.removed = vanished.len();
+        report.removed += vanished.len();
         self.index.removed.extend(vanished.into_values());
         if self.index.removed.len() > MAX_REMOVED {
             self.index
@@ -397,6 +435,9 @@ impl Library {
         ignored.sort_by(|a, b| a.path.cmp(&b.path));
         self.index.books = books;
         self.index.ignored = ignored;
+        if !cbz_refresh_failed {
+            self.index.cbz_metadata_version = crate::cbz::METADATA_VERSION;
+        }
         report.total_time = started.elapsed();
         Ok(report)
     }

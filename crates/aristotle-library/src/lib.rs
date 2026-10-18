@@ -19,6 +19,7 @@
 //!
 //! See `docs/library.md` for the design and measurements.
 
+mod cbz;
 pub mod clippings;
 pub mod cover;
 pub mod encoding;

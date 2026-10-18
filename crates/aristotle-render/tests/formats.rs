@@ -64,7 +64,7 @@ fn default_bundle_renders_cbz_pages_in_natural_order() {
     let path = scratch.0.join("generated.cbz");
     let mut archive = ZipWriter::new(std::fs::File::create(&path).unwrap());
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    for (name, gray) in [("page10.png", 224), ("page2.png", 128), ("page1.png", 32)] {
+    for (name, gray) in [("page20.png", 224), ("page10.png", 128), ("page2.png", 32)] {
         archive.start_file(name, options).unwrap();
         archive.write_all(&png(gray)).unwrap();
     }
@@ -76,6 +76,10 @@ fn default_bundle_renders_cbz_pages_in_natural_order() {
             std::fs::copy(&path, &renamed).unwrap();
         }
         assert_eq!(sniff(&renamed).unwrap(), Some(Format::Cbz));
+        let metadata =
+            aristotle_library::metadata::extract(&renamed, Format::Cbz, None, true).unwrap();
+        assert_eq!(metadata.meta.pages, Some(3));
+        assert_eq!(metadata.cover, Some(png(32)));
         let mut book = Book::open(&renamed, &Style::pw4(), None).unwrap();
         assert_eq!(book.engine(), Engine::Fixed);
         assert_eq!(book.known_page_count(), Some(3));
