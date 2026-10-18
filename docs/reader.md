@@ -353,12 +353,12 @@ The app writes `[perf <ms since start>]` lines to stderr. Direct `run-aristotle.
 
 ## Size budget
 
-The default build includes Latin and Greek fonts, five hyphenation languages, and EPUB, MOBI, PDF, and TXT support. Other formats, including CBZ comic archives, need a different build configuration. Build sizes are recorded in [Benchmarks](benchmarks.md#binary-size).
+The default build includes Latin and Greek fonts, five hyphenation languages, and EPUB, MOBI, PDF, TXT, and CBZ support. Build sizes are recorded in [Benchmarks](benchmarks.md#binary-size).
 
 | Switch | Default | Other choices |
 | --- | --- | --- |
 | `MUPDF_FONTS` | `latin-greek` | `base14` drops Noto Serif; `full` restores Plato's fonts |
-| `MUPDF_FORMATS` | `minimal` | `full` adds formats including XPS, SVG, CBZ, FB2, Office, HTML, and EPUB |
+| `MUPDF_FORMATS` | `minimal` | `full` adds formats including XPS, SVG, FB2, Office, HTML, and EPUB |
 | `PLATO_DJVU` | `0` | `1` links DjVuLibre |
 | `FONT_SUBSET` | `latin-greek` | `none` keeps whole fonts |
 | `HYPH_LANGS` | `pl en-us en-gb grc la` | Pattern list |

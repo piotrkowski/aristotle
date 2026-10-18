@@ -44,8 +44,8 @@
 #                        Fallback for CJK, Charis SIL, the CJK CMaps (+17 MB).
 #   MUPDF_FORMATS=minimal (default) MuPDF opens PDF, images (EPUB pictures),
 #                        MOBI (fallback for books mobi.rs can't convert) and
-#                        TXT; Plato's own engine reads EPUB and HTML. No XPS,
-#                        SVG, CBZ, FB2, Office, HTML or EPUB in MuPDF, and no
+#                        TXT and CBZ; Plato's own engine reads EPUB and HTML. No XPS,
+#                        SVG, FB2, Office, HTML or EPUB in MuPDF, and no
 #                        MuPDF hyphenation (used only with CSS hyphens: auto).
 #   MUPDF_FORMATS=full   everything MuPDF reads.
 #   PLATO_DJVU=0         (default) no DjVuLibre: DjVu files are not opened
@@ -92,7 +92,7 @@ case $MUPDF_FONTS in
     *) echo "MUPDF_FONTS must be latin-greek, base14 or full" >&2; exit 1 ;;
 esac
 case $MUPDF_FORMATS in
-    minimal) MUPDF_XCFLAGS="$MUPDF_XCFLAGS -DFZ_ENABLE_XPS=0 -DFZ_ENABLE_SVG=0 -DFZ_ENABLE_CBZ=0
+    minimal) MUPDF_XCFLAGS="$MUPDF_XCFLAGS -DFZ_ENABLE_XPS=0 -DFZ_ENABLE_SVG=0
         -DFZ_ENABLE_HTML=0 -DFZ_ENABLE_FB2=0 -DFZ_ENABLE_EPUB=0 -DFZ_ENABLE_OFFICE=0
         -DFZ_ENABLE_HYPHEN=0 -DFZ_ENABLE_DOCX_OUTPUT=0" ;;
     full) ;;
@@ -103,6 +103,7 @@ case $PLATO_DJVU in
     *) echo "PLATO_DJVU must be 0 or 1" >&2; exit 1 ;;
 esac
 MUPDF_CONF=$MUPDF_FONTS-$MUPDF_FORMATS
+[ "$MUPDF_FORMATS" != minimal ] || MUPDF_CONF=$MUPDF_CONF-cbz
 
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ARISTOTLE_CACHE/target-plato}
 export ZIG_GLOBAL_CACHE_DIR="$B/zig-cache"

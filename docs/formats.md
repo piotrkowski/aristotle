@@ -12,13 +12,13 @@ The library and reader detect books by content. Recognized EPUB and MOBI 7 files
 | PalmDOC | Database name | None | MuPDF fallback | MuPDF reflow, not Aristotle's EPUB conversion |
 | PDF | Info metadata and page count | None | Yes | Fixed pages scaled to fit |
 | TXT | File and folder names | None | Yes | MuPDF reflow, without the selected custom font |
-| CBZ | ComicInfo metadata and page count | First image | No | CBZ reader disabled in the default MuPDF build |
+| CBZ | ComicInfo metadata and page count | First image | Yes | Fixed image pages through MuPDF |
 
 Neither Aristotle's MOBI converter nor the bundled MuPDF reader supports HUFF/CDIC compression. KF8-only files are not converted, and the MuPDF fallback is not a guarantee that they open correctly. Encrypted MOBI can appear in the index with its DRM flag, but cannot be read. Aristotle does not remove DRM.
 
 Conversion is attempted for detected MOBI 7 files, including joint MOBI 7/KF8 containers named `.azw3`. KF8-only files and plain PalmDOC containers use MuPDF. PalmDOC compression inside MOBI 7 is supported by the converter.
 
-KFX, CBR, CB7, FB2, DjVu, and Topaz are unsupported by the library. A custom `MUPDF_FORMATS=full` build enables more renderer formats, including CBZ, but does not add library detection for every format. See [Size budget](reader.md#size-budget).
+KFX, CBR, CB7, FB2, DjVu, and Topaz are unsupported by the library. A custom `MUPDF_FORMATS=full` build enables more renderer formats, but does not add library detection for every format. See [Size budget](reader.md#size-budget).
 
 ## Reading interactions
 
@@ -41,7 +41,7 @@ Stock annotation imports and KF8 sidecars have no device-data verification. Impo
 | EPUB | Chapter start | Chapter, refined by percentage when possible |
 | PDF | 1-based page | Page |
 | MOBI, AZW3, TXT | Not sent | Percentage |
-| CBZ in a custom reader build | 1-based page | Page |
+| CBZ | 1-based page | Page |
 
 Sync uses a partial file MD5 as the document ID. Different editions or reconverted files need not share that ID. EPUB element paths after the chapter are not resolved. [Network setup](network.md) covers configuration and a first sync check.
 
