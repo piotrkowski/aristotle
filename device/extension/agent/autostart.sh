@@ -10,6 +10,7 @@ S=$R/var/local/aristotle
 APP=${ARISTOTLE_APP_DIR:-$R/mnt/us/aristotle}
 LOCK=$R/var/run/aristotle-app-update.lock
 PRESERVE_STAGE=0
+ROLLBACK_ACTIVE=0
 
 say() {
     printf '%s\n' "$*"
@@ -17,8 +18,27 @@ say() {
 }
 
 cleanup() {
+    rc=$?
+    trap - EXIT
+    if [ "$ROLLBACK_ACTIVE" = 1 ] && ! recover_rollback; then
+        say "aristotle: rollback interrupted; complete copies were kept for recovery"
+        rc=1
+    fi
     [ "$PRESERVE_STAGE" = 1 ] || rm -rf "$S/app.new"
-    rmdir "$LOCK"
+    rmdir "$LOCK" || rc=1
+    exit "$rc"
+}
+
+recover_rollback() {
+    [ -d "$S/app.rollback" ] || return 0
+    if [ ! -d "$S/app" ] && [ -d "$S/app.previous" ]; then
+        mv "$S/app.previous" "$S/app" || return 1
+    fi
+    if [ ! -e "$S/app.previous" ]; then
+        mv "$S/app.rollback" "$S/app.previous" || return 1
+    else
+        return 1
+    fi
 }
 
 lock() {
@@ -47,27 +67,32 @@ prepare() {
         say "aristotle: the app is still running; stop it first"
         exit 1
     fi
-    for path in "$S/app" "$S/app.new" "$S/app.previous"; do
+    for path in "$S/app" "$S/app.new" "$S/app.previous" "$S/app.rollback"; do
         if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
             say "aristotle: unexpected app path: $path"
             exit 1
         fi
     done
+    if ! recover_rollback; then
+        say "aristotle: incomplete rollback; app.rollback was kept, retry after resolving the rename error"
+        exit 1
+    fi
     if [ ! -d "$S/app" ] && [ -d "$S/app.previous" ]; then
         mv "$S/app.previous" "$S/app"
     fi
 }
 
 activate() {
+    stage=$1
     sync
     rm -rf "$S/app.previous"
     if [ -d "$S/app" ]; then
         mv "$S/app" "$S/app.previous"
     fi
-    if ! mv "$S/app.new" "$S/app"; then
+    if ! mv "$stage" "$S/app"; then
         if [ -d "$S/app.previous" ] && ! mv "$S/app.previous" "$S/app"; then
             PRESERVE_STAGE=1
-            say "aristotle: restore failed; app.previous and app.new were kept"
+            say "aristotle: restore failed; complete previous and staged copies were kept"
             exit 1
         fi
         say "aristotle: activation failed; the previous app was kept"
@@ -93,7 +118,7 @@ on)
     fi
     cp "$APP/SOURCE.txt" "$S/app.new/USB-SOURCE.txt"
     chmod 700 "$S/app.new/aristotle"
-    activate
+    activate "$S/app.new"
     say "Aristotle starts at the next boot; the previous app is kept"
     ;;
 rollback)
@@ -102,12 +127,12 @@ rollback)
         say "aristotle: no previous boot app; nothing changed"
         exit 1
     fi
-    rm -rf "$S/app.new"
-    mv "$S/app.previous" "$S/app.new"
+    ROLLBACK_ACTIVE=1
+    mv "$S/app.previous" "$S/app.rollback"
     if [ -s "$APP/SOURCE.txt" ]; then
-        cp "$APP/SOURCE.txt" "$S/app.new/USB-SOURCE.txt"
+        cp "$APP/SOURCE.txt" "$S/app.rollback/USB-SOURCE.txt"
     fi
-    activate
+    activate "$S/app.rollback"
     say "Previous boot app restored; reading data was not changed"
     ;;
 off)

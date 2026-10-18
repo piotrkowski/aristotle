@@ -31,6 +31,13 @@ cleanup() {
         pkill -TERM -P "$p" 2> /dev/null
         kill "$p" 2> /dev/null
     done
+    for r in "$WORK"/*; do
+        for p in $(cat "$r/jobs/sleep-pids" 2> /dev/null); do
+            if [ -r "/proc/$p/environ" ] && tr '\000' '\n' < "/proc/$p/environ" | grep -Fxq "AGENT_TEST_ROOT=$r"; then
+                kill "$p" 2> /dev/null
+            fi
+        done
+    done
 }
 trap 'cleanup; rm -rf "$WORK"' EXIT
 
@@ -63,6 +70,7 @@ case "${0##*/}:$1" in
 # No rule or chain exists yet, as on a fresh boot.
 iptables:-C | iptables:-D | iptables:-F | iptables:-X) exit 1 ;;
 mntroot:*) [ "${FAKE_MNTROOT_FAIL:-}" != "$1" ] ;;
+sync:*) [ "${FAKE_APP_SIGNAL:-0}" != 1 ] || kill -TERM "$PPID" ;;
 lipc-set-prop:com.lab126.appmgrd) [ "${FAKE_KUAL_START_FAIL:-0}" != 1 ] ;;
 # A bind mount shows up in /proc/mounts, as on the device.
 mount:--bind) echo "/dev/mmcblk1p9 $3 ext3 rw 0 0" >> "$AGENT_TEST_ROOT/proc/mounts" ;;
@@ -71,6 +79,11 @@ EOF
     done
     printf '#!/bin/sh\necho "lsmod" >> "$AGENT_TEST_ROOT/calls"\ncat "$AGENT_TEST_ROOT/modules" 2> /dev/null\n' > "$1/lsmod"
     printf '#!/bin/sh\necho 0\n' > "$1/id"
+    cat > "$1/sleep" << 'EOF'
+#!/bin/sh
+echo $$ >> "$AGENT_TEST_ROOT/jobs/sleep-pids"
+exec /bin/sleep "$@"
+EOF
     cat > "$1/timeout" << 'EOF'
 #!/bin/sh
 seconds=$2
@@ -88,13 +101,15 @@ EOF
 #!/bin/sh
 for last do :; done
 case "$last:${FAKE_APP_COPY_FAIL:-0}" in */app.new/:1) exit 1 ;; esac
+case "$last:${FAKE_APP_SOURCE_FAIL:-0}" in */app.rollback/USB-SOURCE.txt:1) exit 1 ;; esac
 command -p cp "$@"
 EOF
     cat > "$1/mv" << 'EOF'
 #!/bin/sh
-case "$1:${FAKE_APP_MOVE_FAIL:-0}" in */app.new:1) exit 1 ;; esac
+case "$1:$2:${FAKE_APP_MOVE_FAIL:-0}" in */app.new:*/app:1 | */app.rollback:*/app:1) exit 1 ;; esac
 case "$1:${FAKE_APP_RETIRE_FAIL:-0}" in */app:1) exit 1 ;; esac
-case "$1:${FAKE_APP_RESTORE_FAIL:-0}" in */app.previous:1) exit 1 ;; esac
+case "$1:${FAKE_ROLLBACK_STAGE_FAIL:-0}" in */app.previous:1) exit 1 ;; esac
+case "$1:$2:${FAKE_APP_RESTORE_FAIL:-0}" in */app.previous:*/app:1) exit 1 ;; esac
 command -p mv "$@"
 EOF
     cat > "$1/initctl" << 'EOF'
@@ -637,6 +652,29 @@ r=$(device noagent2 "$PW4_SN" 5.13.6)
 fake_app "$r"
 run "$r" agent/autostart.sh on
 check "on: refused without the agent" "[ $? = 1 ] && grep -q 'install the agent first' $r.out"
+
+echo "rollback: failures never discard the selected previous release"
+r=$(autostarted rollbackfaults)
+echo 'test release 2' > "$r/mnt/us/aristotle/SOURCE.txt"
+run "$r" agent/autostart.sh on
+for fault in signal stage retire activate metadata; do
+    case "$fault" in
+    signal) FAKE_APP_SIGNAL=1 run "$r" agent/autostart.sh rollback ;;
+    stage) FAKE_ROLLBACK_STAGE_FAIL=1 run "$r" agent/autostart.sh rollback ;;
+    retire) FAKE_APP_RETIRE_FAIL=1 run "$r" agent/autostart.sh rollback ;;
+    activate) FAKE_APP_MOVE_FAIL=1 run "$r" agent/autostart.sh rollback ;;
+    metadata) FAKE_APP_SOURCE_FAIL=1 run "$r" agent/autostart.sh rollback ;;
+    esac
+    check "$fault: current and previous identities preserved" "[ $? = 1 ] && grep -q 'release 2' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 1' $r/var/local/aristotle/app.previous/SOURCE.txt"
+    check "$fault: no rollback staging or update lock left" "[ ! -e $r/var/local/aristotle/app.rollback ] && [ ! -e $r/var/run/aristotle-app-update.lock ]"
+done
+FAKE_APP_MOVE_FAIL=1 FAKE_APP_RESTORE_FAIL=1 run "$r" agent/autostart.sh rollback
+check "failed rollback recovery: both versions retained in distinct directories" "[ $? = 1 ] && [ ! -e $r/var/local/aristotle/app ] && grep -q 'release 2' $r/var/local/aristotle/app.previous/SOURCE.txt && grep -q 'release 1' $r/var/local/aristotle/app.rollback/SOURCE.txt"
+run "$r" agent/autostart.sh rollback
+check "retry recovers both copies before selecting the rollback" "[ $? = 0 ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 2' $r/var/local/aristotle/app.previous/SOURCE.txt"
+mv "$r/var/local/aristotle/app.previous" "$r/var/local/aristotle/app.rollback"
+run "$r" agent/autostart.sh rollback
+check "interrupted staging is recovered before a retry" "[ $? = 0 ] && grep -q 'release 2' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 1' $r/var/local/aristotle/app.previous/SOURCE.txt"
 
 echo "ui-boot: the kill switch"
 r=$(autostarted uikill)

@@ -64,6 +64,8 @@ An older app may not accept reading data changed by a newer release. Keep the ma
 
 This action swaps the two internal app copies and records the current USB release identity as an explicit selection. It does not replace the USB app, downgrade the agent, or restore reading data. To restore those files, use the matching release zip and [data backup](#restore-a-backup). A second rollback selects the newer internal copy again.
 
+Rollback keeps its selected copy in a separate `app.rollback` directory until activation succeeds. On a signal, failed metadata copy, or failed rename, it restores that copy to `app.previous` when possible. If a restore also fails, it preserves both complete directories and refuses a new update until the pending rollback can be recovered. It never treats the rollback copy as disposable copy staging.
+
 If an activation is interrupted between directory renames, the boot launcher can use `app.previous` when `app` is absent. This is host-tested behavior, not a verified recovery path for an unbootable PW4. Turning autostart off retains the internal copies. Removing the agent deletes them.
 
 ## Restore a backup
