@@ -237,7 +237,6 @@ impl Settings {
             false,
             action::RETURN_KINDLE,
         );
-        let kindle = t.fixed(None, Some(MIN_TARGET), Some(kindle));
         let kual = chip(
             &mut t,
             s,
@@ -245,7 +244,6 @@ impl Settings {
             false,
             action::OPEN_KUAL,
         );
-        let kual = t.fixed(None, Some(MIN_TARGET), Some(kual));
         let exits = t.add(Node::row(Space::M), [kindle, kual]);
         let hint = t.label(
             v.exit_message.unwrap_or_else(|| tr(Msg::SettingsExitHint)),
@@ -718,7 +716,6 @@ mod tests {
                             .find(|id| ui.tree.node(*id).action == Some(action))
                             .unwrap();
                         let r = ui.tree.rect(id);
-                        assert!(r.h >= MIN_TARGET, "{code} action {action}: {r:?}");
                         assert!(r.y < SCREEN_HEIGHT / 3);
                         assert!(r.x >= 0 && r.right() <= SCREEN_WIDTH);
                         let hit = ui.tree.hit(crate::geom::Point {
@@ -726,6 +723,14 @@ mod tests {
                             y: r.y + r.h / 2,
                         });
                         assert!(matches!(hit, crate::tree::Hit::Target(n) if n == id));
+                        let target = r.expand_to(MIN_TARGET);
+                        for y in [target.y + 1, target.bottom() - 1] {
+                            let hit = ui.tree.hit(crate::geom::Point {
+                                x: r.x + r.w / 2,
+                                y,
+                            });
+                            assert!(matches!(hit, crate::tree::Hit::Target(n) if n == id));
+                        }
                     }
                 }
             });
