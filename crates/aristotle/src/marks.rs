@@ -41,7 +41,8 @@ pub fn target(
                     aristotle_library::Format::Mobi | aristotle_library::Format::Azw3
                 ) =>
         {
-            aristotle_library::sidecar::kindle_position(start).map(Position::Kindle)
+            let position = aristotle_library::sidecar::kindle_position(start)?;
+            (position <= u64::from(mobi?.text_length)).then_some(Position::Kindle(position))
         }
         _ => None,
     }
@@ -233,6 +234,7 @@ mod tests {
         let mut a = bookmark(&Position::Kindle(7510), 7510, None, String::new());
         let single = aristotle_render::mobi::MobiInfo {
             version: 6,
+            text_length: 10_000,
             ..Default::default()
         };
         let joint = aristotle_render::mobi::MobiInfo {
@@ -285,6 +287,76 @@ mod tests {
         let positions = ours(&b, AnnotationKind::Bookmark);
         assert_eq!(positions.len(), 1);
         assert_eq!(positions[0].0, 1);
+    }
+
+    #[test]
+    fn imported_targets_use_declared_text_bounds_not_the_last_map_anchor() {
+        use aristotle_render::mobi::{cached_epub, load_posmap};
+        let text = b"<html><body><p>Test text written for a bounds review.</p></body></html>";
+        let mut r0 = vec![0u8; 40];
+        r0[0..2].copy_from_slice(&1u16.to_be_bytes());
+        r0[4..8].copy_from_slice(&(text.len() as u32).to_be_bytes());
+        r0[8..10].copy_from_slice(&1u16.to_be_bytes());
+        r0[16..20].copy_from_slice(b"MOBI");
+        r0[20..24].copy_from_slice(&24u32.to_be_bytes());
+        r0[28..32].copy_from_slice(&65001u32.to_be_bytes());
+        r0[36..40].copy_from_slice(&6u32.to_be_bytes());
+        let mut raw = vec![0u8; 96];
+        raw[60..68].copy_from_slice(b"BOOKMOBI");
+        raw[76..78].copy_from_slice(&2u16.to_be_bytes());
+        for (i, record) in [r0.as_slice(), text.as_slice()].iter().enumerate() {
+            let at = 78 + i * 8;
+            let offset = raw.len() as u32;
+            raw[at..at + 4].copy_from_slice(&offset.to_be_bytes());
+            raw.extend_from_slice(record);
+        }
+        let dir = crate::testdir("stock-position-bounds");
+        let path = dir.join("bounds.mobi");
+        std::fs::write(&path, raw).unwrap();
+        let (epub, cold, converted) = cached_epub(&path, &dir.join("cache")).unwrap();
+        assert!(converted);
+        let (again, warm, converted) = cached_epub(&path, &dir.join("cache")).unwrap();
+        assert!(!converted);
+        assert_eq!(again, epub);
+        let map = load_posmap(&epub).unwrap();
+        let end = text.len() as u64;
+        assert!(map.anchors.last().unwrap().0 < end - 1);
+        assert_eq!(map.location(end + 1), map.location(end));
+        for info in [cold, warm] {
+            assert_eq!(u64::from(info.text_length), end);
+            let mut a = bookmark(&Position::Kindle(0), 0, None, String::new());
+            a.source = "kindle-sidecar".into();
+            for position in [0, 14, end - 1, end, end + 1, u64::MAX] {
+                let raw_position = format!("{position}:{position}:11:state");
+                a.position = Some((raw_position.clone(), raw_position));
+                let original = a.clone();
+                let expected = (position <= end).then_some(Position::Kindle(position));
+                assert_eq!(target(&a, Format::Mobi, Some(&info)), expected);
+                assert_eq!(a, original);
+            }
+            let joint = aristotle_render::mobi::MobiInfo {
+                kf8_boundary: Some(3),
+                ..info.clone()
+            };
+            a.position = Some(("14".into(), "14".into()));
+            assert_eq!(target(&a, Format::Mobi, Some(&joint)), None);
+            let own = bookmark(&Position::Kindle(u64::MAX), 0, None, String::new());
+            assert_eq!(
+                target(&own, Format::Mobi, Some(&joint)),
+                Some(Position::Kindle(u64::MAX))
+            );
+            let empty = aristotle_render::mobi::MobiInfo {
+                text_length: 0,
+                ..info
+            };
+            a.position = Some(("0".into(), "0".into()));
+            assert_eq!(
+                target(&a, Format::Mobi, Some(&empty)),
+                Some(Position::Kindle(0))
+            );
+            a.position = Some(("1".into(), "1".into()));
+            assert_eq!(target(&a, Format::Mobi, Some(&empty)), None);
+        }
     }
 
     /// A clippings-to-notes pipeline (a Python script that turns
