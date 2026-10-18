@@ -251,10 +251,10 @@ if [ "$WHAT" = device ]; then
         ./licenses ./SOURCE.txt
     mv -f "$BUNDLE.part" "$BUNDLE"
     APP_BUNDLE=${APP_BUNDLE:-$ARISTOTLE_CACHE/render/aristotle-device.tar.gz}
-    cp "$REPO/device/app/run-aristotle.sh" "$REPO/device/app/takeover.sh" \
+    cp "$REPO/device/app/run-aristotle.sh" "$REPO/device/app/takeover.sh" "$REPO/device/app/open-kual.sh" \
         "$REPO/device/extension/guard.sh" "$OUT/"
     tar -czf "$APP_BUNDLE.part" -C "$OUT" --transform 's,^\.,aristotle,' \
-        ./aristotle ./data ./run-aristotle.sh ./takeover.sh ./guard.sh ./licenses ./SOURCE.txt
+        ./aristotle ./data ./run-aristotle.sh ./takeover.sh ./open-kual.sh ./guard.sh ./licenses ./SOURCE.txt
     mv -f "$APP_BUNDLE.part" "$APP_BUNDLE"
     ls -l "$BUNDLE" "$APP_BUNDLE"
 fi

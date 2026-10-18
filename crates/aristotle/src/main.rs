@@ -51,6 +51,7 @@ mod catalogs;
 mod device;
 mod dict;
 mod fonts;
+mod launcher;
 mod marks;
 mod net;
 mod open;
@@ -243,7 +244,7 @@ fn parse_args() -> Result<Args, Error> {
 fn main() -> ExitCode {
     START.get_or_init(Instant::now);
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => ExitCode::from(code),
         Err(e) => {
             eprintln!("aristotle: {e:#}");
             ExitCode::FAILURE
@@ -251,7 +252,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), Error> {
+fn run() -> Result<u8, Error> {
     let args = parse_args()?;
     // SAFETY: the handler only stores to an atomic.
     unsafe {
@@ -265,10 +266,10 @@ fn run() -> Result<(), Error> {
 
     if let Some(title) = &args.bench_open {
         let root = args.scan.then_some(args.root.as_path());
-        return open::bench(&args.library, root, title);
+        return open::bench(&args.library, root, title).map(|()| 0);
     }
     if let Some((out, book)) = &args.preview {
-        return preview::run(&args, out, book);
+        return preview::run(&args, out, book).map(|()| 0);
     }
     if args.index_dicts {
         let cache = args.library.join("dict-index");
@@ -280,7 +281,7 @@ fn run() -> Result<(), Error> {
             missing.len(),
             cache.display()
         );
-        return Ok(());
+        return Ok(0);
     }
 
     let mut prefs = Prefs::load(&args.library);
@@ -320,8 +321,9 @@ fn run() -> Result<(), Error> {
         app.open_by_title(title)?;
     }
     let result = app.run(&mut touch);
+    let code = app.exit_target.exit_code();
     app.leave()?;
-    result
+    result.map(|()| code)
 }
 
 /// Where to look for dictionaries: `--dict`, else the device defaults.
@@ -440,6 +442,9 @@ fn build_app(
         catalogs: catalogs::CatalogState::default(),
         fonts_dir: args.fonts.clone(),
         font_faces: HashMap::new(),
+        exit_target: launcher::Target::Kindle,
+        settings_message: None,
+        kual_available: launcher::kual_available(),
     };
     app.load_font();
     app.apply_night();
@@ -558,6 +563,9 @@ struct App {
     fonts_dir: PathBuf,
     /// UI families made for showing font names, by regular face file.
     font_faces: HashMap<PathBuf, FamilyId>,
+    exit_target: launcher::Target,
+    settings_message: Option<String>,
+    kual_available: bool,
 }
 
 /// What a handler wants the loop to do next.
@@ -818,6 +826,7 @@ impl App {
             sync: sync_account.as_deref(),
             catalogs: self.net.accounts.catalogs.len(),
             about: &facts.about,
+            exit_message: self.settings_message.as_deref(),
         };
         let (tree, ids) = set_ui::Settings::build(&mut self.ui.text, &self.styles, &view);
         self.ui.set_tree_with(tree, refresh);
@@ -861,6 +870,19 @@ impl App {
         }
         match id {
             a::BACK => return self.show_library(Refresh::Full).map(|_| Flow::Continue),
+            a::RETURN_KINDLE => {
+                self.exit_target = launcher::Target::Kindle;
+                return Ok(Flow::Quit);
+            }
+            a::OPEN_KUAL => {
+                if self.kual_available {
+                    self.exit_target = launcher::Target::Kual;
+                    return Ok(Flow::Quit);
+                }
+                self.settings_message = Some(
+                    aristotle_i18n::tr(aristotle_i18n::Msg::SettingsKualUnavailable).to_string(),
+                );
+            }
             a::LIGHT_DOWN | a::LIGHT_UP | a::LIGHT_SET => {
                 let cur = self.light_step();
                 let step = match id {
@@ -912,6 +934,11 @@ impl App {
                 );
                 if let Err(e) = res {
                     eprintln!("aristotle: usb mode: {e}");
+                    self.settings_message = Some(
+                        aristotle_i18n::tr(aristotle_i18n::Msg::SettingsUsbFailed).to_string(),
+                    );
+                } else {
+                    self.settings_message = None;
                 }
             }
             id => {
@@ -2498,6 +2525,39 @@ mod tests {
             powerd::Sleep::none(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn settings_can_leave_without_an_agent_and_report_unavailable_kual() {
+        let library = testdir("settings-exit");
+        let root = library.join("documents");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut app = memory_app(&library, &root);
+        app.show_settings(Refresh::Full, 0).unwrap();
+        let event = |app: &App, action| {
+            let node = (0..app.ui.tree.len())
+                .map(|i| NodeId(i as u32))
+                .find(|id| app.ui.tree.node(*id).action == Some(action))
+                .unwrap();
+            UiEvent::Action {
+                id: action,
+                node,
+                at: aristotle_ui::geom::Point { x: 200, y: 240 },
+            }
+        };
+        let kual = event(&app, set_ui::action::OPEN_KUAL);
+        assert!(app.on_settings_event(kual).unwrap() == Flow::Continue);
+        assert!(app.settings_message.is_some());
+        assert!(app.exit_target == launcher::Target::Kindle);
+        app.kual_available = true;
+        let kual = event(&app, set_ui::action::OPEN_KUAL);
+        assert!(app.on_settings_event(kual).unwrap() == Flow::Quit);
+        assert_eq!(app.exit_target.exit_code(), launcher::KUAL_EXIT_CODE);
+        let stock = event(&app, set_ui::action::RETURN_KINDLE);
+        assert!(app.on_settings_event(stock).unwrap() == Flow::Quit);
+        assert_eq!(app.exit_target.exit_code(), 0);
+        app.leave().unwrap();
+        std::fs::remove_dir_all(&library).unwrap();
     }
 
     fn updates(app: &App) -> Vec<String> {

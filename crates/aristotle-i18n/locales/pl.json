@@ -58,6 +58,11 @@
   },
   "settings": {
     "title": "Ustawienia",
+    "return_kindle": "Wróć do Kindle",
+    "open_kual": "Otwórz KUAL",
+    "exit_hint": "Zapisuje postęp. Powrót do interfejsu Kindle może potrwać minutę.",
+    "kual_unavailable": "KUAL jest tu niedostępny. Wróć do Kindle i otwórz KUAL stamtąd.",
+    "usb_failed": "Nie zmieniono trybu USB. Wróć do Kindle i włącz sieć USB w KUAL.",
     "section_screen": "Ekran",
     "section_power": "Zasilanie",
     "section_device": "Urządzenie",

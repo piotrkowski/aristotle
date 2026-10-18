@@ -27,7 +27,7 @@ PW4_SN=G000PP0123456789
 PW5_SN=G001Q00123456789
 
 cleanup() {
-    for p in $(cat "$WORK"/*/jobs/*.pid "$WORK"/*/var/run/*.pid 2> /dev/null); do
+    for p in $(cat "$WORK"/*/jobs/*.pid "$WORK"/*/var/run/*.pid "$WORK"/*/var/local/aristotle/dropbear.pid 2> /dev/null); do
         pkill -TERM -P "$p" 2> /dev/null
         kill "$p" 2> /dev/null
     done
@@ -63,6 +63,7 @@ case "${0##*/}:$1" in
 # No rule or chain exists yet, as on a fresh boot.
 iptables:-C | iptables:-D | iptables:-F | iptables:-X) exit 1 ;;
 mntroot:*) [ "${FAKE_MNTROOT_FAIL:-}" != "$1" ] ;;
+lipc-set-prop:com.lab126.appmgrd) [ "${FAKE_KUAL_START_FAIL:-0}" != 1 ] ;;
 # A bind mount shows up in /proc/mounts, as on the device.
 mount:--bind) echo "/dev/mmcblk1p9 $3 ext3 rw 0 0" >> "$AGENT_TEST_ROOT/proc/mounts" ;;
 esac
@@ -70,6 +71,19 @@ EOF
     done
     printf '#!/bin/sh\necho "lsmod" >> "$AGENT_TEST_ROOT/calls"\ncat "$AGENT_TEST_ROOT/modules" 2> /dev/null\n' > "$1/lsmod"
     printf '#!/bin/sh\necho 0\n' > "$1/id"
+    cat > "$1/timeout" << 'EOF'
+#!/bin/sh
+seconds=$2
+signal=$4
+shift 4
+exec /usr/bin/timeout -s "$signal" "$seconds" "$@"
+EOF
+    cat > "$1/lipc-get-prop" << 'EOF'
+#!/bin/sh
+echo "lipc-get-prop $*" >> "$AGENT_TEST_ROOT/calls"
+[ "${FAKE_LIPC_HANG:-0}" != 1 ] || exec sleep 30
+echo "${FAKE_ACTIVE_APP_PID:-123}"
+EOF
     cat > "$1/cp" << 'EOF'
 #!/bin/sh
 for last do :; done
@@ -90,6 +104,10 @@ echo "initctl $*" >> "$R/calls"
 case "$1" in
 reload-configuration) exit 0 ;;
 status)
+    if [ "$2" = framework ] && [ -e "$R/framework-ready" ]; then
+        echo 'framework start/running, process 123'
+        exit 0
+    fi
     # The stock jobs always exist; ours only once installed.
     case "$2" in
     aristotle-*) [ -f "$R/etc/upstart/$2.conf" ] || [ -f "$R/jobs/$2.pid" ] || { echo "initctl: Unknown job: $2" >&2; exit 1; } ;;
@@ -106,6 +124,9 @@ EOF
 #!/bin/sh
 R=$AGENT_TEST_ROOT
 echo "start $*" >> "$R/calls"
+if [ "$1" = lab126_gui ] && [ "${FAKE_KUAL_READY:-0}" = 1 ]; then
+    : > "$R/framework-ready"
+fi
 case "$1" in aristotle-agent) ;; *) exit 0 ;; esac
 [ -f "$R/etc/upstart/$1.conf" ] || { echo "start: Unknown job: $1" >&2; exit 1; }
 mkdir -p "$R/jobs"
@@ -136,14 +157,21 @@ device() {
     [ -n "$3" ] && printf 'Kindle %s (~~otaVersion~~)\n\n\n\n' "$3" > "$r/etc/prettyversion.txt"
     printf '10.00 5.00\n' > "$r/proc/uptime"
     cp -R "$DEVICE/extension" "$r/mnt/us/extensions/aristotle"
-    cp "$DEVICE/app/takeover.sh" "$r/mnt/us/extensions/aristotle/"
+    cp "$DEVICE/app/takeover.sh" "$DEVICE/app/open-kual.sh" "$r/mnt/us/extensions/aristotle/"
     printf 'ssh-ed25519 AAAA test\n' > "$r/mnt/us/extensions/aristotle/authorized_keys"
     cat > "$r/mnt/us/koreader/dropbear" << 'EOF'
 #!/bin/sh
 echo "dropbear $* (in $PWD)" >> "$AGENT_TEST_ROOT/calls"
 while [ $# -gt 0 ]; do [ "$1" = -P ] && pid=$2; shift; done
 # A process with "dropbear" in its command line, as the scripts check.
-sh -c 'sleep 300; :' fake-dropbear > /dev/null 2>&1 &
+sh -c '
+cleanup() { kill "$child" 2> /dev/null; wait "$child" 2> /dev/null; }
+trap cleanup EXIT
+trap "exit 0" TERM INT
+sleep 300 &
+child=$!
+wait "$child"
+' fake-dropbear > /dev/null 2>&1 &
 echo $! > "$pid"
 EOF
     chmod 755 "$r/mnt/us/koreader/dropbear"
@@ -245,7 +273,14 @@ installed() {
     printf 'ssh-ed25519 OWNER own\nssh-ed25519 AAAA test\n' > "$r/mnt/us/koreader/settings/SSH/authorized_keys"
     printf 'ssh-ed25519 AAAA test\n' > "$r/var/local/aristotle-migrate/20260101T000000Z/authorized_keys"
     printf 'migrated\n' > "$r/var/local/aristotle-migrate/migrate.log"
-    sh -c 'sleep 300; :' fake-dropbear > /dev/null 2>&1 &
+    sh -c '
+cleanup() { kill "$child" 2> /dev/null; wait "$child" 2> /dev/null; }
+trap cleanup EXIT
+trap "exit 0" TERM INT
+sleep 300 &
+child=$!
+wait "$child"
+' fake-dropbear > /dev/null 2>&1 &
     echo $! > "$r/var/run/aristotle-dropbear.pid"
     echo 'g_ether 40960 0' > "$r/modules"
     echo "$r"
@@ -526,6 +561,7 @@ fake_app() {
     cat > "$1/mnt/us/aristotle/aristotle" << 'EOF'
 #!/bin/sh
 echo "app $*" >> "$AGENT_TEST_ROOT/calls"
+echo "launcher-capability ${ARISTOTLE_EXIT_ACTIONS:-unset}" >> "$AGENT_TEST_ROOT/calls"
 echo $$ > "$AGENT_TEST_ROOT/jobs/app-$$.pid"
 trap 'echo "app saved" >> "$AGENT_TEST_ROOT/calls"; rm -f "$AGENT_TEST_ROOT/jobs/app-$$.pid"; exit 0' TERM
 i=0
@@ -533,7 +569,7 @@ while [ $i -lt "${FAKE_SECS:-0}" ]; do sleep 1; i=$((i + 1)); done
 exit "${FAKE_RC:-0}"
 EOF
     chmod 755 "$1/mnt/us/aristotle/aristotle"
-    cp "$DEVICE/app/run-aristotle.sh" "$DEVICE/app/takeover.sh" "$DEVICE/extension/guard.sh" "$1/mnt/us/aristotle/"
+    cp "$DEVICE/app/run-aristotle.sh" "$DEVICE/app/takeover.sh" "$DEVICE/app/open-kual.sh" "$DEVICE/extension/guard.sh" "$1/mnt/us/aristotle/"
 }
 
 # autostarted NAME: a booted device with autostart on.
@@ -721,6 +757,54 @@ AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" ARISTOTLE_LOG=$r/app.log sh "$r/mnt/us
 check "the boot one saved first, not counted" "called $r 'app saved' && [ \"\$(cat $r/var/local/aristotle/ui-fails)\" = 0 ]"
 check "then its own run, then the stock GUI" "[ \"\$(grep -c '^app' $r/calls)\" = 3 ] && called $r 'start lab126_gui'"
 check "the stock GUI was not started in between" "[ \"\$(grep -c '^start lab126_gui' $r/calls)\" = 1 ]"
+
+echo "KUAL handoff: unavailable or unready booklet"
+r=$(booted kualmissing)
+KUAL_WAIT=1 run "$r" open-kual.sh
+check "missing booklet: no launch request" "[ $? = 1 ] && ! called $r 'lipc-set-prop com.lab126.appmgrd start'"
+mkdir -p "$r/opt/amazon/ebook/booklet"
+: > "$r/opt/amazon/ebook/booklet/KUALBooklet.jar"
+KUAL_WAIT=1 run "$r" open-kual.sh
+check "framework not ready: bounded fallback to stock" "[ $? = 1 ] && ! called $r 'lipc-set-prop com.lab126.appmgrd start'"
+: > "$r/framework-ready"
+FAKE_ACTIVE_APP_PID=0 KUAL_WAIT=1 run "$r" open-kual.sh
+check "no active stock app yet: no premature launch" "[ $? = 1 ] && ! called $r 'lipc-set-prop com.lab126.appmgrd start'"
+FAKE_KUAL_START_FAIL=1 KUAL_WAIT=1 run "$r" open-kual.sh
+check "app manager rejects launch: bounded failure" "[ $? = 1 ] && grep -q 'Kindle interface stays active' $r.out"
+t0=$(date +%s)
+FAKE_LIPC_HANG=1 KUAL_WAIT=1 run "$r" open-kual.sh
+check "hung LIPC command is killed within the budget" "[ $? = 1 ] && [ \$((\$(date +%s) - t0)) -le 3 ]"
+KUAL_WAIT=not-a-number run "$r" open-kual.sh
+check "invalid wait budget is rejected" "[ $? = 1 ] && grep -q 'invalid KUAL wait budget' $r.out"
+
+echo "KUAL handoff: manual runner"
+r=$(booted kualmanual)
+fake_app "$r"
+mkdir -p "$r/opt/amazon/ebook/booklet"
+: > "$r/opt/amazon/ebook/booklet/KUALBooklet.jar"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=1 \
+    ARISTOTLE_LOG=$r/app.log sh "$r/mnt/us/aristotle/run-aristotle.sh" > "$r.out" 2>&1
+check "KUAL request is a successful exit" "[ $? = 0 ]"
+stock_line=$(awk '/^start lab126_gui$/ {print NR; exit}' "$r/calls")
+kual_line=$(awk '/^lipc-set-prop com.lab126.appmgrd start app:\/\/com.mobileread.ixtab.kindlelauncher$/ {print NR; exit}' "$r/calls")
+check "stock restored before KUAL launch" "[ -n '$stock_line' ] && [ -n '$kual_line' ] && [ '$stock_line' -lt '$kual_line' ]"
+rm "$r/mnt/us/aristotle/open-kual.sh"
+: > "$r/calls"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" ARISTOTLE_LOG=$r/app.log \
+    sh "$r/mnt/us/aristotle/run-aristotle.sh" > "$r.out" 2>&1
+check "missing helper is not advertised to the app" "[ $? = 0 ] && called $r 'launcher-capability 0'"
+
+echo "KUAL handoff: boot runner"
+r=$(autostarted kualboot)
+printf 'fsp %s/mnt/us fuse.fsp rw 0 0\n' "$r" > "$r/proc/mounts"
+mkdir -p "$r/opt/amazon/ebook/booklet"
+: > "$r/opt/amazon/ebook/booklet/KUALBooklet.jar"
+FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=1 ui_boot "$r"
+done_ui "$r"
+check "one clean launch, no crash retry" "[ \"\$(grep -c '^app' $r/calls)\" = 1 ] && [ \"\$(cat $r/var/local/aristotle/ui-fails)\" = 0 ]"
+stock_line=$(awk '/^start lab126_gui$/ {print NR; exit}' "$r/calls")
+kual_line=$(awk '/^lipc-set-prop com.lab126.appmgrd start app:\/\/com.mobileread.ixtab.kindlelauncher$/ {print NR; exit}' "$r/calls")
+check "boot runner restores stock before KUAL" "[ -n '$stock_line' ] && [ -n '$kual_line' ] && [ '$stock_line' -lt '$kual_line' ]"
 
 # --- KUAL items -------------------------------------------------------------
 

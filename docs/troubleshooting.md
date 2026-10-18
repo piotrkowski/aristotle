@@ -14,7 +14,9 @@ Start with the symptom below. Keep reading data intact while diagnosing problems
 | Autostart runs an older version | Quit to stock, then select **Start Aristotle at boot: on** again to refresh the internal copy. |
 | Autostart no longer runs | Check for `aristotle-disable` on the drive. Three failed launches also cause fallback. Inspect boot logs before enabling autostart again. |
 
-If you need the stock interface, hold **Library** for one second in Aristotle's library. KUAL also has **Return to the Kindle interface**. A 30 to 60 second boot splash on return is expected [dev].
+If you need the stock interface, open **Settings > Return to Kindle**. **Open KUAL**, beside it, returns to stock and opens the installed KUAL booklet. Neither needs the agent. Holding **Library** for one second in Aristotle's library still quits. KUAL also has **Return to the Kindle interface**. A 30 to 60 second boot splash on return is expected [dev].
+
+If Aristotle says KUAL is unavailable, use **Return to Kindle** and open KUAL from the stock library. Direct opening needs the installed KUAL booklet and the updated Aristotle launcher. If the framework or KUAL launch does not become ready within 90 seconds, the launcher leaves the stock interface active and records the failure in its log. Each device command has a timeout of at most three seconds within that total budget. This handoff has host tests only.
 
 For a boot problem without SSH, use the [kill switch](../device/README.md#kill-switch). If needed, follow [Recovery without SSH](../device/README.md#recovery-without-ssh). The emergency script requires the stock framework to start and the USB drive not to be exported. This is not a verified recovery method for an unbootable PW4.
 

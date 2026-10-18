@@ -44,9 +44,16 @@ echo "=== aristotle $(date) $*" >> "$LOG"
 # takeover.sh refuses anything but a PW4 on firmware 5.13.x; then the app does
 # not start either.
 sh "$DIR/takeover.sh" start || exit 1
+ARISTOTLE_EXIT_ACTIONS=0
+[ ! -r "$DIR/open-kual.sh" ] || ARISTOTLE_EXIT_ACTIONS=1
+export ARISTOTLE_EXIT_ACTIONS
 "$DIR/aristotle" "$@" >> "$LOG" 2>&1
 status=$?
 echo "=== exit $status" >> "$LOG"
 sh "$DIR/takeover.sh" stop
+if [ "$status" = 20 ]; then
+    sh "$DIR/open-kual.sh" >> "$LOG" 2>&1
+    status=0
+fi
 tail -n "+$((start + 1))" "$LOG"
 exit $status

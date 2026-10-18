@@ -126,7 +126,11 @@ the device:[^3] an app started this way kept running after
 the stand-in for KUAL's process group was killed with `SIGKILL`, and *Return*
 stopped it (`=== exit 0`) and brought the stock GUI back. Started from
 KUAL's own menu by tapping, it has not been tried yet.[^5] From inside Aristotle,
-holding the *Library* title for a second also returns.
+**Settings > Return to Kindle** also returns. **Open KUAL**, beside it on every settings page, saves and returns to stock before opening the installed booklet. Holding the *Library* title for a second remains available.
+
+The two launchers advertise exit-action support only when `open-kual.sh` is present. Exit code 20 requests KUAL after a normal save and shutdown. It does not count as a failed boot launch. The helper waits for a running framework and a nonzero application-manager active PID, then sends `start app://com.mobileread.ixtab.kindlelauncher`. That handler and the installed jar path were read from the tested PW4's application registry. They also match [KUAL Booklet's registration](https://github.com/coplate/KUAL_Booklet/blob/master/src/com/mobileread/ixtab/kindlelauncher/resources/booklet/install/appreg.install.sql). No KUAL or Amazon bytecode is included.
+
+The helper uses a 90-second monotonic wait budget. Each device command runs through BusyBox `timeout` for at most three seconds, capped by the remaining budget. An unavailable booklet or a failed handoff leaves stock running. The handoff is host-tested, not device-verified. Update the app bundle for manual launching and reinstall the agent scripts for boot launching to enable it.
 
 `bin/start.sh` is the dev loop without the agent: it swaps the USB mass-storage [gadget](../docs/glossary.md#usb-gadget) for [`g_ether`](../docs/glossary.md#g_ether), gives `usb0` the address `192.168.15.244`, opens
 `usb0` in the stock firewall and starts KOReader's [`dropbear`](../docs/glossary.md#dropbear), key-only, on

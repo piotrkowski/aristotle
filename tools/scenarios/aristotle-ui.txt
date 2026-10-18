@@ -13,7 +13,7 @@
 #
 # Not driven here on purpose: "USB drive" in the settings (it drops the USB
 # network and SSH for 10 minutes; try it by hand), the language chips, and
-# quitting (hold the "Library" title for a second).
+# the Return to Kindle and Open KUAL buttons (both leave Aristotle).
 
 snap ui-start
 
@@ -85,36 +85,42 @@ tap 948 118
 wait 3000
 snap ui-settings-1
 label light-down
-tap 124 377
+tap 124 613
 wait 2500
 label light-up
-tap 948 377
+tap 948 613
 wait 2500
 label light-slider-third
-tap 420 377
+tap 420 613
 wait 2500
 label light-preset-medium
-tap 533 463
+tap 533 699
 wait 2500
 label light-preset-night
-tap 341 463
+tap 341 699
 wait 2500
 label covers-cards
-tap 463 814
+tap 463 1050
 wait 2500
 label covers-none
-tap 257 814
+tap 257 1050
+wait 2500
+label settings-power-page
+tap 948 1377
 wait 2500
 label sleep-5
-tap 216 1238
+tap 216 561
 wait 2500
 label sleep-15
-tap 389 1238
+tap 389 561
+wait 2500
+label settings-screen-page
+tap 124 1377
 wait 2500
 
 # --- Night mode from the settings: one flash in, one flash out ---
 label night-on
-tap 536 590
+tap 536 826
 wait 3000
 snap ui-settings-night
 label settings-page-2-night
@@ -122,13 +128,13 @@ tap 948 1377
 wait 2500
 snap ui-settings-2-night
 label usb-network
-tap 326 717
+tap 326 1165
 wait 2500
 label settings-page-1-night
 tap 124 1377
 wait 2500
 label night-off
-tap 536 590
+tap 536 826
 wait 3000
 label settings-back
 tap 98 118
@@ -225,8 +231,11 @@ snap ui-library-end
 label settings-for-sleep
 tap 948 118
 wait 3000
+label settings-power-for-sleep
+tap 948 1377
+wait 2500
 label sleep-5-again
-tap 216 1238
+tap 216 561
 wait 2500
 label back-for-sleep
 tap 98 118
@@ -241,8 +250,11 @@ snap ui-woken
 label settings-restore
 tap 948 118
 wait 3000
+label settings-power-restore
+tap 948 1377
+wait 2500
 label sleep-15-again
-tap 389 1238
+tap 389 561
 wait 2500
 label back-end
 tap 98 118
