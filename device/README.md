@@ -185,6 +185,10 @@ aristotlectl reboot            # reboot; the agent brings SSH back on boot
 The app's settings screen switches the USB mode through the same script
 (`aristotle_hal::system::set_usb_mode`).
 
+When network mode returns, the agent requests that mode from `volumd` and checks that `g_mass_storage` unloads successfully. It then waits for `driveModeState=0`. Only with the storage gadget absent and drive mode cleared does it run the stock `mntus mount` helper if `/mnt/base-us` is missing. It verifies the backing mount and access to `/mnt/us` before starting networking. A busy gadget, unavailable state, or failed mount leaves the transition for a later retry. It never forces an unmount or requests a filesystem check.
+
+The backing-mount loss and manual `mntus mount` recovery were measured on the PW4. The automated transition has host model tests only. A mounted FSP directory or `userstoreIsAvailable=1` alone does not prove that the backing filesystem is present. See [USB network evidence](../docs/pw4-reference.md#usb-network).
+
 ### Aristotle at boot
 
 `aristotle-ui.conf` starts on `started lab126_gui`, once per boot, and does

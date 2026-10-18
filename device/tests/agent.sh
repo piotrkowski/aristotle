@@ -72,12 +72,25 @@ iptables:-C | iptables:-D | iptables:-F | iptables:-X) exit 1 ;;
 mntroot:*) [ "${FAKE_MNTROOT_FAIL:-}" != "$1" ] ;;
 sync:*) [ "${FAKE_APP_SIGNAL:-0}" != 1 ] || kill -TERM "$PPID" ;;
 lipc-set-prop:com.lab126.appmgrd) [ "${FAKE_KUAL_START_FAIL:-0}" != 1 ] ;;
+lipc-set-prop:com.lab126.volumd) [ "${FAKE_VOLUMD_SET_FAIL:-0}" != 1 ] ;;
+rmmod:g_mass_storage)
+    [ "${FAKE_UNLOAD_FAIL:-0}" != 1 ] || exit 1
+    if [ "${FAKE_UNLOAD_STUCK:-0}" != 1 ]; then
+        awk '$1 != "g_mass_storage"' "$AGENT_TEST_ROOT/modules" > "$AGENT_TEST_ROOT/modules.next"
+        mv "$AGENT_TEST_ROOT/modules.next" "$AGENT_TEST_ROOT/modules"
+    fi
+    ;;
 # A bind mount shows up in /proc/mounts, as on the device.
 mount:--bind) echo "/dev/mmcblk1p9 $3 ext3 rw 0 0" >> "$AGENT_TEST_ROOT/proc/mounts" ;;
 esac
 EOF
     done
-    printf '#!/bin/sh\necho "lsmod" >> "$AGENT_TEST_ROOT/calls"\ncat "$AGENT_TEST_ROOT/modules" 2> /dev/null\n' > "$1/lsmod"
+    cat > "$1/lsmod" << 'EOF'
+#!/bin/sh
+echo "lsmod" >> "$AGENT_TEST_ROOT/calls"
+[ "${FAKE_LSMOD_FAIL:-0}" != 1 ] || exit 1
+cat "$AGENT_TEST_ROOT/modules" 2> /dev/null
+EOF
     printf '#!/bin/sh\necho 0\n' > "$1/id"
     cat > "$1/sleep" << 'EOF'
 #!/bin/sh
@@ -95,6 +108,19 @@ EOF
 #!/bin/sh
 echo "lipc-get-prop $*" >> "$AGENT_TEST_ROOT/calls"
 [ "${FAKE_LIPC_HANG:-0}" != 1 ] || exec sleep 30
+if [ "$1:$2" = com.lab126.volumd:driveModeState ]; then
+    [ "${FAKE_VOLUMD_GET_FAIL:-0}" != 1 ] || exit 1
+    if [ "${FAKE_DRIVE_TRANSITION:-0}" = 1 ] && [ ! -e "$AGENT_TEST_ROOT/drive-queried" ]; then
+        : > "$AGENT_TEST_ROOT/drive-queried"
+        echo 1
+    else
+        echo "${FAKE_DRIVE_MODE:-0}"
+        if [ "${FAKE_GADGET_RETURN:-0}" = 1 ]; then
+            echo 'g_mass_storage 40960 0' >> "$AGENT_TEST_ROOT/modules"
+        fi
+    fi
+    exit 0
+fi
 echo "${FAKE_ACTIVE_APP_PID:-123}"
 EOF
     cat > "$1/cp" << 'EOF'
@@ -165,8 +191,9 @@ EOF
 device() {
     r="$WORK/$1"
     mkdir -p "$r/proc/sys/kernel/random" "$r/etc/upstart" "$r/var/local" "$r/var/run" \
-        "$r/mnt/us/extensions" "$r/mnt/us/koreader/settings/SSH" "$r/jobs" "$r/usr/bin"
+        "$r/mnt/us/extensions" "$r/mnt/us/koreader/settings/SSH" "$r/jobs" "$r/usr/bin" "$r/usr/sbin"
     echo "boot-$1" > "$r/proc/sys/kernel/random/boot_id"
+    : > "$r/modules"
     echo "host key" > "$r/mnt/us/koreader/settings/SSH/dropbear_ed25519_host_key"
     [ -n "$2" ] && printf '%s\n' "$2" > "$r/proc/usid"
     [ -n "$3" ] && printf 'Kindle %s (~~otaVersion~~)\n\n\n\n' "$3" > "$r/etc/prettyversion.txt"
@@ -190,6 +217,14 @@ wait "$child"
 echo $! > "$pid"
 EOF
     chmod 755 "$r/mnt/us/koreader/dropbear"
+    cat > "$r/usr/sbin/mntus" << 'EOF'
+#!/bin/sh
+echo "mntus $*" >> "$AGENT_TEST_ROOT/calls"
+[ "${FAKE_MNTUS_FAIL:-0}" != 1 ] || exit 1
+[ "${FAKE_MNTUS_NO_CHANGE:-0}" != 1 ] || exit 0
+printf '/dev/loop/0 %s/mnt/base-us vfat rw 0 0\n' "$AGENT_TEST_ROOT" >> "$AGENT_TEST_ROOT/proc/mounts"
+EOF
+    chmod 755 "$r/usr/sbin/mntus"
     echo "$r"
 }
 
@@ -364,6 +399,7 @@ booted() {
     # Only the upstart stub's stand-in ran; boot() runs the real script.
     kill "$(cat "$r/jobs/aristotle-agent.pid")" 2> /dev/null
     printf 'fsp /mnt/us fuse.fsp rw,nosuid,nodev,noatime 0 0\n' > "$r/proc/mounts"
+    printf '/dev/loop/0 %s/mnt/base-us vfat rw 0 0\n' "$r" >> "$r/proc/mounts"
     : > "$r/calls"
     echo "$r"
 }
@@ -402,6 +438,51 @@ r=$(booted nomount)
 boot "$r" 1
 check "stays idle when the kill switch cannot be checked" "wait_for $r/var/local/aristotle/log 'cannot check kill switch; staying idle' && ! called $r modprobe && ! called $r dropbear && ! called $r iptables"
 check "does not respawn and leaves USB to volumd" "kill -0 \$(cat $r/jobs/boot.pid) && called $r 'lipc-set-prop com.lab126.volumd useUsbForNetwork 0'"
+
+net_once() {
+    sed '/^log "agent: boot /,$d' "$DEVICE/extension/agent/boot.sh" > "$1.net-up.sh"
+    printf 'net_up\n' >> "$1.net-up.sh"
+    AGENT_TEST_ROOT=$1 PATH="$WORK/bin:$PATH" sh "$1.net-up.sh" > "$1.net.out" 2>&1
+}
+
+unmounted_userstore() {
+    r=$(booted "$1")
+    printf 'fsp /mnt/us fuse.fsp rw 0 0\n' > "$r/proc/mounts"
+    echo 'g_mass_storage 40960 0' > "$r/modules"
+    echo "$r"
+}
+
+echo "net transition: restore the backing userstore after export ends"
+r=$(unmounted_userstore remount)
+FAKE_DRIVE_TRANSITION=1 net_once "$r"
+check "waits for drive mode to clear, then restores storage and SSH" "[ $? = 0 ] && [ \"\$(grep -c '^lipc-get-prop com.lab126.volumd driveModeState' $r/calls)\" -ge 2 ] && called $r 'mntus mount' && called $r 'dropbear '"
+unload_line=$(awk '/^rmmod g_mass_storage$/ { print NR; exit }' "$r/calls")
+mount_line=$(awk '/^mntus mount$/ { print NR; exit }' "$r/calls")
+net_line=$(awk '/^modprobe g_ether / { print NR; exit }' "$r/calls")
+check "unload precedes mount, mount precedes networking" "[ '$unload_line' -lt '$mount_line' ] && [ '$mount_line' -lt '$net_line' ]"
+: > "$r/calls"
+net_once "$r"
+check "an already mounted backing store is not mounted again" "[ $? = 0 ] && ! called $r 'mntus '"
+for fault in busy stuck active unknown policy returned-gadget module-state mount-table mount missing-mount; do
+    r=$(unmounted_userstore "remount-$fault")
+    case "$fault" in
+    busy) FAKE_UNLOAD_FAIL=1 net_once "$r" ;;
+    stuck) FAKE_UNLOAD_STUCK=1 net_once "$r" ;;
+    active) FAKE_DRIVE_MODE=1 net_once "$r" ;;
+    unknown) FAKE_VOLUMD_GET_FAIL=1 net_once "$r" ;;
+    policy) FAKE_VOLUMD_SET_FAIL=1 net_once "$r" ;;
+    returned-gadget) FAKE_GADGET_RETURN=1 net_once "$r" ;;
+    module-state) FAKE_LSMOD_FAIL=1 net_once "$r" ;;
+    mount-table) rm "$r/proc/mounts"; net_once "$r" ;;
+    mount) FAKE_MNTUS_FAIL=1 net_once "$r" ;;
+    missing-mount) FAKE_MNTUS_NO_CHANGE=1 net_once "$r" ;;
+    esac
+    check "$fault: failed transition does not start networking" "[ $? = 1 ] && ! called $r 'modprobe g_ether' && ! called $r 'dropbear '"
+    case "$fault" in
+    busy | stuck | active | unknown | policy | returned-gadget | module-state | mount-table)
+        check "$fault: backing store is never mounted during an unsafe export" "! called $r 'mntus '" ;;
+    esac
+done
 
 # persistent ROOT: the files outside the tmpfs (/var/local, /etc) with their
 # checksums.
