@@ -2755,7 +2755,7 @@ mod tests {
         let mut app = memory_app(&library, &root);
         reopen(&mut app, "Reopened");
         let old_token = app.sync.opened.as_ref().unwrap().token;
-        app.leave().unwrap();
+        app.back_to_library().unwrap();
         reopen(&mut app, "Reopened");
         let current_token = app.sync.opened.as_ref().unwrap().token;
         assert_ne!(old_token, current_token);
