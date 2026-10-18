@@ -3,7 +3,7 @@
 
 use std::cmp::Ordering;
 
-pub(crate) const METADATA_VERSION: u32 = 1;
+pub(crate) const METADATA_VERSION: u32 = 2;
 
 pub(crate) fn is_page_name(name: &str) -> bool {
     // MuPDF's source/cbz/mucbz.c defines the reader's page extensions.
@@ -37,6 +37,7 @@ pub(crate) fn is_page_name(name: &str) -> bool {
 }
 
 pub(crate) fn page_order(a: &str, b: &str) -> Ordering {
+    let (original_a, original_b) = (a, b);
     let (mut a, mut b) = (a.as_bytes(), b.as_bytes());
     while let (Some(&ac), Some(&bc)) = (a.first(), b.first()) {
         let order = if ac.is_ascii_digit() && bc.is_ascii_digit() {
@@ -54,7 +55,9 @@ pub(crate) fn page_order(a: &str, b: &str) -> Ordering {
             return order;
         }
     }
-    a.len().cmp(&b.len())
+    a.len()
+        .cmp(&b.len())
+        .then_with(|| original_a.as_bytes().cmp(original_b.as_bytes()))
 }
 
 fn digits(bytes: &[u8]) -> (&[u8], &[u8]) {
@@ -83,8 +86,11 @@ mod tests {
     #[test]
     fn numeric_and_case_insensitive_order_does_not_overflow() {
         assert_eq!(page_order("PAGE2.png", "page10.png"), Ordering::Less);
-        assert_eq!(page_order("page02.png", "page2.png"), Ordering::Equal);
-        assert_eq!(page_order("a0.png", "a00.png"), Ordering::Equal);
+        assert_eq!(page_order("page02.png", "page2.png"), Ordering::Less);
+        assert_eq!(page_order("PAGE2.PNG", "page2.png"), Ordering::Less);
+        assert_eq!(page_order("a0.png", "a00.png"), Ordering::Less);
+        assert_eq!(page_order("page2.png", "page2.png"), Ordering::Equal);
+        assert_eq!(page_order("a.png", "é.png"), Ordering::Less);
         assert_eq!(page_order("a1/page2.png", "a2/page1.png"), Ordering::Less);
         assert_eq!(page_order("page2.png", "page2a.png"), Ordering::Less);
         assert_eq!(page_order("page.png", "page2.png"), Ordering::Less);

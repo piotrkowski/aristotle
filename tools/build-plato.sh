@@ -82,6 +82,15 @@ B=${PLATO_BUILD:-$ARISTOTLE_CACHE/plato-build/$DEFAULT_BUILD}
 TOOLS=${ARISTOTLE_TOOLS:-$ARISTOTLE_CACHE/tools}
 JOBS=${JOBS:-2}
 
+MUPDF_PATCH_KEY=$(cd "$MUPDF_PATCHES" && sha256sum ./*.patch | sha256sum | cut -d' ' -f1)
+if [ -f "$B/stamps/src-mupdf" ]; then
+    if [ ! -f "$B/stamps/mupdf-patches" ] || \
+        [ "$(cat "$B/stamps/mupdf-patches")" != "$MUPDF_PATCH_KEY" ]; then
+        echo "$B has unknown or different MuPDF patches; use a fresh PLATO_BUILD" >&2
+        exit 1
+    fi
+fi
+
 MUPDF_FONTS=${MUPDF_FONTS:-latin-greek}
 MUPDF_FORMATS=${MUPDF_FORMATS:-minimal}
 PLATO_DJVU=${PLATO_DJVU:-0}
@@ -255,6 +264,7 @@ while read -r name file url sha; do
                 echo "applying $(basename "$p")"
                 patch -d "$T/$name" -p1 < "$p"
             done
+            printf '%s\n' "$MUPDF_PATCH_KEY" > "$B/stamps/mupdf-patches"
         fi
         stamp "src-$name"
     fi
