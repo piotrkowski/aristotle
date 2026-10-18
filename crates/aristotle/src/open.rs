@@ -265,9 +265,7 @@ impl Opening {
 /// one: saved with the progress the index holds now.
 pub fn find_snapshot(src: &Source, style: &Style) -> Option<snapshot::Loaded> {
     let saved = src.saved.as_ref()?;
-    if matches!(saved.locator, aristotle_library::Locator::Kindle { .. })
-        && saved.source.as_deref() != Some("aristotle")
-    {
+    if !snapshot::compatible_progress(saved) {
         return None;
     }
     let locator = saved.locator.clone();

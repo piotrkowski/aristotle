@@ -46,8 +46,7 @@ fn mobi_file(boundary: Option<u32>) -> Vec<u8> {
     out
 }
 
-#[test]
-fn imported_azw3_positions_require_a_single_mobi7_address_space() {
+fn use_render_data() -> bool {
     let cache = std::env::var_os("ARISTOTLE_CACHE")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/aristotle")))
@@ -61,9 +60,17 @@ fn imported_azw3_positions_require_a_single_mobi7_address_space() {
             "no render data directory in CI"
         );
         eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
-        return;
+        return false;
     }
     aristotle_render::use_data_dir(&data).unwrap();
+    true
+}
+
+#[test]
+fn imported_azw3_positions_require_a_single_mobi7_address_space() {
+    if !use_render_data() {
+        return;
+    }
     let dir = crate::testdir("mobi-address-spaces");
     for boundary in [None, Some(u32::MAX), Some(0), Some(3)] {
         let path = dir.join(format!("book-{boundary:?}.azw3"));
@@ -105,5 +112,60 @@ fn imported_azw3_positions_require_a_single_mobi7_address_space() {
         assert!(!warm.mobi().unwrap().converted_now);
         assert_eq!(stock_positions_compatible(&warm), expected.is_none());
     }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn benchmark_prewarms_owned_books_without_imported_kindle_snapshots() {
+    if !use_render_data() {
+        return;
+    }
+    let dir = crate::testdir("benchmark-imported-progress");
+    let root = dir.join("books");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("Target.mobi"), mobi_file(None)).unwrap();
+    std::fs::write(root.join("Imported.mobi"), mobi_file(Some(3))).unwrap();
+    let library = dir.join("library");
+    std::fs::create_dir_all(library.join("pages")).unwrap();
+    let mut lib = Library::open(&library).unwrap();
+    lib.scan(&root, &aristotle_library::ScanOptions::default())
+        .unwrap();
+    assert_eq!(lib.books().len(), 2);
+    let imported = lib
+        .books()
+        .iter()
+        .find(|b| b.meta.title == "Imported")
+        .unwrap()
+        .id
+        .clone();
+    let mut saved = progress_for(Locator::Kindle { position: 0 }, 0.6, 100);
+    saved.source = Some("kindle".into());
+    assert!(lib.set_progress(&imported, saved));
+    let target = lib
+        .books()
+        .iter()
+        .find(|b| b.meta.title == "Target")
+        .unwrap()
+        .id
+        .clone();
+    assert!(lib.set_progress(
+        &target,
+        progress_for(Locator::Kindle { position: 0 }, 0.0, 90)
+    ));
+    lib.save().unwrap();
+
+    crate::open::bench(&library, None, "Target").unwrap();
+
+    let style = Style::pw4();
+    let cache = library.join("epub-cache");
+    let rec = lib.book(&imported).unwrap();
+    assert!(!crate::prewarm::candidates(&lib)
+        .iter()
+        .any(|b| b.id == imported));
+    assert!(crate::prewarm::job_for(&lib, rec, &style, &cache, 30.0).is_none());
+    assert!(!crate::snapshot::path(&library, &imported).exists());
+    let target = lib.book(&target).unwrap();
+    let (source, _) = crate::prewarm::job_for(&lib, target, &style, &cache, 30.0).unwrap();
+    assert!(crate::open::find_snapshot(&source, &style).is_some());
     std::fs::remove_dir_all(dir).unwrap();
 }

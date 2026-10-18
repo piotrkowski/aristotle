@@ -51,7 +51,7 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use aristotle_library::Locator;
+use aristotle_library::{Locator, Progress};
 use aristotle_render::book::Bounds;
 use aristotle_render::page::Page;
 use aristotle_render::style::Style;
@@ -69,6 +69,12 @@ const FORMAT_VERSION: u32 = 3;
 /// zstd level: 1 is the fastest to compress and decodes as fast as any;
 /// higher levels gain little on anti-aliased text.
 pub const LEVEL: i32 = 1;
+
+/// Whether a saved position can identify a snapshot before the book opens.
+pub fn compatible_progress(progress: &Progress) -> bool {
+    !matches!(progress.locator, Locator::Kindle { .. })
+        || progress.source.as_deref() == Some("aristotle")
+}
 
 /// Everything a snapshot must agree with to be shown.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

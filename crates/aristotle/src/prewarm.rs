@@ -2,7 +2,7 @@
 //! Snapshots made ahead of time, so almost every open is a snapshot open.
 //!
 //! A book gets a [snapshot](crate::snapshot) when it is left, but not one
-//! that was never opened here (progress imported from the stock reader), and
+//! that was never opened here, and
 //! a font size change makes every snapshot stale. So while the library sits
 //! on screen untouched, one thread at a time opens the books most likely to
 //! be opened next, renders the saved page and the one after it, and stores
@@ -12,6 +12,7 @@
 //!   ([`CANDIDATES`] in all), each with a saved position and without a
 //!   valid snapshot for the current style. Each is tried once per run,
 //!   position, style and UI language, so the work is bounded and then stops.
+//!   Imported Kindle positions wait until a real open saves an owned position.
 //! - **When:** after [`QUIET`] without input, with the library on screen and
 //!   no book opening. Any touch cancels the job; the thread runs at
 //!   `SCHED_IDLE`, so on the single core of the PW4 it only gets the CPU
@@ -131,7 +132,7 @@ impl Prewarm {
 
 /// The source (without background pagination) and the key of a snapshot
 /// made ahead of time for `rec`, with the reading speed `secs_per_page`
-/// (the footer's minutes left); `None` without a saved position.
+/// (the footer's minutes left); `None` without snapshot-compatible progress.
 pub fn job_for(
     lib: &Library,
     rec: &BookRecord,
@@ -140,6 +141,9 @@ pub fn job_for(
     secs_per_page: f32,
 ) -> Option<(Source, Key)> {
     let progress = rec.progress.as_ref()?;
+    if !snapshot::compatible_progress(progress) {
+        return None;
+    }
     let mut src = Source::new(lib, rec, mobi_cache).ok()?;
     src.secs_per_page = secs_per_page;
     let key = Key::new(&rec.id, src.stamp, style, progress.locator.clone());
@@ -153,7 +157,11 @@ pub fn candidates(lib: &Library) -> Vec<&BookRecord> {
     let mut books: Vec<&BookRecord> = lib
         .books()
         .iter()
-        .filter(|b| b.progress.is_some())
+        .filter(|b| {
+            b.progress
+                .as_ref()
+                .is_some_and(snapshot::compatible_progress)
+        })
         .collect();
     books.sort_by_key(|b| {
         std::cmp::Reverse((b.last_opened, b.progress.as_ref().map(|p| p.updated)))
