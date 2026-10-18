@@ -250,7 +250,7 @@ impl Settings {
             s.small(),
         );
         let exits = t.add(Node::column(Space::S), [exits, hint]);
-        let exits = t.pad(Insets::vh(Space::S, 0), exits);
+        let exits = t.pad(Insets::new(Space::M, 0, Space::S, 0), exits);
 
         let mut sections = Vec::new();
         let mut light_node = None;
@@ -710,6 +710,17 @@ mod tests {
                 for page in 0..count {
                     ui.tree.set_page(ids.list, page);
                     ui.layout();
+                    let back = (0..ui.tree.len())
+                        .map(|i| NodeId(i as u32))
+                        .find(|id| ui.tree.node(*id).action == Some(action::BACK))
+                        .unwrap();
+                    let r = ui.tree.rect(back).expand_to(MIN_TARGET);
+                    for x in [r.x + 1, r.right() - 1] {
+                        for y in [r.y + 1, r.bottom() - 1] {
+                            let hit = ui.tree.hit(crate::geom::Point { x, y });
+                            assert!(matches!(hit, crate::tree::Hit::Target(n) if n == back));
+                        }
+                    }
                     for action in [action::RETURN_KINDLE, action::OPEN_KUAL] {
                         let id = (0..ui.tree.len())
                             .map(|i| NodeId(i as u32))
