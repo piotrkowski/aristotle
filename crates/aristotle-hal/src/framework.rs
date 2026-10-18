@@ -152,6 +152,53 @@ mod tests {
     }
 
     #[test]
+    fn embedded_lua_readiness_protocol_when_lua_is_available() {
+        let stub = r#"
+local registered = false
+package.preload.liblipclua = function()
+    return {
+        init = function(name)
+            assert(name == 'com.lab126.kaf')
+            return {
+                register_int_property = function(_, name, mode)
+                    assert(name == 'frameworkStarted' and mode == 'r')
+                    return setmetatable({}, {__newindex = function(_, key, value)
+                        assert(key == 'value' and value == 1)
+                        registered = true
+                    end})
+                end
+            }
+        end,
+        run_event_loop = function()
+            assert(registered)
+            os.exit(0)
+        end
+    }
+end
+"#;
+        let script = format!("{stub}\n{SCRIPT}");
+        let output = match crate::lipc_command::run(Command::new("lua").args(["-e", &script])) {
+            Ok(output) => output,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                eprintln!("host Lua unavailable; embedded protocol test skipped");
+                return;
+            }
+            Err(error) => panic!("running embedded Lua: {error}"),
+        };
+        assert!(output.status.success());
+        assert_eq!(output.stdout, READY);
+        for rejection in [
+            "package.preload.liblipclua=function() return {init=function() return nil end} end",
+            "package.preload.liblipclua=function() return {init=function() return {register_int_property=function() return nil end} end} end",
+        ] {
+            let script = format!("{rejection}\n{SCRIPT}");
+            let output = crate::lipc_command::run(Command::new("lua").args(["-e", &script])).unwrap();
+            assert!(!output.status.success());
+            assert!(output.stdout.is_empty());
+        }
+    }
+
+    #[test]
     fn ready_child_is_owned_until_drop_and_reaped() {
         let guard = Framework::start(
             &mut command("printf 'aristotle-framework-ready\\n'; exec sleep 60"),
