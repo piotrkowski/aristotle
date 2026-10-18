@@ -566,12 +566,17 @@ mod tests {
     fn secrets_go_only_to_a_private_folder() {
         use std::os::unix::fs::PermissionsExt;
         let base = testdir("private");
-        // Created owner-only when missing.
+        // Root uses mode 000 to resist the stock framework's chmod g=u.
         let dir = base.join("var-local-aristotle");
         private_dir(&dir).unwrap();
+        let expected_mode = if unsafe { libc::geteuid() } == 0 {
+            0o000
+        } else {
+            0o700
+        };
         assert_eq!(
             fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
-            0o700
+            expected_mode
         );
         let a = Accounts {
             device_id: "X".into(),
