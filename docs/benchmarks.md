@@ -7,7 +7,7 @@ Device results use a PW4 on firmware 5.13.6 unless marked otherwise. These numbe
 `aristotle-observe` measures both interfaces with the same method:
 
 - It enables [EPDC](glossary.md#epdc) debug logging through `mxc_epdc_debug` in sysfs. The log records update regions, [waveforms](glossary.md#waveform), and completion times.
-- It reads `/dev/kmsg` and touch events, pairing touches with updates until none arrive for 1.5 s.
+- It reads `/dev/kmsg` and touch events, pairing touches with updates until none arrive for 1.5 s or the next touch starts.
 - It injects evdev touches into the real touchscreen node.
 
 `tools/scenarios/` contains `tap`, `hold`, `swipe`, `wait`, `label`, `go-home`, and `snap` commands. Start from `go-home` and verify steps with screenshots.
@@ -16,11 +16,27 @@ Full flashes use [GC16](glossary.md#gc16) or [GCK16](glossary.md#gck16) waveform
 
 | Metric | Meaning |
 | --- | --- |
-| `first✓` | release to the first update finished: the earliest moment the user sees the result |
-| `settled` | release to the last update finished: the screen is calm again |
+| `first>` | release to the first update that starts after release |
+| `first✓` | release to the earliest completion among updates that start after release |
+| `page✓` | release to the earliest completed full-screen update that starts after release |
+| `settled` | release to the last completed update assigned to this touch |
 | `upd` | number of panel updates the interaction caused |
+| `pre` | updates that start before release, including touch-down highlights |
+| `open` | updates without a completion record |
 | `flash` | full GC16/GCK16 updates (visible black flash) |
 | `area%` | total updated area relative to the screen |
+
+`first✓` can measure a small acknowledgement, not the book page. `page✓`
+checks the update rectangle, not its contents or waveform. Verify the page
+and the single full-mode mode-9 update in the screenshot and driver log.
+Touch-down updates contribute to update counts and `settled`, but not to
+`first✓` or `page✓`. A touch-down-only interaction has no release sample.
+
+Missing completion records produce `n/a`, not a fabricated completion at
+submit time. A kernel log overrun invalidates all completion metrics in the
+capture. Summary lines show the valid sample count for each metric. For an
+even sample count, the median averages the middle pair. Compare the same
+interaction labels, not the combined median of unrelated controls.
 
 The Goodix touchscreen accepts multi-touch axes only. Inject a slot, tracking ID from 0 to 255, position, pressure, and touch or width major. Do not send `BTN_TOUCH`, `ABS_X`, or `ABS_Y`. Stock ignores IDs above 255. `aristotle-observe caps` lists supported axes.
 

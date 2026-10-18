@@ -66,6 +66,13 @@ pub struct UpdateLog {
 }
 
 impl UpdateLog {
+    pub fn updates(&self) -> Vec<Update> {
+        let mut updates = self.done.clone();
+        updates.extend(self.open.values().cloned());
+        updates.sort_by_key(|u| u.start_us);
+        updates
+    }
+
     pub fn feed(&mut self, ts_us: u64, message: &str) {
         // The Lab126 kernel puts the printk time ("[ 5936.322425] ") inside
         // the message text itself, so search instead of matching a prefix.
@@ -156,6 +163,21 @@ mod tests {
         assert_eq!(log.done.len(), 1);
         assert_eq!(log.done[0].waveform, "a2");
         assert!(!log.done[0].full);
+    }
+
+    #[test]
+    fn retains_starts_without_completion_records() {
+        let mut log = UpdateLog::default();
+        log.feed(100, "mxc_epdc_fb: [7] update start marker=3, start time=1");
+        log.feed(110, "mxc_epdc_fb: [8] update start marker=4, start time=1");
+        log.feed(
+            200,
+            "mxc_epdc_fb: [8] update end marker=4, end time=2, time taken=1 ms",
+        );
+        let updates = log.updates();
+        assert_eq!(updates.len(), 2);
+        assert_eq!((updates[0].start_us, updates[0].end_us), (100, None));
+        assert_eq!(updates[1].end_us, Some(200));
     }
 
     #[test]

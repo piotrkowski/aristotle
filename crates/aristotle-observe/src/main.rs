@@ -30,6 +30,7 @@
 
 mod bench;
 mod kmsg;
+mod report;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, Read, Write};
@@ -38,10 +39,9 @@ use std::thread;
 use std::time::Duration;
 
 use aristotle_hal::input::{find_touchscreen, monotonic_us, Phase, TouchScreen, Transform};
-use kmsg::{parse_record, Update, UpdateLog, EPDC_DEBUG};
+use kmsg::{parse_record, UpdateLog, EPDC_DEBUG};
 
-/// An update belongs to the interaction it follows if it starts within this
-/// long after the release (or before the next interaction).
+/// Maximum quiet gap between release or the last update and the next update.
 const SETTLE_US: u64 = 1_500_000;
 
 #[derive(Clone, Debug)]
@@ -182,6 +182,7 @@ struct Observer {
     /// Count only the interactions we inject. Set by scripts: an app that
     /// grabs the touchscreen (Aristotle does) hides touches from us.
     injected_only: bool,
+    lost_records: u64,
 }
 
 fn set_epdc_debug(on: bool) -> io::Result<()> {
@@ -228,6 +229,7 @@ impl Observer {
             open: None,
             label: String::new(),
             injected_only: false,
+            lost_records: 0,
         })
     }
 
@@ -269,7 +271,10 @@ impl Observer {
                 Ok(_) => break,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
                 // EPIPE: records were overwritten before we read them.
-                Err(e) if e.raw_os_error() == Some(libc::EPIPE) => continue,
+                Err(e) if e.raw_os_error() == Some(libc::EPIPE) => {
+                    self.lost_records += 1;
+                    continue;
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -299,89 +304,6 @@ impl Observer {
 impl Drop for Observer {
     fn drop(&mut self) {
         let _ = set_epdc_debug(false);
-    }
-}
-
-// ---------------------------------------------------------------- reporting
-
-fn ms(us: u64) -> f64 {
-    us as f64 / 1000.0
-}
-
-fn report(interactions: &[Interaction], updates: &[Update]) {
-    if std::env::var_os("OBSERVE_DEBUG").is_some() {
-        eprintln!("parsed {} updates", updates.len());
-        for u in updates {
-            eprintln!(
-                "  update start {} end {:?} {} {:?}",
-                u.start_us, u.end_us, u.waveform, u.rect
-            );
-        }
-        for i in interactions {
-            eprintln!("  touch {} down {} up {}", i.label, i.down_us, i.up_us);
-        }
-    }
-    println!(
-        "{:<14} {:>9} {:>9} {:>9} {:>4} {:>5} {:>7}  waveforms",
-        "interaction", "first>", "first✓", "settled", "upd", "flash", "area%"
-    );
-    let screen = 1072.0 * 1448.0;
-    let (mut firsts, mut settles) = (Vec::new(), Vec::new());
-    let mut flashes_total = 0;
-    for (k, i) in interactions.iter().enumerate() {
-        let next = interactions.get(k + 1).map_or(u64::MAX, |n| n.down_us);
-        let mine: Vec<&Update> = updates
-            .iter()
-            .filter(|u| {
-                u.start_us >= i.down_us && u.start_us < next && u.start_us < i.up_us + SETTLE_US
-            })
-            .collect();
-        let label = if i.label.is_empty() {
-            format!("({},{})", i.x, i.y)
-        } else {
-            i.label.clone()
-        };
-        let Some(first) = mine.first() else {
-            println!("{label:<14} no update");
-            continue;
-        };
-        let first_start = first.start_us.saturating_sub(i.up_us);
-        let first_end = first
-            .end_us
-            .unwrap_or(first.start_us)
-            .saturating_sub(i.up_us);
-        let settled = mine
-            .iter()
-            .filter_map(|u| u.end_us)
-            .max()
-            .unwrap_or(first.start_us)
-            .saturating_sub(i.up_us);
-        let flashes = mine.iter().filter(|u| u.flashes()).count();
-        flashes_total += flashes;
-        let area: u64 = mine.iter().map(|u| u.area()).sum();
-        let mut wf: Vec<&str> = mine.iter().map(|u| u.waveform.as_str()).collect();
-        wf.dedup();
-        println!(
-            "{label:<14} {:>8.0}ms {:>8.0}ms {:>8.0}ms {:>4} {:>5} {:>6.0}%  {}",
-            ms(first_start),
-            ms(first_end),
-            ms(settled),
-            mine.len(),
-            flashes,
-            area as f64 / screen * 100.0,
-            wf.join(",")
-        );
-        firsts.push(first_end);
-        settles.push(settled);
-    }
-    firsts.sort_unstable();
-    settles.sort_unstable();
-    if !firsts.is_empty() {
-        let med = |v: &[u64]| ms(v[v.len() / 2]);
-        println!(
-            "summary: {} interactions, median release->first update done {:.0} ms, median settled {:.0} ms, flashes {}",
-            firsts.len(), med(&firsts), med(&settles), flashes_total
-        );
     }
 }
 
@@ -435,7 +357,7 @@ fn run_script(path: &str) -> io::Result<()> {
         obs.pump(Duration::from_millis(1))?;
     }
     obs.pump_for(SETTLE_US / 1000 + 500)?;
-    report(&obs.interactions, &obs.log.done);
+    report::print(&obs.interactions, &obs.log.updates(), obs.lost_records);
     Ok(())
 }
 
@@ -563,7 +485,7 @@ fn watch(seconds: u64) -> io::Result<()> {
     let mut obs = Observer::start()?;
     println!("observing for {seconds} s; touch the screen");
     obs.pump_for(seconds * 1000)?;
-    report(&obs.interactions, &obs.log.done);
+    report::print(&obs.interactions, &obs.log.updates(), obs.lost_records);
     Ok(())
 }
 
