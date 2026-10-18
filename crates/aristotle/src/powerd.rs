@@ -14,10 +14,9 @@
 //! once a minute) and every five minutes while awake, and presses the
 //! button itself when its own time is up. "Never" keeps restarting T1.
 //!
-//! When powerd does not react (the events cannot be followed off the
-//! device, or powerd ignores the button, as it does while it thinks USB
-//! drive mode is on [dev]), the app falls back to its own screensaver
-//! without suspending, and a touch wakes it.
+//! When powerd does not react, the app falls back to its own screensaver without suspend.
+//! A touch wakes that fallback; the ignored button's cause needs device validation.
+//! Firmware drive_mode_state=1 means off, not a USB-network suspend blocker.
 
 use std::os::fd::RawFd;
 use std::time::{Duration, Instant};
