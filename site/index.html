@@ -46,27 +46,40 @@
 
       <p>There were some quirks with ghosting, which required some tweaking, but now it works very well on my Kindle. I'll fix bugs as they come up in real usage.</p>
 
-      <p>Here is a small demo web app that shows how it works:</p>
+      <p>Here is a clickable preview. Try the dictionary, reader menu and night mode:</p>
 
       <figure class="demo" id="demo" data-demo data-root="" aria-label="Interactive Aristotle demo">
-        <div class="demo-invite" aria-hidden="true" hidden>
-          <span>start here</span>
-          <svg viewBox="0 0 160 170" fill="none">
-            <path class="pointer-wide" d="M42 34c-19 37 24 77 91 53m-20-5 22 4-13 18"/>
-            <path class="pointer-narrow" d="M98 30C37 20 18 70 24 148m-11-17 11 19 10-20"/>
-          </svg>
+        <button class="demo-guide" type="button" data-advance aria-describedby="demo-caption" hidden>
+          <span class="demo-hint" aria-live="polite" aria-atomic="true">Open a book to try the reader.</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+        </button>
+        <div class="demo-screen">
+          <div class="demo-invite" aria-hidden="true" hidden>
+            <span>start here</span>
+            <svg viewBox="0 0 160 170" fill="none">
+              <path d="M42 34c-19 37 24 77 91 53m-20-5 22 4-13 18"/>
+            </svg>
+          </div>
+          <div class="device">
+            <img src="demo/frames/library.png" width="1072" height="1448" alt="Aristotle's library on a Kindle Paperwhite 4. Open Nicomachean Ethics to try the reader." draggable="false">
+            <div class="hotspots"></div>
+            <div class="flash" aria-hidden="true"></div>
+          </div>
         </div>
-        <div class="device">
-          <img src="demo/frames/library.png" width="1072" height="1448" alt="Aristotle's library on a Kindle Paperwhite 4. Open Nicomachean Ethics to try the reader." draggable="false">
-          <div class="hotspots"></div>
-          <div class="flash" aria-hidden="true"></div>
+        <div class="demo-samples" role="group" aria-label="Reading samples" hidden>
+          <button type="button" data-sample="greek-page" aria-pressed="false">Greek text</button>
+          <button type="button" data-sample="english-page" aria-pressed="false">English text</button>
+          <button type="button" data-sample="footnote-page" aria-pressed="false">Footnotes</button>
         </div>
         <figcaption>
-          <div class="demo-controls">
-            <p class="demo-hint" aria-live="polite">Screenshots from my Kindle.</p>
-            <button type="button" data-restart hidden>Reset</button>
+          <div class="demo-controls" data-demo-controls hidden>
+            <button type="button" data-show-actions aria-pressed="false">Show actions</button>
+            <button type="button" data-enlarge aria-pressed="false">Enlarge</button>
+            <button type="button" data-restart>Reset</button>
           </div>
-          <p class="demo-caption">A clickable preview using screenshots from my Kindle.</p>
+          <p class="demo-caption" id="demo-caption">Real screenshots from my Kindle. Only selected controls are interactive.</p>
+          <p class="demo-feedback" role="status" aria-live="polite" hidden></p>
+          <a class="demo-gallery" href="https://github.com/piotrkowski/aristotle/blob/main/docs/screenshots.md">More screenshots<span class="sr-only"> on GitHub</span></a>
         </figcaption>
       </figure>
 

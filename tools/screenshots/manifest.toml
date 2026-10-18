@@ -309,10 +309,106 @@ inputs = ["night-english-page.png"]
 name = "menu-night.png"
 out_dir = "../../site/demo/frames"
 frame = false
-inputs = ["night-menu.png"]
+inputs = ["gallery/night-menu.png"]
 
 [[output]]
 name = "settings-night.png"
 out_dir = "../../site/demo/frames"
 frame = false
 inputs = ["night-settings.png"]
+
+[[output]]
+name = "folders.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-folders.png"]
+
+[[output]]
+name = "folders-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-folders.png"]
+
+[[output]]
+name = "folder.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-folder.png"]
+
+[[output]]
+name = "folder-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-folder.png"]
+
+[[output]]
+name = "english-popup.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-english-popup.png"]
+
+[[output]]
+name = "english-popup-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-english-popup.png"]
+
+[[output]]
+name = "greek-highlighted.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-greek-highlighted.png"]
+
+[[output]]
+name = "greek-highlighted-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-greek-highlighted.png"]
+
+[[output]]
+name = "footnote-page.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-footnote-page.png"]
+
+[[output]]
+name = "footnote-page-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-footnote-page.png"]
+
+[[output]]
+name = "footnote.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-footnote.png"]
+
+[[output]]
+name = "footnote-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-footnote.png"]
+
+[[output]]
+name = "menu-size.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-menu-size.png"]
+
+[[output]]
+name = "menu-size-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-menu-size.png"]
+
+[[output]]
+name = "greek-menu.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/day-greek-menu.png"]
+
+[[output]]
+name = "greek-menu-night.png"
+out_dir = "../../site/demo/frames"
+frame = false
+inputs = ["gallery/night-greek-menu.png"]

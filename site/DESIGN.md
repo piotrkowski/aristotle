@@ -33,11 +33,11 @@ typography:
     fontSize: "0.8125rem"
   demo-controls:
     fontFamily: "Inter, sans-serif"
-    fontSize: "0.75rem"
+    fontSize: "0.8125rem"
     lineHeight: 1.6
   demo-caption:
     fontFamily: "Inter, sans-serif"
-    fontSize: "0.6875rem"
+    fontSize: "0.8125rem"
     lineHeight: 1.6
 rounded:
   hotspot: "2px"
@@ -71,7 +71,7 @@ Load the local variable Inter font. Use regular body text, a medium-weight title
 
 Use one centered column, capped at 40rem, with 1.5rem side gutters. Place an icon-only GitHub link and theme toggle above the title and date. Keep the demo inside the article, between paragraphs.
 
-The demo is capped at 22rem and keeps the screenshots' 1072 / 1448 aspect ratio. At widths up to 480px, reduce header padding and the spacing around the post header and demo. Metadata and footer links may wrap.
+The demo is capped at 22rem and keeps the screenshots' 1072 / 1448 aspect ratio. Enlarge widens it to 40rem, within the viewport. At widths up to 480px, reduce header padding and the spacing around the post header and demo. Metadata and footer links may wrap.
 
 ## Elevation & Depth
 
@@ -83,7 +83,13 @@ Use the existing small radii for buttons, hotspots, and the screenshot frame. Do
 
 ## Components
 
-The demo uses real screenshots and clickable hotspots. Keep its current hint, Reset control, and short screenshot caption. Keyboard focus must remain visible. The footer holds only repository links. Header icons have accessible names and 44px touch targets. A hand-drawn arrow points at Continue reading on the initial demo screen and disappears when a book opens. On narrow screens it sits above the preview.
+The demo uses real screenshots and clickable hotspots. Put the current instruction above the screenshot. The instruction is also a button that performs the suggested action. After a dictionary lookup, suggest the reader menu instead of another lookup. Keep keyboard focus on the instruction after keyboard navigation.
+
+Greek text, English text, and Footnotes select separate reading samples, not consecutive pages. Continue reading returns to the last Greek or English sample. Menu and night-mode controls work in both themes. Reset returns to the initial library and clears the visited actions.
+
+Show actions marks the available hotspots. Tapping an inactive area also reveals them and explains the preview's limits. Hotspots and controls have a minimum 44px touch target. Keep the caption readable at 0.8125rem. Link More screenshots to the GitHub screenshot gallery.
+
+Header icons have accessible names and 44px touch targets. A hand-drawn arrow points at Continue reading on the initial demo screen. Hide it after opening a book, on screens up to 600px wide, and in the enlarged view. The footer holds only repository links.
 
 ## Do's and Don'ts
 
