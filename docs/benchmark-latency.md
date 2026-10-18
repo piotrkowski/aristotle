@@ -72,6 +72,21 @@ It saves no framebuffer, book text, account data, or library path.
 Missing completion metrics are `null`. Replay exits unsuccessfully for
 incomplete captures, log overruns, unsupported schemas, or invalid timestamps.
 
+New captures record `captured_until_us` and `drain_timed_out`. The observer
+drains until all submitted updates finish and the 1.5 s quiet window expires.
+Its final drain has a 10 s budget. A timeout preserves the raw trace, marks
+it invalid, and suppresses completion metrics. Replay checks the recorded
+end time against the rolling quiet deadline instead of trusting the flag.
+Its `capture_horizon_verified` check includes all raw updates and pending
+completions, including updates outside an interaction's attribution window.
+
+Each measurement reports `settlement_verified`. A new capture reports `true`
+only when it proves the quiet horizon. An interrupted or truncated horizon
+reports `false` and no settled time. Legacy traces remain readable and retain
+their observed completion values, with `settlement_verified: null` and a
+warning in the text report. That unknown acquisition evidence does not
+invalidate their recorded first-update or full-screen completions.
+
 Reject a run if `valid` is false or either page-turn label has fewer than
 six completed samples. Inspect every `page-forward` and `page-back` update:
 each must remain one full-screen, full-mode `glkw16` update (mode 9).

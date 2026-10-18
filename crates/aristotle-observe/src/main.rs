@@ -30,6 +30,7 @@
 //! CLOCK_MONOTONIC by writing a marker line first.
 
 mod bench;
+mod capture;
 mod kmsg;
 mod report;
 mod trace;
@@ -294,6 +295,30 @@ impl Observer {
         });
     }
 
+    fn drain(&mut self) -> io::Result<capture::End> {
+        let started = monotonic_us();
+        loop {
+            self.pump(Duration::from_millis(5))?;
+            let now = monotonic_us();
+            let release = self.interactions.last().map_or(started, |i| i.up_us);
+            match capture::drain(
+                now,
+                started,
+                release,
+                &self.log.updates(),
+                self.open.is_some(),
+            ) {
+                capture::Drain::Waiting => {}
+                state => {
+                    return Ok(capture::End {
+                        captured_until_us: Some(now),
+                        drain_timed_out: state == capture::Drain::TimedOut,
+                    })
+                }
+            }
+        }
+    }
+
     fn pump_for(&mut self, ms: u64) -> io::Result<()> {
         let until = monotonic_us() + ms * 1000;
         while monotonic_us() < until {
@@ -311,13 +336,25 @@ impl Drop for Observer {
 
 // ---------------------------------------------------------------- commands
 
-fn finish(obs: &Observer, trace_path: Option<&str>) -> io::Result<()> {
+fn finish(obs: &mut Observer, trace_path: Option<&str>) -> io::Result<()> {
+    let end = obs.drain()?;
     let updates = obs.log.updates();
     if let Some(path) = trace_path {
-        trace::Capture::new(obs.interactions.clone(), updates.clone(), obs.lost_records)
-            .write(path)?;
+        trace::Capture::new(
+            obs.interactions.clone(),
+            updates.clone(),
+            obs.lost_records,
+            end,
+        )
+        .write(path)?;
     }
-    report::print(&obs.interactions, &updates, obs.lost_records);
+    report::print(&obs.interactions, &updates, obs.lost_records, end);
+    if end.drain_timed_out {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "capture did not settle within 10 seconds",
+        ));
+    }
     Ok(())
 }
 
@@ -368,8 +405,7 @@ fn run_script(path: &str, trace_path: Option<&str>) -> io::Result<()> {
         }
         obs.pump(Duration::from_millis(1))?;
     }
-    obs.pump_for(SETTLE_US / 1000 + 500)?;
-    finish(&obs, trace_path)
+    finish(&mut obs, trace_path)
 }
 
 /// Where snaps go: the userstore, not `/var/tmp`. `/var` is a 64 MB tmpfs
@@ -496,7 +532,7 @@ fn watch(seconds: u64, trace_path: Option<&str>) -> io::Result<()> {
     let mut obs = Observer::start()?;
     println!("observing for {seconds} s; touch the screen");
     obs.pump_for(seconds * 1000)?;
-    finish(&obs, trace_path)
+    finish(&mut obs, trace_path)
 }
 
 fn trace_path(args: &[String]) -> io::Result<Option<&str>> {
