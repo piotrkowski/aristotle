@@ -328,8 +328,8 @@ The app bundle unpacks to `/mnt/us/aristotle/` with `run-aristotle.sh`,
 `takeover.sh` and a copy of `guard.sh`. `run-aristotle.sh` runs
 `takeover.sh start`, which stops the stock GUI and the cloud and telemetry
 jobs, then the app, then `takeover.sh stop`, which brings the stock GUI back
-(30 to 60 s of boot splash). The app follows `powerd` for sleep only with
-`ARISTOTLE_POWERD=1` for now ([`docs/reader.md`](../docs/reader.md)). It logs to `/var/tmp/aristotle.log` and ignores
+(30 to 60 s of boot splash). The app follows `powerd` for sleep by default;
+`ARISTOTLE_POWERD=0` selects the non-suspending fallback ([`docs/reader.md`](../docs/reader.md)). It logs to `/var/tmp/aristotle.log` and ignores
 hangups, so the app outlives a dropped SSH session:
 
 ```sh

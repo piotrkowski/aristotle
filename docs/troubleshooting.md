@@ -35,9 +35,9 @@ For a boot problem without SSH, use the [kill switch](../device/README.md#kill-s
 
 ## Power and display
 
-The default screensaver does not suspend the CPU. The power button has no effect while the app holds `preventScreenSaver`. Touch wakes the app's screensaver. Quit to stock when you finish reading. Battery use is unverified.
+The app follows stock powerd by default. If its event listener or framework-readiness takeover fails, it holds `preventScreenSaver` and uses a non-suspending screensaver. The power button has no effect in that fallback; touch wakes its screensaver. Read the app log for the acquisition error.
 
-`ARISTOTLE_POWERD=1` enables an alternative sleep path with host tests only. It is not a verified fix for device suspend or battery use.
+Set `ARISTOTLE_POWERD=0` when launching the app to select that fallback explicitly. See [Power validation](power-validation.md) for measured behavior and remaining checks. Battery use is unverified.
 
 For ghosting or flicker, report the transition that causes it, whether night mode is on, and whether you changed the default page-turn mode. Do not change waveforms or clear reading state just to collect a report.
 
