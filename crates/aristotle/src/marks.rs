@@ -25,6 +25,23 @@ use aristotle_render::book::Position;
 
 pub const SOURCE: &str = "aristotle";
 
+/// A navigation target only when the source provides an exact position.
+pub fn target(a: &Annotation, format: aristotle_library::Format) -> Option<Position> {
+    let start = &a.position.as_ref()?.0;
+    match a.source.as_str() {
+        SOURCE => decode(start),
+        "kindle-sidecar"
+            if matches!(
+                format,
+                aristotle_library::Format::Mobi | aristotle_library::Format::Azw3
+            ) =>
+        {
+            aristotle_library::sidecar::kindle_position(start).map(Position::Kindle)
+        }
+        _ => None,
+    }
+}
+
 /// The stock Kindle's bytes per location (calibre's constant).
 const BYTES_PER_LOCATION: u64 = 150;
 
@@ -204,6 +221,43 @@ mod tests {
         assert_eq!(decode("xpointer:/body"), None);
         assert_eq!(kindle_location(0), 1);
         assert_eq!(kindle_location(7510), 51);
+    }
+
+    #[test]
+    fn imported_targets_require_exact_positions_in_a_matching_format() {
+        let mut a = bookmark(&Position::Kindle(7510), 7510, None, String::new());
+        a.source = "kindle-sidecar".into();
+        a.position = Some(("7510:7510:11:state".into(), "8000:8000:11:state".into()));
+        assert_eq!(target(&a, Format::Mobi), Some(Position::Kindle(7510)));
+        assert_eq!(target(&a, Format::Azw3), Some(Position::Kindle(7510)));
+        assert_eq!(target(&a, Format::Epub), None);
+        assert_eq!(target(&a, Format::Pdf), None);
+        a.position = Some(("not a position".into(), "8000".into()));
+        assert_eq!(target(&a, Format::Mobi), None);
+        a.source = "kindle-clippings".into();
+        a.position = None;
+        a.location = Some((51, 54));
+        assert_eq!(target(&a, Format::Mobi), None);
+    }
+
+    #[test]
+    fn imported_annotations_never_become_editable_page_marks() {
+        let mut b = book();
+        let a = bookmark(
+            &Position::Spine {
+                item: 0,
+                offset: 100,
+            },
+            100,
+            None,
+            String::new(),
+        );
+        let mut imported = a.clone();
+        imported.source = "kindle-sidecar".into();
+        b.annotations.extend([imported, a]);
+        let positions = ours(&b, AnnotationKind::Bookmark);
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].0, 1);
     }
 
     /// A clippings-to-notes pipeline (a Python script that turns

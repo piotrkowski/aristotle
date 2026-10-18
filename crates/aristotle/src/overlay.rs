@@ -33,6 +33,7 @@ pub mod act {
     pub const LOOKUP: ActionId = 1005;
     pub const GLOSS: ActionId = 1006;
     pub const GO_NOTE: ActionId = 1007;
+    pub const GO_ANNOTATION: ActionId = 1011;
     pub const MORE: ActionId = 1010;
     pub const CANCEL: ActionId = 1008;
     pub const BACK: ActionId = 1009;

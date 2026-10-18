@@ -110,6 +110,8 @@ Scans import sidecars for new books, while `aristotle-library-cli import-sidecar
 - KOReader imports `percent_finished`, `last_xpointer` or `last_page`, and `summary.status`. The partial MD5 must match.
 - `fpr`, PDF and KFX positions, font preferences, and KOReader highlights are not imported.
 
+Imported annotations appear in the reader's Highlights list as read-only entries. An entry opens its full text and attached note. A Go button appears only when the source has an exact position that the renderer can resolve. Sidecar positions can resolve in converted MOBI books with a position map. Clippings locations and page labels are not treated as exact positions. Imported ranges are not painted on reader pages or included in exports.
+
 ### My Clippings.txt [fw]
 
 The stock format is UTF-8 with CRLF line endings, a carriage return followed by a line feed, and a BOM on creation:
