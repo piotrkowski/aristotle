@@ -264,7 +264,13 @@ impl Opening {
 /// The snapshot to show for `src` opened with `style`, if it has a valid
 /// one: saved with the progress the index holds now.
 pub fn find_snapshot(src: &Source, style: &Style) -> Option<snapshot::Loaded> {
-    let locator = src.saved.as_ref()?.locator.clone();
+    let saved = src.saved.as_ref()?;
+    if matches!(saved.locator, aristotle_library::Locator::Kindle { .. })
+        && saved.source.as_deref() != Some("aristotle")
+    {
+        return None;
+    }
+    let locator = saved.locator.clone();
     let key = snapshot::Key::new(&src.id, src.stamp, style, locator);
     snapshot::load(&src.data_dir, &key, style)
 }
@@ -583,6 +589,53 @@ pub fn bench(library: &Path, root: Option<&Path>, title: &str) -> Result<(), Err
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_kindle_progress_cannot_reuse_an_owned_exact_snapshot() {
+        let data_dir = crate::testdir("snapshot-provenance");
+        let style = Style::pw4();
+        let locator = aristotle_library::Locator::Kindle { position: 1200 };
+        let key = snapshot::Key::new("joint", (123, 456), &style, locator.clone());
+        let snapshot = snapshot::Snapshot {
+            key: key.clone(),
+            pages: vec![(
+                snapshot::PageInfo {
+                    location: 420,
+                    locator: locator.clone(),
+                    fraction: 0.5,
+                    chapter: String::new(),
+                    label: "50%".into(),
+                    last: false,
+                },
+                Page::white(&style),
+            )],
+        };
+        snapshot::store(&data_dir, &snapshot).unwrap();
+        let mut source = Source {
+            id: "joint".into(),
+            title: "Synthetic joint book".into(),
+            path: data_dir.join("joint.azw3"),
+            stamp: (123, 456),
+            data_dir: data_dir.clone(),
+            mobi_cache: data_dir.join("cache"),
+            saved: Some(progress::progress_for(locator, 0.5, 1)),
+            marks: Vec::new(),
+            bookmarks: Vec::new(),
+            secs_per_page: 30.0,
+            exact: None,
+            paginate: false,
+            cancel: None,
+        };
+        assert_eq!(find_snapshot(&source, &style).unwrap().info.location, 420);
+        for provenance in [Some("kindle"), None, Some("future-import")] {
+            let saved = source.saved.as_mut().unwrap();
+            saved.source = provenance.map(String::from);
+            saved.fraction = 0.8;
+            assert!(snapshot::load(&data_dir, &key, &style).is_some());
+            assert!(find_snapshot(&source, &style).is_none());
+        }
+        std::fs::remove_dir_all(data_dir).unwrap();
+    }
 
     #[test]
     fn reconcile_never_keeps_a_wrong_page() {
