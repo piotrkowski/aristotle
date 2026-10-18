@@ -122,6 +122,42 @@ In this run:
 - A book takes 1.3 s to open against stock's 0.8 s, mostly chapter layout.
 - The shelf flash fires on a count, so it can feel random.
 
+## Current release-driven baseline (2026-10-18)
+
+Measured on a PW4 with firmware 5.13.6, using the original TXT fixture and
+[`aristotle-latency.txt`](../tools/scenarios/aristotle-latency.txt).
+The reader came from the CI bundle for commit `4afc98b`, with Plato
+`6a4fc45`; the observer was built from `35a82e7`. The device was charging
+at 80 %, in day mode with light level 2 and page-turn mode 9. Accounts,
+library state, dictionaries, fonts, and clippings were isolated in
+`/var/tmp`; no personal books were indexed or opened.
+
+| Interaction | Samples | Median release to completion | Range |
+| --- | ---: | ---: | ---: |
+| Page forward | 6 | 514.1 ms | 506.0 to 525.4 ms |
+| Page back | 6 | 513.6 ms | 501.7 to 524.8 ms |
+| Menu open | 1 | 617.2 ms | one sample |
+| Menu close | 1 | 512.4 ms | one sample |
+
+Warm-up turns are excluded from the table. Every measured interaction
+produced one full-screen, full-mode `glkw16` update. The trace has no lost
+kernel records or missing completions; host replay reports `valid: true`.
+The app log confirms forward/back dispatch and menu closure.
+
+The [raw trace](measurements/pw4-release-2026-10-18.json) contains timings
+and update metadata, not framebuffer contents. Replay it with:
+
+```sh
+cargo run --locked -p aristotle-observe -- replay \
+    docs/measurements/pw4-release-2026-10-18.json --json
+```
+
+This is a current-path baseline for one TXT fixture, not a speedup or a
+paired stock comparison. Menu timings need more samples. It does not
+verify long-session ghosting, suspend, wake, or battery consumption. The
+test app exited, its child processes ended, stock was restored, and the
+previous light, screensaver-prevention, and EPDC debug values were restored.
+
 ## Device measurements of the app
 
 Device, 2026-10-17, from the app's `[perf]` lines in `/var/tmp/aristotle.log` and `/proc/<pid>/status`.
