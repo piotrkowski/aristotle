@@ -61,6 +61,7 @@ echo "${0##*/} $*" >> "$AGENT_TEST_ROOT/calls"
 case "${0##*/}:$1" in
 # No rule or chain exists yet, as on a fresh boot.
 iptables:-C | iptables:-D | iptables:-F | iptables:-X) exit 1 ;;
+iptables:-L) case "$2" in INPUT | OUTPUT) exit 0 ;; *) exit 1 ;; esac ;;
 mntroot:*) [ "${FAKE_MNTROOT_FAIL:-}" != "$1" ] ;;
 # A bind mount shows up in /proc/mounts, as on the device.
 mount:--bind) echo "/dev/mmcblk1p9 $3 ext3 rw 0 0" >> "$AGENT_TEST_ROOT/proc/mounts" ;;

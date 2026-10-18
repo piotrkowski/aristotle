@@ -58,7 +58,10 @@ stop aristotle-agent > /dev/null 2>&1
 # Back to the stock firewall on Wi-Fi.
 if [ -f "$S/net.sh" ]; then
     echo off > "$S/net-mode"
-    sh "$S/net.sh" apply
+    if ! sh "$S/net.sh" apply; then
+        say "Aristotle: Wi-Fi policy removal failed; files kept, retry removal"
+        exit 1
+    fi
 fi
 # The OTA block: the stubs go, and the daemons that ran (as stubs) run again
 # for real. The stub file goes first: starting a daemon runs the OTA job,
