@@ -22,8 +22,8 @@
 use std::os::fd::RawFd;
 use std::time::{Duration, Instant};
 
-use aristotle_hal::power;
 use aristotle_hal::powerd::{self as hal, Lipc, PowerEvent, PowerEvents};
+use aristotle_hal::screensaver::Screensaver;
 
 use crate::perf;
 
@@ -51,8 +51,8 @@ pub enum Action {
 pub struct Sleep {
     events: Option<PowerEvents>,
     lipc: Lipc,
-    /// `preventScreenSaver` as found, put back on exit.
-    prevent_was: Option<bool>,
+    /// Restores stock screensaver state on every exit path.
+    screensaver: Option<Screensaver>,
     last_ping: Instant,
     touched: bool,
     /// The button pressed for our own timer, waiting for powerd.
@@ -71,39 +71,34 @@ impl Sleep {
     /// is set, hold `preventScreenSaver` instead, as earlier versions did:
     /// suspending through powerd is not yet verified on the device, so it
     /// is opt-in for now.
-    pub fn start() -> Sleep {
-        let prevent_was = power::screensaver_prevented().ok();
+    pub fn start() -> std::io::Result<Sleep> {
         let wanted = std::env::var_os("ARISTOTLE_POWERD").is_some_and(|v| v == "1");
         let listen = if wanted {
             PowerEvents::listen()
         } else {
             Err(std::io::Error::other("ARISTOTLE_POWERD=1 not set"))
         };
-        let events = match listen {
-            Ok(ev) => {
-                if prevent_was != Some(false) {
-                    if let Err(e) = power::prevent_screensaver(false) {
-                        eprintln!("aristotle: preventScreenSaver: {e}");
-                    }
+        let (events, screensaver) = match listen {
+            Ok(ev) => match Screensaver::acquire(true) {
+                Ok(state) => {
+                    perf!("sleep: following powerd's events");
+                    (Some(ev), state)
                 }
-                if let Err(e) = hal::blanket(false, "screensaver") {
-                    eprintln!("aristotle: can't unload the stock screensaver: {e}");
+                Err(error) => {
+                    eprintln!("aristotle: can't take over powerd's screensaver: {error}");
+                    drop(ev);
+                    (None, Screensaver::acquire(false)?)
                 }
-                perf!("sleep: following powerd's events");
-                Some(ev)
-            }
+            },
             Err(e) => {
                 eprintln!("aristotle: no powerd events ({e}); holding off its screensaver");
-                if let Err(e) = power::prevent_screensaver(true) {
-                    eprintln!("aristotle: can't hold off the stock screensaver: {e}");
-                }
-                None
+                (None, Screensaver::acquire(false)?)
             }
         };
-        Sleep {
+        Ok(Sleep {
             events,
             lipc: Lipc::start(),
-            prevent_was,
+            screensaver: Some(screensaver),
             // Restart T1 on the first tick. (Early in a boot the monotonic
             // clock may be below PING_ALWAYS.)
             last_ping: Instant::now()
@@ -114,7 +109,7 @@ impl Sleep {
             powerd_asleep: false,
             wake_asked_at: None,
             check_at: None,
-        }
+        })
     }
 
     /// A Sleep for the host preview: no powerd, nothing changed.
@@ -122,7 +117,7 @@ impl Sleep {
         Sleep {
             events: None,
             lipc: Lipc::start(),
-            prevent_was: None,
+            screensaver: None,
             last_ping: Instant::now(),
             touched: false,
             asked_at: None,
@@ -284,16 +279,17 @@ impl Sleep {
 
     /// Give the screensaver back to the stock system: blanket's module, and
     /// `preventScreenSaver` as it was.
-    pub fn restore(&self) {
-        if self.managed() {
-            if let Err(e) = hal::blanket(true, "screensaver") {
-                eprintln!("aristotle: can't load the stock screensaver: {e}");
-            }
-            if self.prevent_was == Some(true) {
-                let _ = power::prevent_screensaver(true);
-            }
-        } else if self.prevent_was == Some(false) {
-            let _ = power::prevent_screensaver(false);
+    pub fn restore(&mut self) {
+        self.events.take();
+        self.lipc.shutdown();
+        if let Some(state) = &mut self.screensaver {
+            state.restore();
         }
+    }
+}
+
+impl Drop for Sleep {
+    fn drop(&mut self) {
+        self.restore();
     }
 }

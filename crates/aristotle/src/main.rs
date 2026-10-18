@@ -308,7 +308,7 @@ fn run() -> Result<(), Error> {
     touch.grab(true)?;
     // Our screensaver replaces the stock one, and powerd's events drive it
     // (powerd.rs). Put back as found on exit.
-    let sleep_ctl = powerd::Sleep::start();
+    let sleep_ctl = powerd::Sleep::start().context("can't acquire the screensaver")?;
     let mut app = build_app(&args, panel, prefs, start_dictionaries(&args), sleep_ctl)?;
     perf!("startup: first frame submitted");
     open::warm_up();

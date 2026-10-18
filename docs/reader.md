@@ -236,6 +236,8 @@ The default screensaver saves progress, turns off the light, and shows a book ca
 
 `ARISTOTLE_POWERD=1` enables the implemented `powerd` event path in `powerd.rs`. It releases `preventScreenSaver`, handles sleep and wake events, and restores stock screensaver behavior on exit. This path has host tests only; device suspend, wake light levels, and battery use are unverified.
 
+The app reads the existing power policy before changing it and unloads the stock screensaver before allowing suspend. Failed takeover falls back to the default policy. If the app cannot read or hold that policy, startup fails without starting the reader. Normal exits and startup errors restore the saved policy; queued power commands finish before stock screensaver restoration.
+
 Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including `SIGTERM` and `SIGINT`. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
 
 ## Reading interactions

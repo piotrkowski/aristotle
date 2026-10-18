@@ -275,10 +275,12 @@ pub fn blanket(load: bool, module: &str) -> io::Result<()> {
     set_prop(BLANKET, if load { "load" } else { "unload" }, module, false)
 }
 
-/// Requests to powerd that need no answer, run in order on a thread of
-/// their own.
+type Property = (String, String, String, bool);
+
+/// Requests to powerd, run in order on one worker and completed before shutdown.
 pub struct Lipc {
-    tx: Sender<(String, String, String, bool)>,
+    tx: Option<Sender<Property>>,
+    worker: Option<thread::JoinHandle<()>>,
 }
 
 impl Default for Lipc {
@@ -289,21 +291,46 @@ impl Default for Lipc {
 
 impl Lipc {
     pub fn start() -> Lipc {
-        let (tx, rx) = mpsc::channel::<(String, String, String, bool)>();
-        let _ = thread::Builder::new().name("lipc".into()).spawn(move || {
+        Self::start_with(set_prop)
+    }
+
+    fn start_with<F>(mut set: F) -> Lipc
+    where
+        F: FnMut(&str, &str, &str, bool) -> io::Result<()> + Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel::<Property>();
+        let worker = thread::Builder::new().name("lipc".into()).spawn(move || {
             for (service, prop, value, int) in rx {
-                if let Err(e) = set_prop(&service, &prop, &value, int) {
+                if let Err(e) = set(&service, &prop, &value, int) {
                     eprintln!("aristotle: {e}");
                 }
             }
         });
-        Lipc { tx }
+        let worker = match worker {
+            Ok(worker) => Some(worker),
+            Err(error) => {
+                eprintln!("aristotle: starting LIPC worker: {error}");
+                None
+            }
+        };
+        Lipc {
+            tx: Some(tx),
+            worker,
+        }
     }
 
     fn send(&self, service: &str, prop: &str, value: &str, int: bool) {
-        let _ = self
-            .tx
-            .send((service.into(), prop.into(), value.into(), int));
+        if let Some(tx) = &self.tx {
+            let _ = tx.send((service.into(), prop.into(), value.into(), int));
+        }
+    }
+
+    /// Finish queued commands before restoring the stock power policy.
+    pub fn shutdown(&mut self) {
+        self.tx.take();
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
     }
 
     /// Restart powerd's idle timer (T1), as a touch on the stock UI does.
@@ -317,9 +344,34 @@ impl Lipc {
     }
 }
 
+impl Drop for Lipc {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lipc_shutdown_finishes_queued_commands_once() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = calls.clone();
+        let mut lipc = Lipc::start_with(move |_, prop, _, _| {
+            recorded.lock().unwrap().push(prop.to_string());
+            Ok(())
+        });
+        lipc.touch_idle_timer();
+        lipc.power_button();
+        lipc.shutdown();
+        lipc.power_button();
+        drop(lipc);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["touchScreenSaverTimeout", "powerButton"]
+        );
+    }
 
     fn listener(script: &'static str, retry: Duration) -> PowerEvents {
         PowerEvents::listen_with(
