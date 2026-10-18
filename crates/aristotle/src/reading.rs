@@ -1157,11 +1157,12 @@ impl App {
         };
         let mut rows = Vec::new();
         if let Some(rec) = self.lib.book(&r.session.id) {
+            let mobi = r.session.book().mobi().map(|m| m.info.clone());
             let mut all: Vec<_> = rec
                 .annotations
                 .iter()
                 .map(|a| {
-                    let p = marks::target(a, rec.format)
+                    let p = marks::target(a, rec.format, mobi.as_ref())
                         .filter(|p| r.session.book().location_of(p).is_some());
                     let loc = p.as_ref().and_then(|p| r.session.book().location_of(p));
                     (loc.unwrap_or(usize::MAX), a, p)
