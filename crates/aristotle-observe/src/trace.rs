@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+use crate::capture::End;
 use crate::kmsg::Update;
 use crate::{report, Interaction};
 
@@ -15,6 +16,8 @@ pub struct Capture {
     interactions: Vec<Interaction>,
     updates: Vec<Update>,
     kernel_log_overruns: u64,
+    #[serde(flatten)]
+    end: End,
 }
 
 impl Capture {
@@ -22,12 +25,14 @@ impl Capture {
         interactions: Vec<Interaction>,
         updates: Vec<Update>,
         kernel_log_overruns: u64,
+        end: End,
     ) -> Self {
         Self {
             schema_version: 1,
             interactions,
             updates,
             kernel_log_overruns,
+            end,
         }
     }
 
@@ -60,6 +65,20 @@ impl Capture {
                 "trace timestamps are not monotonic",
             ));
         }
+        if capture.end.drain_timed_out && capture.end.captured_until_us.is_none()
+            || capture.end.captured_until_us.is_some_and(|until| {
+                capture.interactions.iter().any(|i| i.up_us > until)
+                    || capture
+                        .updates
+                        .iter()
+                        .any(|u| u.start_us > until || u.end_us.is_some_and(|end| end > until))
+            })
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "capture end precedes recorded events",
+            ));
+        }
         Ok(capture)
     }
 }
@@ -80,13 +99,21 @@ pub fn replay(args: &[String]) -> io::Result<()> {
         &capture.interactions,
         &capture.updates,
         capture.kernel_log_overruns,
+        capture.end,
     );
-    let valid = capture.kernel_log_overruns == 0 && rows.iter().all(|row| row.valid);
+    let valid = capture.kernel_log_overruns == 0
+        && !capture.end.drain_timed_out
+        && rows.iter().all(|row| row.valid)
+        && rows
+            .last()
+            .is_none_or(|row| row.settlement_verified != Some(false));
     if json {
         let result = serde_json::json!({
             "schema_version": 1,
             "valid": valid,
             "kernel_log_overruns": capture.kernel_log_overruns,
+            "captured_until_us": capture.end.captured_until_us,
+            "drain_timed_out": capture.end.drain_timed_out,
             "measurements": rows,
         });
         let stdout = io::stdout();
@@ -98,6 +125,7 @@ pub fn replay(args: &[String]) -> io::Result<()> {
             &capture.interactions,
             &capture.updates,
             capture.kernel_log_overruns,
+            capture.end,
         );
     }
     if !valid {
@@ -131,6 +159,10 @@ mod tests {
                 taken_ms: Some(1),
             }],
             0,
+            End {
+                captured_until_us: Some(2_000_000),
+                drain_timed_out: false,
+            },
         )
     }
 
@@ -142,6 +174,7 @@ mod tests {
             &restored.interactions,
             &restored.updates,
             restored.kernel_log_overruns,
+            restored.end,
         );
         assert_eq!(rows[0].page_done_us, Some(600));
         assert_eq!(rows[0].updates[0].waveform, "glkw16");
@@ -172,11 +205,31 @@ mod tests {
             &restored.interactions,
             &restored.updates,
             restored.kernel_log_overruns,
+            restored.end,
         );
         let json = serde_json::to_value(&rows).unwrap();
         assert_eq!(json[0]["valid"], false);
         assert!(json[0]["first_done_us"].is_null());
         assert!(json[0]["page_done_us"].is_null());
         assert!(json[0]["settled_us"].is_null());
+    }
+
+    #[test]
+    fn legacy_traces_preserve_observed_values_without_claiming_settlement() {
+        let mut json = serde_json::to_value(capture()).unwrap();
+        json.as_object_mut().unwrap().remove("captured_until_us");
+        json.as_object_mut().unwrap().remove("drain_timed_out");
+        let legacy = Capture::read(serde_json::to_vec(&json).unwrap().as_slice()).unwrap();
+        let rows = report::measure(&legacy.interactions, &legacy.updates, 0, legacy.end);
+        assert_eq!(rows[0].first_done_us, Some(600));
+        assert_eq!(rows[0].settled_us, Some(600));
+        assert_eq!(rows[0].settlement_verified, None);
+    }
+
+    #[test]
+    fn rejects_capture_end_before_raw_events() {
+        let mut capture = capture();
+        capture.end.captured_until_us = Some(799);
+        assert!(Capture::read(serde_json::to_vec(&capture).unwrap().as_slice()).is_err());
     }
 }

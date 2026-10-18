@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Release-based measurements from touch and driver timestamps.
 
+use crate::capture::End;
 use crate::kmsg::Update;
 use crate::{Interaction, SETTLE_US};
 
@@ -15,12 +16,14 @@ pub struct Measurement<'a> {
     pub first_done_us: Option<u64>,
     pub page_done_us: Option<u64>,
     pub settled_us: Option<u64>,
+    pub settlement_verified: Option<bool>,
 }
 
 pub fn measure<'a>(
     interactions: &'a [Interaction],
     updates: &'a [Update],
     lost_records: u64,
+    end: End,
 ) -> Vec<Measurement<'a>> {
     let mut ordered: Vec<_> = updates.iter().collect();
     ordered.sort_by_key(|u| u.start_us);
@@ -60,7 +63,10 @@ pub fn measure<'a>(
             let first_start_us = after_release()
                 .map(|u| u.start_us - interaction.up_us)
                 .min();
-            let valid = incomplete == 0 && lost_records == 0;
+            let valid = incomplete == 0 && lost_records == 0 && !end.drain_timed_out;
+            let settlement_verified = end
+                .captured_until_us
+                .map(|until| valid && deadline <= until && deadline <= next);
             let completion = |updates: Vec<&Update>| {
                 valid
                     .then(|| updates.iter().filter_map(|u| u.end_us).min())
@@ -78,7 +84,7 @@ pub fn measure<'a>(
                     })
                     .collect(),
             );
-            let settled_us = valid
+            let settled_us = (valid && settlement_verified != Some(false))
                 .then(|| mine.iter().filter_map(|u| u.end_us).max())
                 .flatten()
                 .and_then(|end| end.checked_sub(interaction.up_us));
@@ -92,6 +98,7 @@ pub fn measure<'a>(
                 first_done_us,
                 page_done_us,
                 settled_us,
+                settlement_verified,
             }
         })
         .collect()
@@ -112,7 +119,7 @@ fn time(value: Option<u64>) -> String {
     value.map_or_else(|| "n/a".into(), |us| format!("{:.1}ms", us as f64 / 1000.0))
 }
 
-pub fn print(interactions: &[Interaction], updates: &[Update], lost_records: u64) {
+pub fn print(interactions: &[Interaction], updates: &[Update], lost_records: u64, end: End) {
     if std::env::var_os("OBSERVE_DEBUG").is_some() {
         for update in updates {
             eprintln!("update: {update:?}");
@@ -121,7 +128,7 @@ pub fn print(interactions: &[Interaction], updates: &[Update], lost_records: u64
             eprintln!("touch: {interaction:?}");
         }
     }
-    let rows = measure(interactions, updates, lost_records);
+    let rows = measure(interactions, updates, lost_records, end);
     println!(
         "{:<22} {:>10} {:>10} {:>10} {:>10} {:>4} {:>4} {:>4} {:>5} {:>7}  waveforms",
         "interaction",
@@ -185,6 +192,20 @@ pub fn print(interactions: &[Interaction], updates: &[Update], lost_records: u64
             );
         }
     }
+    if end.captured_until_us.is_none() {
+        println!("legacy capture: quiet horizon unknown; settled is the last observed completion, not verified settlement");
+    }
+    if end.drain_timed_out {
+        println!("invalid capture: drain timed out; completion metrics omitted");
+    }
+    if rows
+        .iter()
+        .any(|row| row.settlement_verified == Some(false))
+    {
+        println!(
+            "unverified settlement: quiet window interrupted or capture ended before its deadline"
+        );
+    }
     if lost_records > 0 {
         println!("invalid capture: {lost_records} kernel log overruns; completion metrics omitted");
     }
@@ -221,7 +242,7 @@ mod tests {
     fn separates_touch_down_acknowledgement_from_the_page() {
         let interactions = [touch(100, 200)];
         let updates = [update(110, Some(250), false), update(220, Some(800), true)];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].pre_release, 1);
         assert_eq!(rows[0].first_start_us, Some(20));
         assert_eq!(rows[0].first_done_us, Some(600));
@@ -232,7 +253,7 @@ mod tests {
     fn uses_the_earliest_completion_not_the_first_submit() {
         let interactions = [touch(100, 200)];
         let updates = [update(220, Some(800), true), update(230, Some(400), false)];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].first_done_us, Some(200));
         assert_eq!(rows[0].page_done_us, Some(600));
     }
@@ -241,7 +262,7 @@ mod tests {
     fn full_screen_updates_spanning_release_keep_their_actual_completion() {
         let interactions = [touch(100, 200)];
         let updates = [update(110, Some(180), true), update(190, Some(800), true)];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].pre_release, 2);
         assert_eq!(rows[0].first_done_us, None);
         assert_eq!(rows[0].page_done_us, Some(600));
@@ -252,7 +273,7 @@ mod tests {
     fn missing_completion_or_log_loss_invalidates_completion_metrics() {
         let interactions = [touch(100, 200)];
         let updates = [update(220, None, true), update(230, Some(400), false)];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].incomplete, 1);
         assert_eq!(
             (
@@ -263,7 +284,7 @@ mod tests {
             (None, None, None)
         );
         let complete = [update(220, Some(800), true)];
-        let rows = measure(&interactions, &complete, 1);
+        let rows = measure(&interactions, &complete, 1, End::default());
         assert_eq!(rows[0].first_done_us, None);
     }
 
@@ -275,7 +296,7 @@ mod tests {
             update(2_000_000, Some(2_500_000), false),
             update(3_000_050, Some(3_500_000), false),
         ];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].updates.len(), 2);
         assert_eq!(rows[0].settled_us, Some(2_499_800));
         assert_eq!(rows[1].updates.len(), 1);
@@ -284,9 +305,12 @@ mod tests {
     #[test]
     fn quiet_or_pre_release_only_interactions_have_no_release_sample() {
         let interactions = [touch(100, 200)];
-        assert_eq!(measure(&interactions, &[], 0)[0].first_done_us, None);
+        assert_eq!(
+            measure(&interactions, &[], 0, End::default())[0].first_done_us,
+            None
+        );
         let updates = [update(110, Some(180), false)];
-        let rows = measure(&interactions, &updates, 0);
+        let rows = measure(&interactions, &updates, 0, End::default());
         assert_eq!(rows[0].first_done_us, None);
         assert_eq!(rows[0].page_done_us, None);
     }
@@ -296,5 +320,63 @@ mod tests {
         assert_eq!(median([600, 100, 200, 300].into_iter()), Some(250.0));
         assert_eq!(median([600, 100, 200].into_iter()), Some(200.0));
         assert_eq!(median([].into_iter()), None);
+    }
+
+    #[test]
+    fn capture_end_must_prove_the_rolling_quiet_horizon() {
+        let interactions = [touch(0, 0)];
+        let updates = [
+            update(100_000, Some(700_000), true),
+            update(1_300_000, Some(1_900_000), false),
+            update(2_500_000, Some(3_000_000), false),
+        ];
+        let truncated = measure(
+            &interactions,
+            &updates[..2],
+            0,
+            End {
+                captured_until_us: Some(2_000_000),
+                drain_timed_out: false,
+            },
+        );
+        assert_eq!(truncated[0].settlement_verified, Some(false));
+        assert_eq!(truncated[0].settled_us, None);
+        assert_eq!(truncated[0].first_done_us, Some(700_000));
+        let complete = measure(
+            &interactions,
+            &updates,
+            0,
+            End {
+                captured_until_us: Some(4_500_000),
+                drain_timed_out: false,
+            },
+        );
+        assert_eq!(complete[0].settlement_verified, Some(true));
+        assert_eq!(complete[0].settled_us, Some(3_000_000));
+    }
+
+    #[test]
+    fn bounded_timeout_preserves_raw_updates_but_suppresses_completion_metrics() {
+        let interactions = [touch(0, 0)];
+        let updates = [update(100_000, Some(700_000), true)];
+        let rows = measure(
+            &interactions,
+            &updates,
+            0,
+            End {
+                captured_until_us: Some(10_000_000),
+                drain_timed_out: true,
+            },
+        );
+        assert!(!rows[0].valid);
+        assert_eq!(rows[0].updates.len(), 1);
+        assert_eq!(
+            (
+                rows[0].first_done_us,
+                rows[0].page_done_us,
+                rows[0].settled_us
+            ),
+            (None, None, None)
+        );
     }
 }
