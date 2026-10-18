@@ -665,7 +665,7 @@ mod tests {
             first_slot.run(1, || {
                 first_sent.lock().unwrap().push(1);
                 entered_tx.send(()).unwrap();
-                release_rx.recv().unwrap();
+                release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
                 Ok(())
             })
         });
@@ -712,7 +712,7 @@ mod tests {
         let first = std::thread::spawn(move || {
             first_slot.run(1, || {
                 entered_tx.send(()).unwrap();
-                release_rx.recv().unwrap();
+                release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
                 Ok(())
             })
         });
