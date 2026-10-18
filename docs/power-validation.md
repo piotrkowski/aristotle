@@ -43,6 +43,7 @@ This verifies a suspend and physical wake using the temporary external helper. I
 Managed sleep is the default; `ARISTOTLE_POWERD=0` selects the non-suspending fallback. These checks remain outstanding:
 
 - Normal startup and physical sleep/wake using the app-owned helper.
+- Device display-update counts and framebuffer preservation for Last screen mode, compared with Book cover under the same observer scenario.
 - Cover sleep and wake with the reader running.
 - Idle-timer sleep and wake, including the reader's sleep-delay settings.
 - Progress persistence and frontlight restoration across actual suspend.

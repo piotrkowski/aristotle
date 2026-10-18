@@ -36,6 +36,7 @@ pub mod action {
     pub const COVERS: ActionId = 40;
     /// `SLEEP + i` picks `SLEEP_MINUTES[i]`.
     pub const SLEEP: ActionId = 50;
+    pub const SLEEP_SCREEN: ActionId = 54;
     /// `USB + 0` is the network, `USB + 1` drive mode.
     pub const USB: ActionId = 60;
     /// `LANGUAGE + i` picks `aristotle_i18n::locales()[i]`.
@@ -92,6 +93,7 @@ pub struct SystemView<'a> {
     pub night: bool,
     pub covers: CoverMode,
     pub sleep_minutes: Option<u32>,
+    pub sleep_screen_cover: bool,
     /// Whether new highlights are appended to `My Clippings.txt`.
     pub clippings: bool,
     pub battery: Option<BatteryInfo<'a>>,
@@ -364,6 +366,27 @@ impl Settings {
         let sleep = choice(&mut t, s, &labels, selected, action::SLEEP);
         let sleep = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), sleep);
         rows.push(t.add(Node::column(0), [sleep_head, sleep]));
+        let screen_head = row(
+            &mut t,
+            s,
+            Icon::Power,
+            tr(Msg::SettingsSleepScreen),
+            None,
+            None,
+        );
+        let labels = [
+            tr(Msg::SettingsSleepScreenLast),
+            tr(Msg::SettingsSleepScreenCover),
+        ];
+        let screen = choice(
+            &mut t,
+            s,
+            &labels,
+            Some(usize::from(v.sleep_screen_cover)),
+            action::SLEEP_SCREEN,
+        );
+        let screen = t.pad(Insets::new(0, 0, Space::M, Space::XL + Space::M), screen);
+        rows.push(t.add(Node::column(0), [screen_head, screen]));
         sections.extend(section(&mut t, s, tr(Msg::SettingsSectionPower), rows));
 
         // Device.
@@ -612,6 +635,7 @@ mod tests {
             night: false,
             covers: CoverMode::None,
             sleep_minutes: Some(15),
+            sleep_screen_cover: false,
             clippings: true,
             battery: Some(BatteryInfo {
                 level: 0.82,
@@ -669,6 +693,40 @@ mod tests {
                     .position(|l| l.code == code)
                     .unwrap();
                 assert!(selected[at] && selected.iter().filter(|s| **s).count() == 1);
+            });
+        }
+    }
+
+    #[test]
+    fn sleep_screen_choices_are_reachable_and_selected_in_both_languages() {
+        for language in ["en", "pl"] {
+            aristotle_i18n::with_language(language, || {
+                for cover in [false, true] {
+                    let about = sample_about();
+                    let mut view = view(&about);
+                    view.sleep_screen_cover = cover;
+                    let mut text = TextEngine::new(Fonts::embedded());
+                    let (tree, ids) = Settings::build(&mut text, &Styles::new(FamilyId(0)), &view);
+                    let mut ui = Ui::new(tree, text, SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32);
+                    ui.layout();
+                    for index in 0..2 {
+                        let action = action::SLEEP_SCREEN + index;
+                        let node = (0..ui.tree.len())
+                            .map(|n| NodeId(n as u32))
+                            .find(|&n| ui.tree.node(n).action == Some(action))
+                            .unwrap();
+                        assert_eq!(ui.tree.node(node).inverted, (index == 1) == cover);
+                        let pages = ui.tree.page(ids.list).1;
+                        let visible = (0..pages).any(|page| {
+                            ui.tree.set_page(ids.list, page);
+                            ui.layout();
+                            let rect = ui.tree.rect(node);
+                            !rect.is_empty()
+                                && ui.tree.hit(rect.center()) == crate::tree::Hit::Target(node)
+                        });
+                        assert!(visible, "{language}: sleep screen choice {index}");
+                    }
+                }
             });
         }
     }

@@ -508,6 +508,9 @@ impl App {
 
     /// Show a waiting offer, once nothing covers the page.
     pub(crate) fn show_sync_offer(&mut self) -> Result<(), Error> {
+        if self.asleep.is_some() {
+            return Ok(());
+        }
         let Screen::Reader(r) = &mut self.screen else {
             return Ok(());
         };

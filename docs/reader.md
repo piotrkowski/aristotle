@@ -234,9 +234,11 @@ Night mode keeps page-turn and flash modes. See [Night mode](ui-framework.md#nig
 
 Startup shows the saved library index, then scans `/mnt/us/documents`. The library has *Books*, *Folders*, *Series*, and a continue-reading card. *Settings* control the frontlight, night mode, covers, screensaver delay, and USB mode.
 
-The app follows [`powerd`](glossary.md#powerd)'s sleep and wake events by default. On entering the screensaver, it saves progress, turns off the light, and shows a book card. Powerd controls CPU suspend and physical wake.
+The app follows [`powerd`](glossary.md#powerd)'s sleep and wake events by default. On entering sleep, it saves progress and turns off the light. **Settings > Sleep screen > Last screen**, the default, leaves the currently visible book, library or settings screen unchanged without submitting a display update. **Book cover** draws the previous book card instead. Both choices use the same powerd suspend and wake path. Skipping the cover update is not a measured battery-saving claim.
 
-`ARISTOTLE_POWERD=0` disables managed sleep. If the event listener or takeover fails, the app also falls back to holding `preventScreenSaver`: its own screensaver does not suspend the CPU, the power button has no effect, and touch wakes the card. A managed idle request that powerd ignores also falls back to a card without suspend. Host tests cover listener shutdown, helper ownership, and policy rollback. [Power validation](power-validation.md) distinguishes the measured runtime mechanism from the app-owned helper's pending device validation. Battery use remains unverified.
+Network completions still update their state while asleep. Their display changes and sync-position offers wait until wake, so a completed request does not repaint the retained screen or remain marked busy.
+
+`ARISTOTLE_POWERD=0` disables managed sleep. If the event listener or takeover fails, the app also falls back to holding `preventScreenSaver`: its own sleep screen does not suspend the CPU, the power button has no effect, and touch wakes it. A managed idle request that powerd ignores also uses the selected sleep screen without suspend. Host tests cover listener shutdown, helper ownership, and policy rollback. [Power validation](power-validation.md) distinguishes the measured runtime mechanism from the app-owned helper's pending device validation. Battery use remains unverified.
 
 The app reads the existing power policy before changing it and unloads the stock screensaver before allowing suspend. Failed takeover selects the non-suspending fallback. If the app cannot read or hold that policy, startup fails without starting the reader. Normal exits and startup errors restore the saved policy.
 

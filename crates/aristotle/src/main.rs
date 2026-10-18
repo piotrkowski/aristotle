@@ -539,7 +539,7 @@ struct App {
     covers: Covers,
     screen: Screen,
     nav: Nav,
-    /// The screensaver is up; holds the light step to restore.
+    /// The saved light step while asleep.
     asleep: Option<u32>,
     last_touch: Instant,
     /// The time the status line shows, to refresh it each minute.
@@ -662,6 +662,13 @@ impl App {
     }
 
     fn render_ui_with(&mut self, content: Content) -> Result<(), Error> {
+        if self.asleep.is_some() {
+            return Ok(());
+        }
+        self.submit_ui(content)
+    }
+
+    fn submit_ui(&mut self, content: Content) -> Result<(), Error> {
         let damage = self.ui.render();
         self.panel.present(&self.ui, &damage, content)?;
         Ok(())
@@ -717,6 +724,15 @@ impl App {
 
     /// Rebuild the library screen for `self.nav`, on list page `page`.
     fn show_library_at(&mut self, refresh: Refresh, page: usize) -> Result<(), Error> {
+        self.rebuild_library_at(refresh, page, false)
+    }
+
+    fn rebuild_library_at(
+        &mut self,
+        refresh: Refresh,
+        page: usize,
+        deferred: bool,
+    ) -> Result<(), Error> {
         let mode = self.prefs.covers.mode();
         let model = ShelfModel::build(&self.lib, &self.nav, mode, &mut self.covers);
         let facts = Facts::status(&self.battery);
@@ -736,7 +752,7 @@ impl App {
         // Quitting is drastic: ask for a full second's hold.
         self.ui.gesture_config_mut().long_press_us = 1_000_000;
         let old = std::mem::replace(&mut self.screen, Screen::Library { model, view });
-        let submitted = self.render_ui();
+        let submitted = if deferred { Ok(()) } else { self.render_ui() };
         // A closed book is freed only now: the display lists of a laid-out
         // chapter are many allocations, and the library should not wait.
         drop(old);
@@ -817,6 +833,7 @@ impl App {
             night: self.prefs.night,
             covers: self.prefs.covers.mode(),
             sleep_minutes: self.prefs.sleep(),
+            sleep_screen_cover: self.prefs.sleep_screen == prefs::SleepScreen::BookCover,
             clippings: self.prefs.clippings,
             battery: facts.battery_info(),
             storage: facts.storage,
@@ -950,6 +967,13 @@ impl App {
                 } else if let Some(i) = in_range(id, a::SLEEP, SLEEP_MINUTES.len()) {
                     self.prefs.set_sleep(SLEEP_MINUTES[i]);
                     self.save_prefs();
+                } else if let Some(i) = in_range(id, a::SLEEP_SCREEN, 2) {
+                    self.prefs.sleep_screen = if i == 0 {
+                        prefs::SleepScreen::LastScreen
+                    } else {
+                        prefs::SleepScreen::BookCover
+                    };
+                    self.save_prefs();
                 } else {
                     return Ok(Flow::Continue);
                 }
@@ -973,16 +997,16 @@ impl App {
             .map(|m| self.last_touch + Duration::from_secs(m as u64 * 60))
     }
 
-    /// powerd went to its screensaver (power button, cover, idle time), or
-    /// it did not answer ours: save, put the light out and show the
-    /// screensaver. `by_powerd`: powerd will suspend the CPU in a minute.
+    /// Save progress and switch the light off; powerd controls CPU suspend.
     fn fall_asleep(&mut self, by_powerd: bool) -> Result<(), Error> {
-        // The screensaver replaces the screen: no redraw for a book still
-        // opening, a book opening without a snapshot is given up, and no
-        // snapshots are made ahead of time while asleep.
+        // Finish an opening without repainting; cancel work without a snapshot.
         self.finish_opening(true)?;
         self.cancel_pending();
         self.prewarm.input();
+        self.ui.reset_gestures();
+        if let Screen::Reader(r) = &mut self.screen {
+            r.gestures.reset();
+        }
         if let Screen::Reader(r) = &self.screen {
             let now = aristotle_library::library::now();
             self.lib
@@ -994,23 +1018,31 @@ impl App {
         self.debounce.saved();
         self.asleep = Some(self.light_step());
         self.set_light_step(0);
+        self.sleep_ctl.asleep(by_powerd);
+        if self.prefs.sleep_screen == prefs::SleepScreen::LastScreen {
+            perf!(
+                "sleep: last screen ({})",
+                if by_powerd { "powerd" } else { "own" }
+            );
+            return Ok(());
+        }
         let photos = self.prefs.covers.mode() == CoverMode::Photos;
         let book = shelf::current_book(&self.lib)
             .cloned()
             .map(|rec| shelf::screen_book(&self.lib, &rec, &mut self.covers, photos));
         let tree = sleep::build(&self.styles, book.as_ref(), photos);
         self.ui.set_tree(tree);
-        self.sleep_ctl.asleep(by_powerd);
         perf!(
             "sleep: screensaver ({})",
             if by_powerd { "powerd" } else { "own" }
         );
-        self.render_ui()
+        self.submit_ui(Content::Chrome)
     }
 
     /// powerd left its screensaver, or a touch woke ours: the light and
     /// the screen come back.
     fn wake(&mut self, by_powerd: bool) -> Result<(), Error> {
+        self.ui.reset_gestures();
         if let Some(step) = self.asleep.take() {
             self.set_light_step(step);
         }
@@ -1035,46 +1067,51 @@ impl App {
 
     // --- Event loop -------------------------------------------------------
 
-    fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
-        loop {
-            if STOP.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            let now = monotonic_us();
-            let mut timeout = Duration::from_secs(1);
-            if let Some(t) = self.ui.next_deadline(now) {
-                timeout = timeout.min(Duration::from_micros(t.saturating_sub(now).max(1000)));
-            }
-            if let Some(d) = self.debounce.deadline() {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
-            if let Some(d) = self.sleep_deadline() {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
+    fn poll_timeout(&self, now_us: u64, now: Instant) -> Duration {
+        let mut timeout = Duration::from_secs(1);
+        if let Some(t) = self.ui.next_deadline(now_us) {
+            timeout = timeout.min(Duration::from_micros(t.saturating_sub(now_us).max(1000)));
+        }
+        if let Some(d) = self.debounce.deadline() {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if let Some(d) = self.sleep_deadline() {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if self.asleep.is_none() {
             if let Screen::Reader(r) = &self.screen {
                 if r.session.paginating() {
                     timeout = timeout.min(Duration::from_millis(250));
                 }
-                // A long press fires while the finger rests.
-                if let Some(t) = r.gestures.next_deadline(now) {
+                if let Some(t) = r.gestures.next_deadline(now_us) {
                     timeout = timeout.min(Duration::from_micros(t.max(1000)));
                 }
                 if matches!(r.overlay, Overlay::Waiting { .. }) {
                     timeout = timeout.min(Duration::from_millis(20));
                 }
             }
-            if self.opening.is_some() || self.pending.is_some() {
-                timeout = timeout.min(Duration::from_millis(10));
+        }
+        if self.opening.is_some() || self.pending.is_some() {
+            timeout = timeout.min(Duration::from_millis(10));
+        }
+        if self.net.busy() {
+            timeout = timeout.min(Duration::from_millis(100));
+        }
+        if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
+            timeout = timeout.min(d.saturating_duration_since(now));
+        }
+        timeout
+    }
+
+    fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
+        loop {
+            if STOP.load(Ordering::Relaxed) {
+                return Ok(());
             }
-            if self.net.busy() {
-                timeout = timeout.min(Duration::from_millis(100));
-            }
-            if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
-            if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
-                timeout = timeout.min(d.saturating_duration_since(Instant::now()));
-            }
+            let timeout = self.poll_timeout(monotonic_us(), Instant::now());
             let (events, _) =
                 match touch.poll_with(timeout.max(Duration::from_millis(1)), self.sleep_ctl.fd()) {
                     Ok(e) => e,
@@ -1161,6 +1198,10 @@ impl App {
     /// Work done between events: adopting page numbers, saving progress,
     /// the clock in the status line.
     fn background(&mut self) -> Result<(), Error> {
+        if self.asleep.is_some() {
+            self.poll_net()?;
+            return Ok(());
+        }
         if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
             self.adopt(result, false)?;
         }
@@ -1812,7 +1853,7 @@ impl App {
             Err(e) => {
                 eprintln!("aristotle: {}: {e:#}", o.title);
                 self.keep_shown_progress(&o);
-                self.show_library(Refresh::Full)?;
+                self.rebuild_library_at(Refresh::Full, 0, deferred)?;
                 self.saver.save(&self.lib);
                 return Ok(false);
             }
@@ -1882,12 +1923,11 @@ impl App {
             }
         }
         match (same, deferred, menu_open) {
-            (true, _, true) => self.render_ui()?,
+            (_, true, _) => {}
+            (true, false, true) => self.render_ui()?,
             // The UI's copy of the screen already has these pixels: no
             // update at all.
-            (true, _, false) => {}
-            // The caller redraws the whole screen next, or asks us to.
-            (false, true, _) => {}
+            (true, false, false) => {}
             // Never a partial fix-up: one full mode-9 update, like a page
             // turn (behind an open menu, like a chapter jump).
             (false, false, true) => {
@@ -2564,6 +2604,248 @@ mod tests {
         match &app.panel {
             Panel::Memory(m) => m.updates.iter().map(|u| u.label.clone()).collect(),
             Panel::Device(_) => Vec::new(),
+        }
+    }
+
+    fn pixels(app: &App) -> &[u8] {
+        match &app.panel {
+            Panel::Memory(panel) => &panel.pixels,
+            Panel::Device(_) => panic!("memory panel required"),
+        }
+    }
+
+    #[test]
+    fn last_screen_sleep_preserves_library_and_settings_pixels() {
+        for settings in [false, true] {
+            for mode in [
+                prefs::SleepScreen::LastScreen,
+                prefs::SleepScreen::BookCover,
+            ] {
+                let dir = testdir("sleep-screen");
+                let mut app = memory_app(&dir.join("library"), &dir.join("books"));
+                app.show_library(Refresh::Full).unwrap();
+                if settings {
+                    app.show_settings(Refresh::Full, 0).unwrap();
+                    let action = set_ui::action::SLEEP_SCREEN
+                        + u32::from(mode == prefs::SleepScreen::BookCover);
+                    let node = (0..app.ui.tree.len())
+                        .map(|n| NodeId(n as u32))
+                        .find(|&n| app.ui.tree.node(n).action == Some(action))
+                        .unwrap();
+                    app.on_settings_event(UiEvent::Action {
+                        id: action,
+                        node,
+                        at: aristotle_ui::geom::Point::default(),
+                    })
+                    .unwrap();
+                    assert_eq!(Prefs::load(&dir.join("library")).sleep_screen, mode);
+                } else {
+                    app.prefs.sleep_screen = mode;
+                }
+                let held = if settings && mode == prefs::SleepScreen::LastScreen {
+                    let night = (0..app.ui.tree.len())
+                        .map(|n| NodeId(n as u32))
+                        .find(|&n| app.ui.tree.node(n).action == Some(set_ui::action::NIGHT))
+                        .unwrap();
+                    let at = app.ui.tree.rect(night).center();
+                    touch(
+                        &mut app,
+                        HalPhase::Down,
+                        at.x as u32,
+                        at.y as u32,
+                        monotonic_us(),
+                    );
+                    Some(at)
+                } else {
+                    None
+                };
+                let before = updates(&app).len();
+                let shown = pixels(&app).to_vec();
+                app.fall_asleep(true).unwrap();
+                assert!(app.asleep.is_some());
+                assert!(app.debounce.deadline().is_none());
+                if mode == prefs::SleepScreen::LastScreen {
+                    assert_eq!(updates(&app).len(), before);
+                    assert_eq!(pixels(&app), shown);
+                } else {
+                    assert_eq!(updates(&app)[before..], ["flash"]);
+                    assert_ne!(pixels(&app), shown);
+                }
+                let asleep = updates(&app).len();
+                app.background().unwrap();
+                assert_eq!(updates(&app).len(), asleep);
+                app.wake(true).unwrap();
+                if let Some(at) = held {
+                    touch(
+                        &mut app,
+                        HalPhase::Up,
+                        at.x as u32,
+                        at.y as u32,
+                        monotonic_us(),
+                    );
+                    assert!(!app.prefs.night, "a pre-sleep press must not fire on wake");
+                }
+                assert!(app.asleep.is_none());
+                assert!(updates(&app).len() > asleep);
+                assert_eq!(matches!(app.screen, Screen::Settings { .. }), settings);
+            }
+        }
+    }
+
+    #[test]
+    fn last_screen_sleep_finishes_snapshot_open_without_updates_and_saves_progress() {
+        let Some((library, root, id)) = reopen_fixture(true) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        app.open_by_title("Reopened").unwrap();
+        assert!(matches!(app.screen, Screen::Opening));
+        app.opening.as_mut().unwrap().menu_open = true;
+        app.sync.before_open = Some((id.clone(), None));
+        let before = updates(&app).len();
+        let shown = pixels(&app).to_vec();
+        app.fall_asleep(true).unwrap();
+        assert!(app.opening.is_none());
+        assert!(app.pending.is_none());
+        assert!(app.asleep.is_some());
+        assert_eq!(updates(&app).len(), before);
+        assert_eq!(pixels(&app), shown);
+        assert_eq!(app.sync.before_open.as_ref().map(|p| &p.0), Some(&id));
+        let Screen::Reader(reader) = &app.screen else {
+            panic!("reader adopted");
+        };
+        let locator = reader
+            .session
+            .progress(aristotle_library::library::now())
+            .locator;
+        app.wake(true).unwrap();
+        let Screen::Reader(reader) = &app.screen else {
+            panic!("reader restored");
+        };
+        assert!(!reader.menu_open);
+        assert!(reader.overlay.is_none());
+        app.saver.flush();
+        let saved = Library::open(&library).unwrap();
+        assert_eq!(
+            saved.book(&id).unwrap().progress.as_ref().unwrap().locator,
+            locator
+        );
+    }
+
+    #[test]
+    fn failed_snapshot_open_defers_library_repaint_until_wake() {
+        let Some((library, root, _)) = reopen_fixture(true) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        app.open_by_title("Reopened").unwrap();
+        let before = updates(&app).len();
+        let shown = pixels(&app).to_vec();
+        app.adopt(Err(Error::msg("synthetic failed open")), true)
+            .unwrap();
+        app.fall_asleep(true).unwrap();
+        assert_eq!(updates(&app).len(), before);
+        assert_eq!(pixels(&app), shown);
+        assert!(matches!(app.screen, Screen::Library { .. }));
+        app.wake(true).unwrap();
+        assert!(updates(&app).len() > before);
+        assert!(matches!(app.screen, Screen::Library { .. }));
+    }
+
+    #[test]
+    fn network_completions_update_state_without_repainting_or_retaining_busy_while_asleep() {
+        for mode in [
+            prefs::SleepScreen::LastScreen,
+            prefs::SleepScreen::BookCover,
+        ] {
+            let dir = testdir("sleep-network");
+            let mut app = memory_app(&dir.join("library"), &dir.join("books"));
+            app.open_network(catalogs::NetView::Sync, 0).unwrap();
+            app.prefs.sleep_screen = mode;
+            app.fall_asleep(true).unwrap();
+            let before = updates(&app).len();
+            let shown = pixels(&app).to_vec();
+            app.sync.checking = true;
+            app.net.spawn("sleep-test", |_| net::Done::Login {
+                register: false,
+                result: Err(aristotle_net::kosync::Error::Unauthorized),
+            });
+            wait(&mut app, |app| !app.net.busy());
+            assert!(!app.sync.checking);
+            assert!(!app.sync.message.is_empty());
+            assert!(app.asleep.is_some());
+            assert_eq!(updates(&app).len(), before);
+            assert_eq!(pixels(&app), shown);
+            app.wake(true).unwrap();
+            assert!(updates(&app).len() > before);
+            assert!(matches!(app.screen, Screen::Network(_)));
+        }
+    }
+
+    #[test]
+    fn asleep_reader_workers_do_not_shorten_polling_but_network_completions_do() {
+        let Some((library, root, id)) = reopen_fixture(true) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        app.open_by_title("Reopened").unwrap();
+        wait(&mut app, |app| matches!(app.screen, Screen::Reader(_)));
+        let mut source =
+            Source::new(&app.lib, app.lib.book(&id).unwrap(), &app.mobi_cache).unwrap();
+        source.data_dir = testdir("sleep-paginator");
+        let prepared = Session::prepare(source, app.prefs.style(), false).unwrap();
+        let Screen::Reader(reader) = &mut app.screen else {
+            panic!("reader required");
+        };
+        reader.session = Session::from_prepared(prepared).unwrap();
+        assert!(reader.session.paginating());
+
+        for waiting in [false, true] {
+            for by_powerd in [false, true] {
+                let Screen::Reader(reader) = &mut app.screen else {
+                    panic!("reader required");
+                };
+                reader.overlay = if waiting {
+                    Overlay::Waiting {
+                        sel: selection::Selection {
+                            anchor: (0, 0),
+                            start: 0,
+                            end: 0,
+                        },
+                        words: Rc::new(Vec::new()),
+                    }
+                } else {
+                    Overlay::None
+                };
+                let now_us = monotonic_us();
+                let now = Instant::now();
+                app.prewarm.input();
+                app.debounce.saved();
+                app.last_touch = now;
+                let awake = if waiting { 20 } else { 250 };
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(awake));
+
+                app.fall_asleep(by_powerd).unwrap();
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                let (release, blocked) = std::sync::mpsc::channel();
+                app.net.spawn("sleep-timeout", move |_| {
+                    blocked.recv().unwrap();
+                    net::Done::Login {
+                        register: false,
+                        result: Ok(()),
+                    }
+                });
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(100));
+                release.send(()).unwrap();
+                wait(&mut app, |app| !app.net.busy());
+                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                let Screen::Reader(reader) = &app.screen else {
+                    panic!("reader retained");
+                };
+                assert!(reader.session.paginating());
+                assert_eq!(matches!(reader.overlay, Overlay::Waiting { .. }), waiting);
+                app.wake(by_powerd).unwrap();
+            }
         }
     }
 

@@ -350,6 +350,7 @@ fn settings_screens(out: &Path) {
         night: false,
         covers: CoverMode::None,
         sleep_minutes: Some(15),
+        sleep_screen_cover: false,
         clippings: true,
         battery: Some(BatteryInfo {
             level: 0.82,
@@ -826,6 +827,7 @@ fn targets(out: &Path) {
         night: false,
         covers: CoverMode::None,
         sleep_minutes: Some(15),
+        sleep_screen_cover: false,
         clippings: true,
         battery: Some(BatteryInfo {
             level: 0.82,
