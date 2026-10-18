@@ -78,6 +78,14 @@ impl Covers {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SleepScreen {
+    #[default]
+    LastScreen,
+    BookCover,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
@@ -91,6 +99,7 @@ pub struct Prefs {
     pub covers: Covers,
     /// Minutes without a touch before the screensaver; 0 is never.
     pub sleep_minutes: u32,
+    pub sleep_screen: SleepScreen,
     /// Library view: 0 books, 1 folders, 2 series.
     pub library_view: usize,
     /// Index into `shelf::SORTS`.
@@ -124,6 +133,7 @@ impl Default for Prefs {
             night_method: NightMethod::Software,
             covers: Covers::None,
             sleep_minutes: 15,
+            sleep_screen: SleepScreen::LastScreen,
             library_view: 0,
             sort: 0,
             language: "en".into(),
@@ -290,6 +300,7 @@ mod tests {
             night_method: NightMethod::Hardware,
             covers: Covers::Cards,
             sleep_minutes: 30,
+            sleep_screen: SleepScreen::BookCover,
             library_view: 1,
             sort: 2,
             language: "pl".into(),
@@ -309,6 +320,22 @@ mod tests {
         assert_eq!(q.language, "en");
         std::fs::write(dir.join(Prefs::FILE), br#"{"language": "xx"}"#).unwrap();
         assert_eq!(Prefs::load(&dir).language, "en");
+    }
+
+    #[test]
+    fn sleep_screen_defaults_for_old_files_and_persists_both_choices() {
+        let old: Prefs = serde_json::from_str(r#"{"sleep_minutes":30}"#).unwrap();
+        assert_eq!(old.sleep_screen, SleepScreen::LastScreen);
+        assert_eq!(old.sleep_minutes, 30);
+        for mode in [SleepScreen::LastScreen, SleepScreen::BookCover] {
+            let prefs = Prefs {
+                sleep_screen: mode,
+                ..Prefs::default()
+            };
+            let encoded = serde_json::to_string(&prefs).unwrap();
+            let decoded: Prefs = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded.sleep_screen, mode);
+        }
     }
 
     #[test]

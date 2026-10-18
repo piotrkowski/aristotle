@@ -53,6 +53,6 @@ By default, the highlight also appends to `documents/My Clippings.txt`. A Markdo
 
 The book's Markdown file contains the highlighted phrase. Next time, Aristotle resumes from its saved position.
 
-Aristotle follows stock powerd for sleep and wake by default. Its fallback screensaver only turns off the light and displays a book card; it does not suspend the CPU. See [Power and sleep](reader.md#the-app) for fallback behavior and [validation limits](power-validation.md). Battery use remains unverified.
+Aristotle follows stock powerd for sleep and wake by default. **Settings > Sleep screen** offers **Last screen** (the default, no redraw) and **Book cover**. Both turn off the light. If powerd integration fails, the selected sleep screen does not suspend the CPU. See [Power and sleep](reader.md#the-app) and [validation limits](power-validation.md). Battery use remains unverified.
 
 Next, [add a dictionary](dictionaries.md), [set up sync](network.md), or [back up your reading data](maintenance.md).
