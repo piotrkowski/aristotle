@@ -3,6 +3,7 @@
 
 pub mod display;
 pub mod framebuffer;
+mod framework;
 pub mod input;
 mod lipc_command;
 pub mod power;

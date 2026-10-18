@@ -238,6 +238,8 @@ The default screensaver saves progress, turns off the light, and shows a book ca
 
 The app reads the existing power policy before changing it and unloads the stock screensaver before allowing suspend. Failed takeover falls back to the default policy. If the app cannot read or hold that policy, startup fails without starting the reader. Normal exits and startup errors restore the saved policy.
 
+With powerd enabled after takeover, the app supplies the KAF `frameworkStarted=1` property that powerd checks before accepting the button. It uses stock Lua and `liblipclua`, as [KOReader does after stopping the framework](https://github.com/koreader/koreader/blob/master/frontend/device/kindle/device.lua). An existing ready KAF service is left untouched. The helper starts only when the takeover marker exists, and a name collision or failed registration keeps the default policy in effect. Its startup checks have three five-second limits: the existing-service query, helper readiness, and registration readback. Exit kills and reaps the owned helper before stock GUI restoration; parent death also kills it. No helper or policy is installed persistently. This does not enable powerd by default or establish actual suspend support.
+
 Shutdown cancels queued power commands and waits for the in-flight command before restoring the stock screensaver. LIPC property commands have a 5-second timeout and a 4 KiB output limit. Timed-out children are killed and reaped.
 
 Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including `SIGTERM` and `SIGINT`. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
