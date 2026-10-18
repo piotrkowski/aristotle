@@ -68,7 +68,9 @@ pub fn measure<'a>(
             };
             let first_done_us = completion(after_release().collect());
             let page_done_us = completion(
-                after_release()
+                mine.iter()
+                    .copied()
+                    .filter(|u| u.end_us.is_some_and(|end| end >= interaction.up_us))
                     .filter(|u| {
                         let (top, left, width, height) = u.rect;
                         top == 0 && left == 0 && width >= 1072 && height >= 1448
@@ -231,6 +233,17 @@ mod tests {
         let rows = measure(&interactions, &updates, 0);
         assert_eq!(rows[0].first_done_us, Some(200));
         assert_eq!(rows[0].page_done_us, Some(600));
+    }
+
+    #[test]
+    fn full_screen_updates_spanning_release_keep_their_actual_completion() {
+        let interactions = [touch(100, 200)];
+        let updates = [update(110, Some(180), true), update(190, Some(800), true)];
+        let rows = measure(&interactions, &updates, 0);
+        assert_eq!(rows[0].pre_release, 2);
+        assert_eq!(rows[0].first_done_us, None);
+        assert_eq!(rows[0].page_done_us, Some(600));
+        assert_eq!(rows[0].settled_us, Some(600));
     }
 
     #[test]

@@ -18,7 +18,7 @@ Full flashes use [GC16](glossary.md#gc16) or [GCK16](glossary.md#gck16) waveform
 | --- | --- |
 | `first>` | release to the first update that starts after release |
 | `first✓` | release to the earliest completion among updates that start after release |
-| `page✓` | release to the earliest completed full-screen update that starts after release |
+| `page✓` | release to the earliest full-screen completion at or after release, including updates started during the touch |
 | `settled` | release to the last completed update assigned to this touch |
 | `upd` | number of panel updates the interaction caused |
 | `pre` | updates that start before release, including touch-down highlights |
@@ -30,7 +30,9 @@ Full flashes use [GC16](glossary.md#gc16) or [GCK16](glossary.md#gck16) waveform
 checks the update rectangle, not its contents or waveform. Verify the page
 and the single full-mode mode-9 update in the screenshot and driver log.
 Touch-down updates contribute to update counts and `settled`, but not to
-`first✓` or `page✓`. A touch-down-only interaction has no release sample.
+`first✓`. A full-screen update that spans release contributes to `page✓`
+without clamping its start to zero. A small touch-down-only highlight has
+no release sample.
 
 Missing completion records produce `n/a`, not a fabricated completion at
 submit time. A kernel log overrun invalidates all completion metrics in the
