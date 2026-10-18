@@ -71,6 +71,8 @@ With the agent installed, select *Start Aristotle at boot: on*. This copies the 
 
 The stock interface starts instead if the [`aristotle-disable` kill switch](glossary.md#kill-switch) exists on the drive or after three failed launches. Quitting Aristotle keeps the stock interface for the rest of that boot.
 
+Updating the internal app retains its previous copy for [rollback](maintenance.md#roll-back-the-boot-app). Quit the boot app before refreshing its copy. Turning autostart off keeps both copies but disables boot startup.
+
 ## Your own fonts
 
 1. Quit Aristotle and connect the Kindle in USB drive mode.

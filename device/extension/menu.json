@@ -28,6 +28,12 @@
           "status": false
         },
         {
+          "name": "Restore previous boot app (reading data unchanged)",
+          "action": "sh ./agent/autostart.sh rollback",
+          "exitmenu": false,
+          "status": false
+        },
+        {
           "name": "Install agent (SSH on every boot, no Amazon updates)",
           "action": "sh ./agent/install.sh",
           "exitmenu": false,

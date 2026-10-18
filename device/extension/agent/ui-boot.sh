@@ -82,6 +82,15 @@ if [ -e "$R/mnt/us/aristotle-disable" ]; then
     log "/mnt/us/aristotle-disable exists; staying on the stock GUI"
     exit 0
 fi
+if [ -d "$R/var/run/aristotle-app-update.lock" ]; then
+    log "app update active; staying on the stock GUI"
+    exit 0
+fi
+# An interrupted activation can leave only the previous complete copy.
+if [ ! -e "$S/app" ] && [ -x "$S/app.previous/aristotle" ]; then
+    APP=$S/app.previous/aristotle
+    log "activation interrupted; using the previous boot app"
+fi
 n=$(fails)
 if [ "$n" -ge "$MAX_FAILS" ] && [ $manual = 0 ]; then
     log "$n launches failed in a row; staying on the stock GUI (turn autostart on again to retry)"

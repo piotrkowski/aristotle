@@ -28,10 +28,11 @@ PW5_SN=G001Q00123456789
 
 cleanup() {
     for p in $(cat "$WORK"/*/jobs/*.pid "$WORK"/*/var/run/*.pid 2> /dev/null); do
+        pkill -TERM -P "$p" 2> /dev/null
         kill "$p" 2> /dev/null
     done
 }
-trap cleanup EXIT
+trap 'cleanup; rm -rf "$WORK"' EXIT
 
 check() {
     if eval "$2"; then
@@ -69,6 +70,19 @@ EOF
     done
     printf '#!/bin/sh\necho "lsmod" >> "$AGENT_TEST_ROOT/calls"\ncat "$AGENT_TEST_ROOT/modules" 2> /dev/null\n' > "$1/lsmod"
     printf '#!/bin/sh\necho 0\n' > "$1/id"
+    cat > "$1/cp" << 'EOF'
+#!/bin/sh
+for last do :; done
+case "$last:${FAKE_APP_COPY_FAIL:-0}" in */app.new/:1) exit 1 ;; esac
+command -p cp "$@"
+EOF
+    cat > "$1/mv" << 'EOF'
+#!/bin/sh
+case "$1:${FAKE_APP_MOVE_FAIL:-0}" in */app.new:1) exit 1 ;; esac
+case "$1:${FAKE_APP_RETIRE_FAIL:-0}" in */app:1) exit 1 ;; esac
+case "$1:${FAKE_APP_RESTORE_FAIL:-0}" in */app.previous:1) exit 1 ;; esac
+command -p mv "$@"
+EOF
     cat > "$1/initctl" << 'EOF'
 #!/bin/sh
 R=$AGENT_TEST_ROOT
@@ -507,6 +521,7 @@ check "works on root's own" "[ $? = 0 ] && grep -q '^storage ' $r/var/local/aris
 # as the real one does.
 fake_app() {
     mkdir -p "$1/mnt/us/aristotle/data"
+    echo 'test release 1' > "$1/mnt/us/aristotle/SOURCE.txt"
     cat > "$1/mnt/us/aristotle/aristotle" << 'EOF'
 #!/bin/sh
 echo "app $*" >> "$AGENT_TEST_ROOT/calls"
@@ -556,8 +571,31 @@ echo 3 > "$r/var/local/aristotle/ui-fails"
 run "$r" agent/autostart.sh on
 check "on: the app copied, the count reset" "[ $? = 0 ] && [ -x $r/var/local/aristotle/app/aristotle ] && [ -d $r/var/local/aristotle/app/data ] && [ \"\$(cat $r/var/local/aristotle/ui-fails)\" = 0 ] && [ -e $r/var/local/aristotle/autostart ]"
 check "no root filesystem write" "! called $r mntroot"
+echo 'test release 2' > "$r/mnt/us/aristotle/SOURCE.txt"
+run "$r" agent/autostart.sh on
+check "update: both release identities kept" "[ $? = 0 ] && grep -q 'release 2' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 1' $r/var/local/aristotle/app.previous/SOURCE.txt"
+run "$r" agent/autostart.sh rollback
+check "rollback: previous becomes current" "[ $? = 0 ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 2' $r/var/local/aristotle/app.previous/SOURCE.txt"
+FAKE_APP_COPY_FAIL=1 run "$r" agent/autostart.sh on
+check "failed copy: current and previous kept" "[ $? = 1 ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt && grep -q 'release 2' $r/var/local/aristotle/app.previous/SOURCE.txt && [ ! -e $r/var/local/aristotle/app.new ]"
+FAKE_APP_MOVE_FAIL=1 run "$r" agent/autostart.sh on
+check "failed activation: current restored" "[ $? = 1 ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt && [ ! -e $r/var/local/aristotle/app.new ]"
+check "failed activation: lock removed" "[ ! -e $r/var/run/aristotle-app-update.lock ]"
+FAKE_APP_RETIRE_FAIL=1 run "$r" agent/autostart.sh on
+check "failed old-copy rename: current kept" "[ $? = 1 ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt"
+FAKE_APP_MOVE_FAIL=1 FAKE_APP_RESTORE_FAIL=1 run "$r" agent/autostart.sh on
+check "failed restore: both complete copies kept" "[ $? = 1 ] && [ ! -e $r/var/local/aristotle/app ] && grep -q 'release 1' $r/var/local/aristotle/app.previous/SOURCE.txt && grep -q 'release 2' $r/var/local/aristotle/app.new/SOURCE.txt"
+mv "$r/var/local/aristotle/app.previous" "$r/var/local/aristotle/app"
+mkdir "$r/var/run/aristotle-app-update.lock"
+run "$r" agent/autostart.sh on
+check "concurrent update: refused without taking the lock" "[ $? = 1 ] && [ -d $r/var/run/aristotle-app-update.lock ] && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt"
+rmdir "$r/var/run/aristotle-app-update.lock"
+echo $$ > "$r/jobs/aristotle-ui.pid"
+run "$r" agent/autostart.sh on
+check "running boot app: update refused" "[ $? = 1 ] && grep -q 'quit the boot app' $r.out && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt"
+rm "$r/jobs/aristotle-ui.pid"
 run "$r" agent/autostart.sh off
-check "off: marker and copy gone" "[ ! -e $r/var/local/aristotle/autostart ] && [ ! -e $r/var/local/aristotle/app ]"
+check "off: marker gone, copy retained" "[ ! -e $r/var/local/aristotle/autostart ] && [ -x $r/var/local/aristotle/app/aristotle ]"
 r=$(device noagent2 "$PW4_SN" 5.13.6)
 fake_app "$r"
 run "$r" agent/autostart.sh on
@@ -571,6 +609,22 @@ ui_boot "$r"
 done_ui "$r"
 check "stays on the stock GUI" "! called $r 'stop lab126_gui' && ! called $r 'app' && grep -q 'aristotle-disable exists' $r/var/local/aristotle/ui.log"
 check "remembers this boot" "cmp -s $r/proc/sys/kernel/random/boot_id $r/var/local/aristotle/ui-booted"
+
+echo "ui-boot: interrupted app activation"
+r=$(autostarted uiinterrupted)
+printf 'fsp %s/mnt/us fuse.fsp rw 0 0\n' "$r" > "$r/proc/mounts"
+mv "$r/var/local/aristotle/app" "$r/var/local/aristotle/app.previous"
+ui_boot "$r"
+done_ui "$r"
+check "runs the complete previous copy" "called $r app && grep -q 'activation interrupted' $r/var/local/aristotle/ui.log"
+
+echo "ui-boot: app update in progress"
+r=$(autostarted uiupdating)
+printf 'fsp %s/mnt/us fuse.fsp rw 0 0\n' "$r" > "$r/proc/mounts"
+mkdir "$r/var/run/aristotle-app-update.lock"
+ui_boot "$r"
+done_ui "$r"
+check "does not stop stock or launch the app" "! called $r 'stop lab126_gui' && ! called $r app"
 
 echo "ui-boot: Aristotle quits"
 r=$(autostarted uiquit)
