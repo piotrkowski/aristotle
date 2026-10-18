@@ -83,6 +83,32 @@ ssh -F tools/host/ssh_config kindle \
 
 Filtering is by IP address, not by process or TLS hostname. DNS remains allowed, and stock rules apply until the agent starts. Read the [network policy and limits](../device/README.md#network) before treating `scoped` as an isolation boundary.
 
+## Set the clock without internet access
+
+In `scoped` mode, the stock Amazon NTP server is blocked. A wrong date can
+cause TLS certificate errors. Allowing another NTP server does not change
+the stock client's configuration.
+
+Check that your computer's clock is correct, then connect the Kindle over
+[USB SSH](../device/README.md#host-setup). Compare its clock with the host:
+
+```sh
+tools/host/sync-clock.sh --check
+```
+
+The output reports the device's time minus the host's time in seconds.
+To set the device's runtime UTC clock from the host, run:
+
+```sh
+tools/host/sync-clock.sh
+```
+
+The helper checks the PW4 firmware guard before changing time. It does not
+contact a time server, change NTP settings, write the hardware clock or
+enable Wi-Fi. It sends whole seconds over SSH, so connection latency limits
+accuracy. Check again after reboot; this is a manual correction, not
+automatic time synchronization.
+
 ## Change or remove an account
 
 Edit the import file with the new values and use its load action, or restart the manual KUAL app. Imports remove plaintext password fields from successfully read USB files. Credentials are saved privately in `/var/local/aristotle/accounts.json`, not in `.aristotle/`.
