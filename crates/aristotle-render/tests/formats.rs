@@ -34,8 +34,7 @@ fn png(gray: u8) -> Vec<u8> {
     out
 }
 
-#[test]
-fn default_bundle_renders_cbz_pages_in_natural_order() {
+fn scratch() -> Option<Scratch> {
     let cache = std::env::var_os("ARISTOTLE_CACHE")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/aristotle")))
@@ -49,7 +48,7 @@ fn default_bundle_renders_cbz_pages_in_natural_order() {
             "no render data directory in CI"
         );
         eprintln!("skipped: no render data directory (run tools/build-render.sh host)");
-        return;
+        return None;
     }
     aristotle_render::use_data_dir(&data).unwrap();
     let scratch = Scratch(std::env::temp_dir().join(format!(
@@ -61,14 +60,37 @@ fn default_bundle_renders_cbz_pages_in_natural_order() {
             .as_nanos()
     )));
     std::fs::create_dir_all(&scratch.0).unwrap();
-    let path = scratch.0.join("generated.cbz");
+    Some(scratch)
+}
+
+fn comic(scratch: &Scratch, filename: &str, pages: &[(&str, u8)]) -> PathBuf {
+    let path = scratch.0.join(filename);
     let mut archive = ZipWriter::new(std::fs::File::create(&path).unwrap());
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    for (name, gray) in [("page20.png", 224), ("page10.png", 128), ("page2.png", 32)] {
+    for &(name, gray) in pages {
         archive.start_file(name, options).unwrap();
         archive.write_all(&png(gray)).unwrap();
     }
     archive.finish().unwrap();
+    path
+}
+
+fn center(book: &mut Book, location: usize) -> u8 {
+    let pixmap = book.render_body(location).unwrap();
+    let center = (pixmap.height / 2 * pixmap.width + pixmap.width / 2) as usize;
+    pixmap.data[center]
+}
+
+#[test]
+fn default_bundle_renders_cbz_pages_in_natural_order() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let path = comic(
+        &scratch,
+        "generated.cbz",
+        &[("page20.png", 224), ("page10.png", 128), ("page2.png", 32)],
+    );
 
     for filename in ["generated.cbz", "generated.zip"] {
         let renamed = scratch.0.join(filename);
@@ -87,14 +109,121 @@ fn default_bundle_renders_cbz_pages_in_natural_order() {
             let location = book.locate(page).unwrap();
             assert_eq!(book.position_at(location), Position::Page(page));
             assert_eq!(book.location_of(&Position::Page(page)), Some(location));
-            let pixmap = book.render_body(location).unwrap();
-            let center = (pixmap.height / 2 * pixmap.width + pixmap.width / 2) as usize;
             assert!(
-                pixmap.data[center].abs_diff(expected) <= 1,
+                center(&mut book, location).abs_diff(expected) <= 1,
                 "{filename}: page {page}"
             );
         }
         assert_eq!(book.next_page(2), None);
         assert_eq!(book.previous_page(1), Some(0));
     }
+}
+
+#[test]
+fn cbz_large_numeric_names_keep_the_cover_and_first_page_in_agreement() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let path = comic(
+        &scratch,
+        "large-numbers.cbz",
+        &[
+            ("PAGE2147483648.png", 128),
+            ("page999999999999999999999999.png", 224),
+            ("page9.png", 32),
+        ],
+    );
+    let metadata = aristotle_library::metadata::extract(&path, Format::Cbz, None, true).unwrap();
+    assert_eq!(metadata.cover, Some(png(32)));
+    let mut book = Book::open(&path, &Style::pw4(), None).unwrap();
+    assert_eq!(book.known_page_count(), Some(3));
+    for (page, expected) in [32u8, 128, 224].into_iter().enumerate() {
+        assert!(
+            center(&mut book, page).abs_diff(expected) <= 1,
+            "page {page}"
+        );
+    }
+}
+
+#[test]
+fn cbz_numeric_and_ascii_case_ties_use_raw_filename_order() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let path = comic(
+        &scratch,
+        "ties.cbz",
+        &[
+            ("page3.png", 128),
+            ("page02.png", 96),
+            ("PAGE0002.PNG", 64),
+            ("page2.png", 32),
+        ],
+    );
+    let mut book = Book::open(&path, &Style::pw4(), None).unwrap();
+    assert_eq!(book.known_page_count(), Some(4));
+    for (page, expected) in [64u8, 96, 32, 128].into_iter().enumerate() {
+        assert!(center(&mut book, page).abs_diff(expected) <= 1);
+    }
+}
+
+#[test]
+fn cbz_shuffled_numeric_ties_keep_cover_and_reader_on_the_same_first_page() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let names = [
+        "page008.png",
+        "page09.png",
+        "page08.png",
+        "page01.png",
+        "page002.png",
+        "page009.png",
+        "page07.png",
+        "page05.png",
+        "page4.png",
+        "page006.png",
+        "page06.png",
+        "page1.png",
+        "page03.png",
+        "page8.png",
+        "page3.png",
+        "page5.png",
+        "page007.png",
+        "page005.png",
+        "page6.png",
+        "page2.png",
+        "page003.png",
+        "page001.png",
+        "page9.png",
+        "page7.png",
+        "page02.png",
+    ];
+    let pages: Vec<(&str, u8)> = names
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| (name, (16 + i * 7) as u8))
+        .collect();
+    let path = comic(&scratch, "shuffled-ties.cbz", &pages);
+    let metadata = aristotle_library::metadata::extract(&path, Format::Cbz, None, true).unwrap();
+    assert_eq!(metadata.cover, Some(png(163)));
+    let mut book = Book::open(&path, &Style::pw4(), None).unwrap();
+    assert_eq!(book.known_page_count(), Some(25));
+    for (page, expected) in [163u8, 37, 93].into_iter().enumerate() {
+        assert!(center(&mut book, page).abs_diff(expected) <= 1);
+    }
+}
+
+#[test]
+fn cbz_unicode_names_use_unsigned_utf8_bytes_on_every_target() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let path = comic(&scratch, "unicode.cbz", &[("é.png", 224), ("a.png", 32)]);
+    let metadata = aristotle_library::metadata::extract(&path, Format::Cbz, None, true).unwrap();
+    assert_eq!(metadata.cover, Some(png(32)));
+    let mut book = Book::open(&path, &Style::pw4(), None).unwrap();
+    assert_eq!(book.known_page_count(), Some(2));
+    assert!(center(&mut book, 0).abs_diff(32) <= 1);
+    assert!(center(&mut book, 1).abs_diff(224) <= 1);
 }

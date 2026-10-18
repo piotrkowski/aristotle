@@ -353,7 +353,7 @@ fn legacy_cbz_metadata_refreshes_once_and_keeps_reading_state() {
         .errors
         .is_empty());
     assert_eq!(library.book(&id).unwrap().progress, Some(progress));
-    assert_eq!(library.index().cbz_metadata_version, 1);
+    assert_eq!(library.index().cbz_metadata_version, 2);
     fs::remove_dir_all(base).unwrap();
 }
 

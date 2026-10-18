@@ -14,6 +14,8 @@ The library and reader detect books by content. Recognized EPUB and MOBI 7 files
 | TXT | File and folder names | None | Yes | MuPDF reflow, without the selected custom font |
 | CBZ | ComicInfo metadata and page count | First page when JPEG or PNG | Yes | Fixed image pages through MuPDF |
 
+CBZ rendering, ordering, and position restoration are checked on the host with generated PNG pages. CBZ reading on the PW4 remains unverified.
+
 Neither Aristotle's MOBI converter nor the bundled MuPDF reader supports HUFF/CDIC compression. KF8-only files are not converted, and the MuPDF fallback is not a guarantee that they open correctly. Encrypted MOBI can appear in the index with its DRM flag, but cannot be read. Aristotle does not remove DRM.
 
 Conversion is attempted for detected MOBI 7 files, including joint MOBI 7/KF8 containers named `.azw3`. KF8-only files and plain PalmDOC containers use MuPDF. PalmDOC compression inside MOBI 7 is supported by the converter.

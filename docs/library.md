@@ -23,7 +23,7 @@ The device book root is `/mnt/us/documents`. Detection uses file contents, not j
 
 The scan opens known book extensions or extensionless files. It skips hidden entries, `.sdr` folders, `dictionaries`, [`My Clippings.txt`](glossary.md#my-clippingstxt), and directory symlinks. Kindle dictionaries stay out of the library. DRM-encrypted MOBI is listed with `drm: true` but cannot be read.
 
-CBZ page names use case-insensitive ASCII natural ordering, so `page2.png` precedes `page10.png`. BMP, GIF, JPEG, JPEG 2000, JPEG XR, JBIG2, PNG, PNM, PKM, and TIFF page names match the bundled MuPDF reader. WebP entries are not pages. A one-time scan refreshes older CBZ metadata and retries previously ignored comic archives without discarding reading state.
+CBZ page names use case-insensitive ASCII natural ordering, so `page2.png` precedes `page10.png`. Numeric runs have no integer-size limit. Equal numeric or ASCII-folded names use the full filename's UTF-8 bytes as a tie-break. BMP, GIF, JPEG, JPEG 2000, JPEG XR, JBIG2, PNG, PNM, PKM, and TIFF page names match the bundled MuPDF reader. WebP entries are not pages. A one-time scan refreshes older CBZ metadata and retries previously ignored comic archives without discarding reading state.
 
 [KFX](glossary.md#kfx), CBR and CB7 comic archives, FB2 (FictionBook), DjVu scanned documents, and Kindle Topaz books are unsupported. Index support does not imply reader support ([Reader formats](reader.md#formats-and-positions)).
 

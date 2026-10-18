@@ -359,7 +359,7 @@ The default build includes Latin and Greek fonts, five hyphenation languages, an
 | `FONT_SUBSET` | `latin-greek` | `none` keeps whole fonts |
 | `HYPH_LANGS` | `pl en-us en-gb grc la` | Pattern list |
 
-The first three belong to `build-plato.sh`, the last two to `build-render.sh`. Other C-library changes need a fresh `PLATO_BUILD`.
+The first three belong to `build-plato.sh`, the last two to `build-render.sh`. Other C-library changes need a fresh `PLATO_BUILD`. The build rejects cached MuPDF sources with an unknown or different patch digest.
 
 MuPDF keeps Noto Serif for Greek in reflowed text. Plato uses smaller fallback fonts. Missing glyphs, including unsupported Chinese, Japanese, and Korean characters, appear as boxes.
 
