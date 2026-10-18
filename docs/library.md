@@ -196,6 +196,8 @@ Automatic sync fetches progress on open with a 5-second timeout. Responses from 
 
 Only a successful push advances the open book's sync baseline. A failed screensaver push is retried at the next screensaver or close, even without further reading. Older completions cannot rewind a newer acknowledged position or change a reopened book's baseline. Pushes for the same server, account, and document are serialized. Queued requests older than the latest requested position skip the network; different documents do not share a send lock. There is no persistent retry queue across book closes or app restarts.
 
+A failed request may already have changed the server's position. The open book still needs a push until the same or a newer request succeeds, even if reading returns to the confirmed starting position. Skipped or unsupported jobs do not clear that uncertainty. A failure older than a confirmed send does not restore it.
+
 The sync screen reports when an outgoing position was sent, failed, or had no compatible KOReader position. A successful push replaces an earlier error message. The screen's format summary does not promise outgoing MOBI, AZW3, or TXT sync.
 
 ### Catalogs (OPDS 1.2)
