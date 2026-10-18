@@ -172,6 +172,17 @@ impl Push {
 }
 
 impl App {
+    pub(crate) fn on_pushed(&mut self, book: &str, result: Option<Result<(), kosync::Error>>) {
+        if result.is_none() {
+            perf!("sync: nothing KOReader could use for {book}; not sent");
+        }
+        self.sync.message = match result {
+            None => tr(Msg::SyncStateNotSent).to_string(),
+            Some(Ok(())) => tr(Msg::SyncStateSent).to_string(),
+            Some(Err(e)) => describe_sync(&e),
+        };
+    }
+
     fn sync_account(&self) -> Option<kosync::Account> {
         let s = self.net.accounts.sync.as_ref()?;
         s.auto.then(|| s.account()).flatten()

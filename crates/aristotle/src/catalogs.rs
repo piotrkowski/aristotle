@@ -801,11 +801,7 @@ impl App {
                     token,
                     result,
                 } => self.on_pulled(book, token, result)?,
-                Done::Pushed { book, result } => match result {
-                    None => perf!("sync: nothing KOReader could use for {book}; not sent"),
-                    Some(Ok(())) => {}
-                    Some(Err(e)) => self.sync.message = crate::net::describe_sync(&e),
-                },
+                Done::Pushed { book, result } => self.on_pushed(&book, result),
                 Done::Feed { token, result } => self.on_feed(token, result)?,
                 Done::Progress {
                     token,
