@@ -60,7 +60,7 @@ For ghosting or flicker, report the transition that causes it, whether night mod
 | Can't read the import file | Check the path shown on screen and JSON syntax. Use double quotes and no trailing commas. |
 | Can't reach the server or timeout | Enable Wi-Fi in stock, check the server's LAN address and port, and [inspect the network policy](network.md#check-the-network-policy). USB networking has no internet gateway. |
 | Destination not allowed | Check the requested host and port, including redirected downloads. Add a trusted destination as described in [network setup](network.md#check-the-network-policy). |
-| Certificate does not fit the device's time | Check the Kindle clock. In `scoped` mode, the stock Amazon NTP destination is blocked. Allowing another NTP server does not reconfigure the stock client. |
+| Certificate does not fit the device's time | [Set the runtime clock over USB](network.md#set-the-clock-without-internet-access) from a host with the correct time. In `scoped` mode, the stock Amazon NTP destination is blocked. |
 | User name or password refused | Verify the account on the same KOSync or catalog server. Re-import credentials if needed. |
 | Progress does not match KOReader exactly | EPUB uses chapters and percentage, not exact element paths. Check that both readers use identical book files and the same server account. |
 | MOBI, AZW3, or TXT progress never reaches KOReader | These formats receive remote progress by percentage, but Aristotle does not send progress for them. Test sending with an EPUB or PDF. |

@@ -187,10 +187,15 @@ run_rules() {
 # What a DHCP renewal or an edit can change.
 signature() {
     {
+        cat "$R/proc/sys/kernel/random/boot_id" 2> /dev/null
         ifconfig $IF 2> /dev/null | grep 'inet addr'
         resolvers
         cksum < "$S/net-allow" 2> /dev/null
     } | cksum
+}
+
+uptime_seconds() {
+    awk '{ sub(/\..*/, "", $1); print $1; exit }' "$R/proc/uptime"
 }
 
 # No kernel IPv6 on the PW4 5.13.x (CONFIG_IPV6 is unset, read from the
@@ -216,13 +221,14 @@ apply_locked() {
     if [ "$(mode)" = off ]; then
         echo | run_rules off || { log "removing the rules failed"; return 1; }
         ipv6 0
-        rm -f "$S/net-resolved" "$S/net-sig" "$S/net-applied"
+        rm -f "$S/net-resolved" "$S/net-sig" "$S/net-applied" "$S/net-refreshed"
         log "off: stock firewall"
         return 0
     fi
     ipv6 1
     # No list is an empty list: only DHCP and DNS.
     touch "$S/net-allow"
+    applied_signature=$(signature)
     parse < "$S/net-allow" 2>> "$S/log" > "$S/net-wanted"
     touch "$S/net-resolved"
     # Revoke removed entries before DNS, which may be slow or fail.
@@ -241,16 +247,19 @@ apply_locked() {
     mv -f "$S/net-resolved.merged" "$S/net-resolved"
     { resolvers; cat "$S/net-resolved"; } | run_rules scoped ||
         { log "scoped: applying rules failed"; return 1; }
-    signature > "$S/net-sig"
+    printf '%s\n' "$applied_signature" > "$S/net-sig"
+    uptime_seconds > "$S/net-refreshed"
     date +%s > "$S/net-applied"
     log "scoped: $(grep -c . "$S/net-resolved") allowed address(es), resolvers: $(resolvers | awk '{ printf "%s ", $2 }')"
 }
 
 tick() {
     [ "$(mode)" = scoped ] || return 0
-    last=$(cat "$S/net-applied" 2> /dev/null || echo 0)
+    last=$(cat "$S/net-refreshed" 2> /dev/null)
+    case "$last" in '' | *[!0-9]*) apply; return $? ;; esac
+    now=$(uptime_seconds) || return 1
     if [ "$(signature)" != "$(cat "$S/net-sig" 2> /dev/null)" ] ||
-        [ $(($(date +%s) - last)) -ge "$REFRESH_SECS" ]; then
+        [ "$now" -lt "$last" ] || [ $((now - last)) -ge "$REFRESH_SECS" ]; then
         apply
     fi
 }

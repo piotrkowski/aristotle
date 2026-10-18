@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Stub of glibc's `getent ahostsv4 HOST` for the test, in its output format.
 # FAKE_DNS_DOWN=HOST makes that host fail, as during a DNS hiccup.
+if [ -n "${FAKE_DNS_EDIT_ALLOW:-}" ] && [ ! -e "$AGENT_TEST_ROOT/dns-edited-allow" ]; then
+    printf '%s\n' "$FAKE_DNS_EDIT_ALLOW" >> "$AGENT_TEST_ROOT/var/local/aristotle/net-allow"
+    touch "$AGENT_TEST_ROOT/dns-edited-allow"
+fi
 if [ -n "${FAKE_DNS_FORBIDDEN:-}" ] &&
     grep -q -- "-d $FAKE_DNS_FORBIDDEN " "$AGENT_TEST_ROOT/ipt/ARISTOTLE_OUT"; then
     touch "$AGENT_TEST_ROOT/dns-saw-revoked-address"

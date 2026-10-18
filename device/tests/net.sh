@@ -23,6 +23,9 @@ failures=0
 
 # A fake root, so that the resolvers come from the fixture.
 mkdir -p "$WORK/root/etc"
+mkdir -p "$WORK/root/proc/sys/kernel/random"
+printf '1000.00 0.00\n' > "$WORK/root/proc/uptime"
+printf 'boot-one\n' > "$WORK/root/proc/sys/kernel/random/boot_id"
 cp "$FIX/resolv.conf" "$WORK/root/etc/resolv.conf"
 export AGENT_TEST_ROOT="$WORK/root"
 
@@ -79,6 +82,20 @@ check "scoped: one jump on top of OUTPUT" "[ \"\$(head -n 1 $T/OUTPUT)\" = '-o w
 check "scoped: no leftover chains" "[ \"\$(ls $T | tr '\n' ' ')\" = 'ARISTOTLE_IN ARISTOTLE_OUT INPUT OUTPUT ' ]"
 check "scoped: ARISTOTLE_OUT as generated" "grep '^iptables -A ARISTOTLE_OUT_NEW' $FIX/expected-rules-scoped | sed 's/^iptables -A ARISTOTLE_OUT_NEW //' | diff - $T/ARISTOTLE_OUT"
 check "scoped: hosts resolved" "diff $FIX/expected-resolve $S/net-resolved"
+printf '1\n' > "$S/net-applied"
+$NET tick
+check "scoped: wall-clock changes do not trigger an early refresh" "[ \"\$(cat $S/net-applied)\" = 1 ]"
+printf '2147483000\n' > "$S/net-applied"
+printf '1900.00 0.00\n' > "$WORK/root/proc/uptime"
+$NET tick
+check "scoped: elapsed uptime refreshes despite a future wall-clock timestamp" "[ \"\$(cat $S/net-applied)\" != 2147483000 ] && [ \"\$(cat $S/net-refreshed)\" = 1900 ]"
+printf 'sentinel\n' > "$S/net-applied"
+printf 'boot-two\n' > "$WORK/root/proc/sys/kernel/random/boot_id"
+$NET tick
+check "scoped: a new boot refreshes persistent policy state" "[ \"\$(cat $S/net-applied)\" != sentinel ]"
+printf 'invalid\n' > "$S/net-refreshed"
+$NET tick
+check "scoped: an invalid refresh timestamp is repaired" "[ \"\$(cat $S/net-refreshed)\" = 1900 ]"
 cp "$S/net-rules.sh" "$WORK/rules-before-contention"
 flock "$S/net-policy.lock" $NET apply 2> "$WORK/contention-errors"
 check "scoped: a held lock rejects a second apply" "[ $? = 1 ]"
@@ -91,6 +108,10 @@ grep -v '^cdn' "$FIX/net-allow" > "$S/net-allow"
 FAKE_DNS_FORBIDDEN=192.0.2.44 $NET apply
 check "scoped: removed addresses are blocked before DNS starts" "[ ! -e $AGENT_TEST_ROOT/dns-saw-revoked-address ]"
 check "scoped: a host removed from net-allow loses its rules" "! grep -q cdn $S/net-resolved && ! grep -q 192.0.2.4 $T/ARISTOTLE_OUT"
+FAKE_DNS_EDIT_ALLOW=192.0.2.99:443 $NET apply
+check "scoped: a concurrent allowlist edit is not marked as applied" "! grep -q -- '-d 192.0.2.99 ' $T/ARISTOTLE_OUT"
+$NET tick
+check "scoped: the next tick applies an edit made during DNS" "grep -q -- '-d 192.0.2.99 ' $T/ARISTOTLE_OUT"
 echo off > "$S/net-mode"
 $NET apply
 check "off: apply succeeds" "[ $? = 0 ]"

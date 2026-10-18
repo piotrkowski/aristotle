@@ -356,9 +356,10 @@ lasting findings in [`docs/pw4-reference.md`](../docs/pw4-reference.md).
 ```sh
 sh device/tests/agent.sh   # the guard, install, uninstall, the kill switch, the takeover flag
 sh device/tests/net.sh     # the Wi-Fi policy generator against net/expected-*
+sh device/tests/clock.sh   # USB clock check, correction, guard and SSH failures
 ```
 
-Both build a fake device root under `$TMPDIR` with stub device commands, run
+These tests build a fake device root under `$TMPDIR` with stub device commands, run
 the real scripts against it (`AGENT_TEST_ROOT`) and touch nothing outside it.
 CI runs them on every pull request. `UPDATE=1 sh device/tests/net.sh` rewrites
 the expected files.
@@ -483,12 +484,16 @@ every 15 minutes after that, and whenever `wlan0`'s address, the resolvers or
 a new resolver before resolving through it. A host that fails to resolve
 keeps its previous addresses.
 
+The refresh interval uses `/proc/uptime`, not the wall clock, so setting the
+date does not delay DNS refresh. A boot ID change forces a refresh after a
+reboot. The displayed `applied` time still uses the wall clock.
+
 Before resolving, an update removes addresses whose host, port and protocol
 are no longer allowed. A slow DNS response does not extend a removed entry's
 access. Updates use a non-blocking `flock` on `net-policy.lock` in the agent directory;
 another update returns an error and leaves the active update alone. The
 kernel releases the lock when its last holder exits, including after
-`SIGKILL`. The agent retries a failed update on its next tick. BusyBox
+`SIGKILL`. In `scoped` mode, the agent retries a failed update on its next tick. BusyBox
 `flock -n FD` is available on our PW4, measured on 2026-10-18.
 
 ### Limits
@@ -508,9 +513,16 @@ kernel releases the lock when its last holder exits, including after
   `wlan0`.
 - The stock Network Time Protocol (NTP) clock sync uses `ntp-g7g.amazon.com` (`/etc/sysconfig/ntp`[^1])
   and is blocked in `scoped`. Allowing another NTP server does not reconfigure
-  the stock client, so the clock drifts until Aristotle sets it itself.
+  the stock client. Use the [USB clock helper](../docs/network.md#set-the-clock-without-internet-access)
+  for a manual runtime correction from a trusted host.
 - The rules have been tested on the host only. Confirm them on the device with
   the checks below.
+
+Read-only checks on our PW4 on 2026-10-18 measured iptables 1.4.15, the
+`state`, `tcp` and `udp` matches, and BusyBox 1.28.3 with `flock -n FD`.
+The device had only `lo` and `usb0`, with no `wlan0` or active resolver
+configuration. These checks confirm tool availability, not packet filtering,
+DNS refresh, or behavior across a Wi-Fi reconnect. Those checks remain open.
 
 ### Stock processes that use the network
 
