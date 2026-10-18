@@ -15,6 +15,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 NET="sh $HERE/../extension/agent/net.sh"
 FIX=$HERE/net
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aristotle-net-test.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+trap 'exit 1' HUP INT TERM
 PATH="$FIX:$PATH"
 export PATH
 failures=0
@@ -77,11 +79,17 @@ check "scoped: one jump on top of OUTPUT" "[ \"\$(head -n 1 $T/OUTPUT)\" = '-o w
 check "scoped: no leftover chains" "[ \"\$(ls $T | tr '\n' ' ')\" = 'ARISTOTLE_IN ARISTOTLE_OUT INPUT OUTPUT ' ]"
 check "scoped: ARISTOTLE_OUT as generated" "grep '^iptables -A ARISTOTLE_OUT_NEW' $FIX/expected-rules-scoped | sed 's/^iptables -A ARISTOTLE_OUT_NEW //' | diff - $T/ARISTOTLE_OUT"
 check "scoped: hosts resolved" "diff $FIX/expected-resolve $S/net-resolved"
+cp "$S/net-rules.sh" "$WORK/rules-before-contention"
+flock "$S/net-policy.lock" $NET apply 2> "$WORK/contention-errors"
+check "scoped: a held lock rejects a second apply" "[ $? = 1 ]"
+check "scoped: a contender leaves the owner's rules alone" "diff $WORK/rules-before-contention $S/net-rules.sh"
 sort "$S/net-resolved" > "$WORK/resolved-sorted"
 FAKE_DNS_DOWN=dash.example.org $NET apply
+check "scoped: an unlocked lock file does not block an update" "[ $? = 0 ]"
 check "scoped: a host that fails to resolve keeps its addresses" "sort $S/net-resolved | diff - $WORK/resolved-sorted"
 grep -v '^cdn' "$FIX/net-allow" > "$S/net-allow"
-$NET apply
+FAKE_DNS_FORBIDDEN=192.0.2.44 $NET apply
+check "scoped: removed addresses are blocked before DNS starts" "[ ! -e $AGENT_TEST_ROOT/dns-saw-revoked-address ]"
 check "scoped: a host removed from net-allow loses its rules" "! grep -q cdn $S/net-resolved && ! grep -q 192.0.2.4 $T/ARISTOTLE_OUT"
 echo off > "$S/net-mode"
 $NET apply

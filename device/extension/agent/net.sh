@@ -47,6 +47,7 @@ RESOLV=$R/etc/resolv.conf
 REFRESH_SECS=${REFRESH_SECS:-900}
 IN=ARISTOTLE_IN
 OUT=ARISTOTLE_OUT
+LOCK=$S/net-policy.lock
 
 log() {
     printf '%s net: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$S/log"
@@ -201,16 +202,17 @@ ipv6() {
 }
 
 apply() {
-    mkdir -p "$S"
-    # aristotlectl and the agent's tick may apply at once; one at a time. A
-    # lock older than a minute is left over from a killed run.
-    i=0
-    until mkdir "$S/net.lock" 2> /dev/null; do
-        i=$((i + 1))
-        [ $i -gt 60 ] && { log "taking over a stale lock"; break; }
-        sleep 1
-    done
-    trap 'rmdir "$S/net.lock" 2> /dev/null' EXIT
+    mkdir -p "$S" || return 1
+    apply_locked 9>> "$LOCK"
+}
+
+apply_locked() {
+    # The kernel releases the lock when its last holder exits, even on SIGKILL.
+    if ! flock -n 9; then
+        log "policy update busy: retry after it finishes"
+        echo "net: policy update busy; retry after it finishes" >&2
+        return 1
+    fi
     if [ "$(mode)" = off ]; then
         echo | run_rules off || { log "removing the rules failed"; return 1; }
         ipv6 0
@@ -219,17 +221,19 @@ apply() {
         return 0
     fi
     ipv6 1
-    # Pass 1: DNS to the current resolvers, the last resolved hosts. Pass 2:
-    # resolve through that, then the final rules.
-    { resolvers; cat "$S/net-resolved" 2> /dev/null; } | run_rules scoped ||
-        { log "scoped: applying rules failed"; return 1; }
     # No list is an empty list: only DHCP and DNS.
     touch "$S/net-allow"
     parse < "$S/net-allow" 2>> "$S/log" > "$S/net-wanted"
+    touch "$S/net-resolved"
+    # Revoke removed entries before DNS, which may be slow or fail.
+    awk 'FILENAME == ARGV[1] { want[$1 " " $2 " " $3] = 1; next }
+        ($5 " " $3 " " $4) in want' \
+        "$S/net-wanted" "$S/net-resolved" > "$S/net-retained"
+    { resolvers; cat "$S/net-retained"; } | run_rules scoped ||
+        { log "scoped: applying rules failed"; return 1; }
     resolve < "$S/net-wanted" 2>> "$S/log" > "$S/net-resolved.new"
     # A host that fails to resolve this time (a DNS hiccup) keeps the
     # addresses it had, so a refresh never cuts off a working server.
-    touch "$S/net-resolved"
     awk 'FILENAME == ARGV[1] { got[$5 " " $3 " " $4] = 1; print; next }
         FILENAME == ARGV[2] { want[$1 " " $2 " " $3] = 1; next }
         ($5 " " $3 " " $4) in want && !(($5 " " $3 " " $4) in got)' \
