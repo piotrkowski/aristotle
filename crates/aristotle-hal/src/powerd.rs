@@ -25,7 +25,8 @@
 use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -241,12 +242,7 @@ pub fn set_prop(service: &str, prop: &str, value: &str, int: bool) -> io::Result
     if int {
         cmd.arg("-i");
     }
-    let status = cmd
-        .args([service, prop, value])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
+    let status = crate::lipc_command::run(cmd.args([service, prop, value]))?.status;
     if status.success() {
         Ok(())
     } else {
@@ -258,15 +254,21 @@ pub fn set_prop(service: &str, prop: &str, value: &str, int: bool) -> io::Result
 
 /// powerd's state (`active`, `screenSaver`, `readyToSuspend`, ...).
 pub fn state() -> io::Result<String> {
-    let out = Command::new("lipc-get-prop")
-        .args(["-s", POWERD, "state"])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()?;
+    get_prop(POWERD, "state", false)
+}
+
+pub(crate) fn get_prop(service: &str, prop: &str, int: bool) -> io::Result<String> {
+    let mut command = Command::new("lipc-get-prop");
+    command
+        .arg(if int { "-i" } else { "-s" })
+        .args([service, prop]);
+    let out = crate::lipc_command::run(&mut command)?;
     if !out.status.success() {
         return Err(io::Error::other(format!("lipc-get-prop: {}", out.status)));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    String::from_utf8(out.stdout)
+        .map(|value| value.trim().to_string())
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
 /// Load (`true`) or unload a blanket module, such as `screensaver`, the
@@ -277,10 +279,11 @@ pub fn blanket(load: bool, module: &str) -> io::Result<()> {
 
 type Property = (String, String, String, bool);
 
-/// Requests to powerd, run in order on one worker and completed before shutdown.
+/// Bounded requests to powerd, run in order and cancelled when shutting down.
 pub struct Lipc {
-    tx: Option<Sender<Property>>,
+    tx: Option<SyncSender<Property>>,
     worker: Option<thread::JoinHandle<()>>,
+    stop: Arc<AtomicBool>,
 }
 
 impl Default for Lipc {
@@ -298,9 +301,14 @@ impl Lipc {
     where
         F: FnMut(&str, &str, &str, bool) -> io::Result<()> + Send + 'static,
     {
-        let (tx, rx) = mpsc::channel::<Property>();
+        let (tx, rx) = mpsc::sync_channel::<Property>(8);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopping = stop.clone();
         let worker = thread::Builder::new().name("lipc".into()).spawn(move || {
             for (service, prop, value, int) in rx {
+                if stopping.load(Ordering::Acquire) {
+                    break;
+                }
                 if let Err(e) = set(&service, &prop, &value, int) {
                     eprintln!("aristotle: {e}");
                 }
@@ -316,17 +324,21 @@ impl Lipc {
         Lipc {
             tx: Some(tx),
             worker,
+            stop,
         }
     }
 
     fn send(&self, service: &str, prop: &str, value: &str, int: bool) {
         if let Some(tx) = &self.tx {
-            let _ = tx.send((service.into(), prop.into(), value.into(), int));
+            if let Err(error) = tx.try_send((service.into(), prop.into(), value.into(), int)) {
+                eprintln!("aristotle: queueing LIPC request: {error}");
+            }
         }
     }
 
-    /// Finish queued commands before restoring the stock power policy.
+    /// Cancel queued commands and wait for the bounded in-flight command.
     pub fn shutdown(&mut self) {
+        self.stop.store(true, Ordering::Release);
         self.tx.take();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -355,22 +367,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lipc_shutdown_finishes_queued_commands_once() {
+    fn lipc_shutdown_cancels_queued_commands() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let recorded = calls.clone();
+        let (started, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
         let mut lipc = Lipc::start_with(move |_, prop, _, _| {
             recorded.lock().unwrap().push(prop.to_string());
+            started.send(()).unwrap();
+            wait.recv_timeout(Duration::from_secs(2)).unwrap();
             Ok(())
         });
         lipc.touch_idle_timer();
+        ready.recv_timeout(Duration::from_secs(2)).unwrap();
         lipc.power_button();
-        lipc.shutdown();
-        lipc.power_button();
-        drop(lipc);
-        assert_eq!(
-            *calls.lock().unwrap(),
-            ["touchScreenSaverTimeout", "powerButton"]
-        );
+        let stop = lipc.stop.clone();
+        let shutdown = thread::spawn(move || {
+            lipc.shutdown();
+            lipc.power_button();
+        });
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !stop.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline);
+            thread::yield_now();
+        }
+        release.send(()).unwrap();
+        shutdown.join().unwrap();
+        assert_eq!(*calls.lock().unwrap(), ["touchScreenSaverTimeout"]);
     }
 
     fn listener(script: &'static str, retry: Duration) -> PowerEvents {
