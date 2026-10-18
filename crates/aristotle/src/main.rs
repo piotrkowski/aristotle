@@ -654,6 +654,13 @@ impl App {
     }
 
     fn render_ui_with(&mut self, content: Content) -> Result<(), Error> {
+        if self.asleep.is_some() {
+            return Ok(());
+        }
+        self.submit_ui(content)
+    }
+
+    fn submit_ui(&mut self, content: Content) -> Result<(), Error> {
         let damage = self.ui.render();
         self.panel.present(&self.ui, &damage, content)?;
         Ok(())
@@ -1002,7 +1009,7 @@ impl App {
             "sleep: screensaver ({})",
             if by_powerd { "powerd" } else { "own" }
         );
-        self.render_ui()
+        self.submit_ui(Content::Chrome)
     }
 
     /// powerd left its screensaver, or a touch woke ours: the light and
@@ -1160,6 +1167,7 @@ impl App {
     /// the clock in the status line.
     fn background(&mut self) -> Result<(), Error> {
         if self.asleep.is_some() {
+            self.poll_net()?;
             return Ok(());
         }
         if let Some(result) = self.opening.as_ref().and_then(|o| o.worker.poll()) {
@@ -2562,7 +2570,7 @@ mod tests {
                     app.on_settings_event(UiEvent::Action {
                         id: action,
                         node,
-                            at: aristotle_ui::geom::Point::default(),
+                        at: aristotle_ui::geom::Point::default(),
                     })
                     .unwrap();
                     assert_eq!(Prefs::load(&dir.join("library")).sleep_screen, mode);
@@ -2677,6 +2685,36 @@ mod tests {
         app.wake(true).unwrap();
         assert!(updates(&app).len() > before);
         assert!(matches!(app.screen, Screen::Library { .. }));
+    }
+
+    #[test]
+    fn network_completions_update_state_without_repainting_or_retaining_busy_while_asleep() {
+        for mode in [
+            prefs::SleepScreen::LastScreen,
+            prefs::SleepScreen::BookCover,
+        ] {
+            let dir = testdir("sleep-network");
+            let mut app = memory_app(&dir.join("library"), &dir.join("books"));
+            app.open_network(catalogs::NetView::Sync, 0).unwrap();
+            app.prefs.sleep_screen = mode;
+            app.fall_asleep(true).unwrap();
+            let before = updates(&app).len();
+            let shown = pixels(&app).to_vec();
+            app.sync.checking = true;
+            app.net.spawn("sleep-test", |_| net::Done::Login {
+                register: false,
+                result: Err(aristotle_net::kosync::Error::Unauthorized),
+            });
+            wait(&mut app, |app| !app.net.busy());
+            assert!(!app.sync.checking);
+            assert!(!app.sync.message.is_empty());
+            assert!(app.asleep.is_some());
+            assert_eq!(updates(&app).len(), before);
+            assert_eq!(pixels(&app), shown);
+            app.wake(true).unwrap();
+            assert!(updates(&app).len() > before);
+            assert!(matches!(app.screen, Screen::Network(_)));
+        }
     }
 
     /// Run the loop's background work until `done`, for at most 20 s.
