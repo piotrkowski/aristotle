@@ -483,6 +483,14 @@ every 15 minutes after that, and whenever `wlan0`'s address, the resolvers or
 a new resolver before resolving through it. A host that fails to resolve
 keeps its previous addresses.
 
+Before resolving, an update removes addresses whose host, port and protocol
+are no longer allowed. A slow DNS response does not extend a removed entry's
+access. Updates use a non-blocking `flock` on `net-policy.lock` in the agent directory;
+another update returns an error and leaves the active update alone. The
+kernel releases the lock when its last holder exits, including after
+`SIGKILL`. The agent retries a failed update on its next tick. BusyBox
+`flock -n FD` is available on our PW4, measured on 2026-10-18.
+
 ### Limits
 
 - Rules are per IP address. Any process can reach anything else served from
