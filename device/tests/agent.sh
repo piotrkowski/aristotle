@@ -56,6 +56,8 @@ check() {
 AGENT_TEST_OWNER=$(id -u)
 export AGENT_TEST_OWNER
 export AGENT_TEST_DIR_MODE=700
+FAKE_LIVE_PID=$$
+export FAKE_LIVE_PID
 
 # stubs DIR: the device commands the scripts call. Each one appends its
 # command line to $AGENT_TEST_ROOT/calls.
@@ -71,7 +73,19 @@ case "${0##*/}:$1" in
 iptables:-C | iptables:-D | iptables:-F | iptables:-X) exit 1 ;;
 mntroot:*) [ "${FAKE_MNTROOT_FAIL:-}" != "$1" ] ;;
 sync:*) [ "${FAKE_APP_SIGNAL:-0}" != 1 ] || kill -TERM "$PPID" ;;
-lipc-set-prop:com.lab126.appmgrd) [ "${FAKE_KUAL_START_FAIL:-0}" != 1 ] ;;
+lipc-set-prop:com.lab126.appmgrd)
+    [ "${FAKE_KUAL_START_FAIL:-0}" != 1 ] || exit 1
+    count=$(cat "$AGENT_TEST_ROOT/kual-requests" 2> /dev/null || echo 0)
+    count=$((count + 1))
+    echo "$count" > "$AGENT_TEST_ROOT/kual-requests"
+    [ "${FAKE_KUAL_IGNORE_ALWAYS:-0}" != 1 ] || exit 0
+    if [ "${FAKE_KUAL_IGNORE_FIRST:-0}" = 1 ] && [ "$count" = 1 ]; then exit 0; fi
+    if [ "${FAKE_KUAL_DELAY_POLLS:-0}" -gt 0 ]; then
+        echo "$FAKE_KUAL_DELAY_POLLS" > "$AGENT_TEST_ROOT/kual-pending"
+    else
+        echo com.mobileread.ixtab.kindlelauncher > "$AGENT_TEST_ROOT/active-app"
+    fi
+    ;;
 lipc-set-prop:com.lab126.volumd) [ "${FAKE_VOLUMD_SET_FAIL:-0}" != 1 ] ;;
 rmmod:g_mass_storage)
     [ "${FAKE_UNLOAD_FAIL:-0}" != 1 ] || exit 1
@@ -121,7 +135,22 @@ if [ "$1:$2" = com.lab126.volumd:driveModeState ]; then
     fi
     exit 0
 fi
-echo "${FAKE_ACTIVE_APP_PID:-123}"
+case "$1:$2" in
+com.lab126.appmgrd:activeAppPid) echo "${FAKE_ACTIVE_APP_PID:-$FAKE_LIVE_PID}" ;;
+com.lab126.appmgrd:activeApp)
+    [ "${FAKE_APP_ID_FAIL:-0}" != 1 ] || exit 1
+    if [ -f "$AGENT_TEST_ROOT/kual-pending" ]; then
+        polls=$(cat "$AGENT_TEST_ROOT/kual-pending")
+        if [ "$polls" -gt 0 ]; then
+            echo $((polls - 1)) > "$AGENT_TEST_ROOT/kual-pending"
+        else
+            rm "$AGENT_TEST_ROOT/kual-pending"
+            echo com.mobileread.ixtab.kindlelauncher > "$AGENT_TEST_ROOT/active-app"
+        fi
+    fi
+    cat "$AGENT_TEST_ROOT/active-app" 2> /dev/null || echo com.lab126.booklet.home
+    ;;
+esac
 EOF
     cat > "$1/cp" << 'EOF'
 #!/bin/sh
@@ -896,14 +925,37 @@ check "hung LIPC command is killed within the budget" "[ $? = 1 ] && [ \$((\$(da
 KUAL_WAIT=not-a-number run "$r" open-kual.sh
 check "invalid wait budget is rejected" "[ $? = 1 ] && grep -q 'invalid KUAL wait budget' $r.out"
 
+echo "KUAL handoff: confirm the active application, not request acceptance"
+: > "$r/calls"
+echo com.mobileread.ixtab.kindlelauncher > "$r/active-app"
+FAKE_ACTIVE_APP_PID=99999999 KUAL_WAIT=1 run "$r" open-kual.sh
+check "stale PID never confirms KUAL or sends a premature request" "[ $? = 1 ] && ! called $r 'lipc-set-prop com.lab126.appmgrd start' && ! grep -q 'KUAL launch confirmed' $r.out"
+echo com.lab126.booklet.home > "$r/active-app"
+FAKE_APP_ID_FAIL=1 KUAL_WAIT=1 run "$r" open-kual.sh
+check "unavailable active-app identity does not launch blindly" "[ $? = 1 ] && ! called $r 'lipc-set-prop com.lab126.appmgrd start'"
+FAKE_KUAL_IGNORE_ALWAYS=1 KUAL_WAIT=1 run "$r" open-kual.sh
+check "accepted but ignored request is not reported as success" "[ $? = 1 ] && ! grep -q 'KUAL launch confirmed' $r.out"
+rm -f "$r/kual-requests"
+: > "$r/calls"
+FAKE_KUAL_DELAY_POLLS=2 KUAL_WAIT=5 run "$r" open-kual.sh
+check "delayed activation is confirmed without duplicate pending requests" "[ $? = 0 ] && grep -q 'KUAL launch confirmed' $r.out && [ \"\$(cat $r/kual-requests)\" = 1 ]"
+echo com.lab126.booklet.home > "$r/active-app"
+rm "$r/kual-requests"
+FAKE_KUAL_IGNORE_FIRST=1 KUAL_WAIT=8 run "$r" open-kual.sh
+check "cold-start ignored request is retried and confirmed" "[ $? = 0 ] && grep -q 'KUAL launch confirmed' $r.out && [ \"\$(cat $r/kual-requests)\" = 2 ]"
+: > "$r/calls"
+KUAL_WAIT=1 run "$r" open-kual.sh
+check "already active KUAL succeeds without relaunch" "[ $? = 0 ] && grep -q 'KUAL launch confirmed' $r.out && ! called $r 'lipc-set-prop com.lab126.appmgrd start'"
+
 echo "KUAL handoff: manual runner"
 r=$(booted kualmanual)
 fake_app "$r"
 mkdir -p "$r/opt/amazon/ebook/booklet"
 : > "$r/opt/amazon/ebook/booklet/KUALBooklet.jar"
-AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=1 \
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=5 \
     ARISTOTLE_LOG=$r/app.log sh "$r/mnt/us/aristotle/run-aristotle.sh" > "$r.out" 2>&1
 check "KUAL request is a successful exit" "[ $? = 0 ]"
+check "manual runner observes KUAL becoming active" "grep -q 'KUAL launch confirmed' $r/app.log"
 stock_line=$(awk '/^start lab126_gui$/ {print NR; exit}' "$r/calls")
 kual_line=$(awk '/^lipc-set-prop com.lab126.appmgrd start app:\/\/com.mobileread.ixtab.kindlelauncher$/ {print NR; exit}' "$r/calls")
 check "stock restored before KUAL launch" "[ -n '$stock_line' ] && [ -n '$kual_line' ] && [ '$stock_line' -lt '$kual_line' ]"
@@ -918,9 +970,10 @@ r=$(autostarted kualboot)
 printf 'fsp %s/mnt/us fuse.fsp rw 0 0\n' "$r" > "$r/proc/mounts"
 mkdir -p "$r/opt/amazon/ebook/booklet"
 : > "$r/opt/amazon/ebook/booklet/KUALBooklet.jar"
-FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=1 ui_boot "$r"
+FAKE_RC=20 FAKE_KUAL_READY=1 KUAL_WAIT=5 ui_boot "$r"
 done_ui "$r"
 check "one clean launch, no crash retry" "[ \"\$(grep -c '^app' $r/calls)\" = 1 ] && [ \"\$(cat $r/var/local/aristotle/ui-fails)\" = 0 ]"
+check "boot runner observes KUAL becoming active" "grep -q 'KUAL launch confirmed' $r/var/local/aristotle/ui.log"
 stock_line=$(awk '/^start lab126_gui$/ {print NR; exit}' "$r/calls")
 kual_line=$(awk '/^lipc-set-prop com.lab126.appmgrd start app:\/\/com.mobileread.ixtab.kindlelauncher$/ {print NR; exit}' "$r/calls")
 check "boot runner restores stock before KUAL" "[ -n '$stock_line' ] && [ -n '$kual_line' ] && [ '$stock_line' -lt '$kual_line' ]"

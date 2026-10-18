@@ -16,6 +16,7 @@ fi
 command -v timeout > /dev/null || exit 1
 now() { cut -d. -f1 /proc/uptime; }
 deadline=$(($(now) + WAIT))
+next_request=0
 bounded() {
     left=$((deadline - $(now)))
     [ "$left" -gt 0 ] || return 1
@@ -25,12 +26,22 @@ bounded() {
 while [ "$(now)" -lt "$deadline" ]; do
     if bounded initctl status framework 2> /dev/null | grep -q start/running; then
         pid=$(bounded lipc-get-prop com.lab126.appmgrd activeAppPid 2> /dev/null) || pid=
+        active=$(bounded lipc-get-prop com.lab126.appmgrd activeApp 2> /dev/null) || active=
         case "$pid" in
         '' | 0 | *[!0-9]*) ;;
         *)
-            if bounded lipc-set-prop com.lab126.appmgrd start app://com.mobileread.ixtab.kindlelauncher; then
-                echo "KUAL launch accepted"
-                exit 0
+            if kill -0 "$pid" 2> /dev/null; then
+                if [ "$active" = com.mobileread.ixtab.kindlelauncher ]; then
+                    echo "KUAL launch confirmed"
+                    exit 0
+                fi
+                if [ -n "$active" ] && [ "$(now)" -ge "$next_request" ]; then
+                    if bounded lipc-set-prop com.lab126.appmgrd start app://com.mobileread.ixtab.kindlelauncher; then
+                        next_request=$(($(now) + 5))
+                        continue
+                    fi
+                    next_request=$(($(now) + 2))
+                fi
             fi
             ;;
         esac
