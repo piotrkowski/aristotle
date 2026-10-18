@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Sleep the stock way: the app follows `powerd` instead of holding it off.
+//! Follow stock powerd by default; ARISTOTLE_POWERD=0 selects the fallback.
 //!
-//! While the app runs, blanket's screensaver module is unloaded, so nothing
-//! draws over it, and `preventScreenSaver` is 0, so the power button works.
+//! Successful takeover unloads blanket's screensaver and releases preventScreenSaver.
+//! Firmware readiness checks still apply to the power button.
 //! powerd's `goingToScreenSaver` (power button, cover, its idle timer, or
 //! our own timer pressing the button through `powerButton`) makes the app
 //! save and draw its screensaver card; powerd then suspends the CPU a minute
@@ -15,7 +15,7 @@
 //! button itself when its own time is up. "Never" keeps restarting T1.
 //!
 //! When powerd does not react, the app falls back to its own screensaver without suspend.
-//! A touch wakes that fallback; the ignored button's cause needs device validation.
+//! A touch wakes that fallback; managed sleep supplies KAF readiness after takeover.
 //! Firmware drive_mode_state=1 means off, not a USB-network suspend blocker.
 
 use std::os::fd::RawFd;
@@ -65,17 +65,16 @@ pub struct Sleep {
 }
 
 impl Sleep {
-    /// Follow powerd and take the screensaver over from blanket. Off the
-    /// device, without `lipc-wait-event`, or unless `ARISTOTLE_POWERD=1`
-    /// is set, hold `preventScreenSaver` instead, as earlier versions did:
-    /// suspending through powerd is not yet verified on the device, so it
-    /// is opt-in for now.
+    /// Follow powerd unless explicitly disabled or its takeover cannot be acquired.
+    /// ARISTOTLE_POWERD=0 retains the non-suspending screensaver fallback.
     pub fn start() -> std::io::Result<Sleep> {
-        let wanted = std::env::var_os("ARISTOTLE_POWERD").is_some_and(|v| v == "1");
+        let wanted = enabled(std::env::var_os("ARISTOTLE_POWERD").as_deref());
         let listen = if wanted {
             PowerEvents::listen()
         } else {
-            Err(std::io::Error::other("ARISTOTLE_POWERD=1 not set"))
+            Err(std::io::Error::other(
+                "ARISTOTLE_POWERD=0 disables managed sleep",
+            ))
         };
         let (events, screensaver) = match listen {
             Ok(ev) => match Screensaver::acquire(true) {
@@ -290,5 +289,21 @@ impl Sleep {
 impl Drop for Sleep {
     fn drop(&mut self) {
         self.restore();
+    }
+}
+
+fn enabled(value: Option<&std::ffi::OsStr>) -> bool {
+    value != Some(std::ffi::OsStr::new("0"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_sleep_is_default_with_an_explicit_zero_opt_out() {
+        assert!(enabled(None));
+        assert!(enabled(Some(std::ffi::OsStr::new("1"))));
+        assert!(!enabled(Some(std::ffi::OsStr::new("0"))));
     }
 }

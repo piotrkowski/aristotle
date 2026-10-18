@@ -2,7 +2,7 @@
 
 Aristotle is experimental. A mistake can brick the Kindle, and no recovery method is verified for the Paperwhite 4. Use only a device you can afford to lose.
 
-The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use is unverified. Quit to the stock interface when you finish reading. The alternative `ARISTOTLE_POWERD=1` path has host tests only, not verified device sleep or wake behavior.
+The app follows stock powerd for sleep by default. `ARISTOTLE_POWERD=0`, or a failed powerd takeover, selects a non-suspending screensaver instead. A temporary framework-readiness helper enabled a measured PW4 suspend and physical wake; the app-owned helper still needs device validation. Battery use remains unverified. See [Power validation](power-validation.md).
 
 The [glossary](glossary.md) explains device and book-format terms.
 

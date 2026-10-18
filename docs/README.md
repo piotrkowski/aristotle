@@ -14,7 +14,7 @@ Aristotle runs on a jailbroken Kindle Paperwhite 4 on firmware 5.13.x. Start wit
 | Fix a problem or collect logs | [Troubleshooting](troubleshooting.md) |
 | Check whether a book will work | [Format support](formats.md) |
 
-The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use has not been verified. Quit to the stock interface when you finish reading. See [Power and sleep](reader.md#the-app) for the experimental alternative.
+Aristotle follows stock powerd for sleep by default. If powerd integration fails or `ARISTOTLE_POWERD=0` is set, its fallback screensaver does not suspend the CPU. Battery use remains unverified. See [Power and sleep](reader.md#the-app) and the [device validation limits](power-validation.md).
 
 ## Understand the implementation
 

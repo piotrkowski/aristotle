@@ -117,7 +117,7 @@ The driver runs one update at a time, even for non-overlapping regions.[^2] Use 
 - Frontlight: `/sys/class/backlight/bl/brightness`, range 0 to 2047. Writes take effect and read back exactly.[^2]
 - Battery: `/sys/class/power_supply/bd71827_bat/` with `capacity`, `status`, `charging`, `voltage_now` (`µV`) and `temp` (`°C`). The charger is `bd71827_ac`.[^2]
 - Hall sensor: `/sys/bus/platform/drivers/hall_sensor/rex_hall/hall_enable`.[^3]
-- `preventScreenSaver=1` blocks screensaver and suspend,[^3] and disables the power button.[^2] The reader sets it unless `ARISTOTLE_POWERD=1`.
+- `preventScreenSaver=1` blocks screensaver and suspend,[^3] and disables the power button.[^2] The reader sets it with `ARISTOTLE_POWERD=0` or when managed sleep cannot be acquired.
 - Firmware uses an enum for `powerd`'s `drive_mode_state`: `1` means drive mode is off, `2` is the passcode state, and `3` is drive mode on. The button's drive-mode blocker checks for `3`, not `1`.[^1] A button was ignored during USB networking,[^2] but that observation does not establish USB networking as the cause.
 - Before accepting the button, `powerd` checks that KAF's `frameworkStarted` property is nonzero and blanket's loaded modules do not include `splash`. A failed property read also blocks the button.[^1] Framework-less sleep needs separate validation.
 - Stock framework setup unloads blanket's splash module and sends `bootSplashCleanup` from `com.lab126.hal`.[^1] `ui-boot.sh` repeats those steps when booting without the framework; the event does not replace the button's property checks.
