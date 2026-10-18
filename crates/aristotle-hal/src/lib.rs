@@ -6,4 +6,5 @@ pub mod framebuffer;
 pub mod input;
 pub mod power;
 pub mod powerd;
+pub mod screensaver;
 pub mod system;
