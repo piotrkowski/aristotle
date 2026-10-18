@@ -53,7 +53,7 @@ Start calibre's content server on a computer reachable from the Kindle's Wi-Fi n
 6. Browse to a book and choose **Download EPUB**.
 7. Wait for the saved-path message, then tap **Read now** or return to the library.
 
-The file appears under `documents/calibre/`. Existing files are not replaced. Downloads are limited to 200 MiB and must leave 20 MiB free. The app can list acquisition formats that the default reader build cannot open, including CBZ. Choose a format from the [reader support table](formats.md#default-release-bundle).
+The file appears under `documents/calibre/`. Existing files are not replaced. Downloads are limited to 200 MiB and must leave 20 MiB free. CBZ opens in the default reader, but KF8-only AZW3 reading remains unverified. Choose a format from the [reader support table](formats.md#default-release-bundle).
 
 Catalog browsing and downloads work without typed search. Although the protocol supports search, entering a query is unavailable without the on-screen keyboard.
 

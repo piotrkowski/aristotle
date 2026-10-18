@@ -192,7 +192,7 @@ Automatic sync fetches progress on open with a 5-second timeout. A different rem
 
 ### Catalogs (OPDS 1.2)
 
-OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
+OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. CBZ opens in the default reader; KF8-only AZW3 reading remains unverified ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
 
 Downloads go to `documents/<catalog name>/<title> - <author>.<ext>`. Each is limited to 200 MiB and leaves at least 20 MiB free. A hidden `.part` file is synced and renamed on success. Failure or cancellation removes it. Existing files are not replaced. The library scans after download.
 

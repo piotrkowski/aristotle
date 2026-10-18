@@ -24,7 +24,7 @@ For a boot problem without SSH, use the [kill switch](../device/README.md#kill-s
 | --- | --- |
 | A copied book is missing | Put it under `documents/`, eject the drive, and restart Aristotle. Try **Books > All**. Hidden entries, dictionaries, and directory symlinks are skipped. |
 | A book is listed but will not open | Check [format support](formats.md). Indexing, downloading, and opening are separate capabilities. Encrypted MOBI cannot be read. |
-| A CBZ downloads but will not open | The default release disables MuPDF's CBZ reader. Use a supported format. |
+| A CBZ downloads but will not open | Check ZIP integrity and the page image formats. WebP entries are not pages. See [format support](formats.md). |
 | Text size or custom fonts do not affect a page | PDF uses fixed pages. MuPDF reflow, used by TXT and some MOBI files, does not use the chosen custom font. |
 | Page numbers are missing | Wait for background pagination. The current position can be saved before page counts are ready. |
 | A highlight is absent from clippings | Check **Save highlights to My Clippings.txt** in settings. Bookmarks are not exported there. |
