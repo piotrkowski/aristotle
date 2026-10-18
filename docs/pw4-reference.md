@@ -161,6 +161,10 @@ The stock reader stores state in `<book>.sdr/` and highlights in [`My Clippings.
 
 By default the port runs `g_mass_storage`, and `volumd` exports the userstore.[^2] While it is exported, the device cannot write `/mnt/us`. `g_mass_storage` unloads only after the host has ejected the drive.[^2]
 
+After a storage-to-network transition, the tested PW4 retained the FSP mount at `/mnt/us` but lacked its FAT backing mount at `/mnt/base-us`. Directory access returned `ESTALE`, and the stock interface was unusable. `volumd` still reported `userstoreIsAvailable=1`, `driveModeState=0`, and `useUsbForNetwork=1`. With no storage gadget loaded and drive mode cleared, plain `/usr/sbin/mntus mount` restored the backing mount and access to the stock interface. No filesystem check or forced unmount was used.[^2]
+
+In the 5.13.6 firmware, `/etc/sysconfig/mntus` sets `MNTUS_MP=/mnt/base-us` and `MNTUS_LOOP_DEV=/dev/loop/0`. The stock `mntus mount` helper attaches the loop device if needed, then mounts the configured filesystem. It checks the filesystem only when called with `--fsck`. It has no gadget or `volumd` export-state guard, so the caller must check those conditions before mounting.[^1]
+
 The Aristotle agent and *[KUAL](glossary.md#kual) › Aristotle › Start USB network* replace it with [`g_ether`](glossary.md#g_ether) and use [Dropbear](glossary.md#dropbear) for SSH.[^2] The link uses fixed addresses without DHCP, and iptables controls access:
 
 | Property | Value |

@@ -86,9 +86,19 @@ dropbear_alive() {
 net_up() {
     # Tell volumd the USB port is for networking, so it doesn't start drive
     # mode when the cable is plugged in.
-    lipc-set-prop com.lab126.volumd useUsbForNetwork 1 2> /dev/null
+    if ! timeout -t 3 -s KILL lipc-set-prop com.lab126.volumd useUsbForNetwork 1 2> /dev/null; then
+        log "net: volumd did not accept network mode; retrying later"
+        return 1
+    fi
     if lsmod | grep -q '^g_mass_storage'; then
-        rmmod g_mass_storage 2>> "$LOG" && log "net: unloaded g_mass_storage"
+        if ! rmmod g_mass_storage 2>> "$LOG"; then
+            log "net: storage gadget is busy; eject the host drive before retrying"
+            return 1
+        fi
+        log "net: unloaded g_mass_storage"
+    fi
+    if ! restore_userstore; then
+        return 1
     fi
     if ! lsmod | grep -q '^g_ether'; then
         if modprobe g_ether dev_addr="$DEV_MAC" host_addr="$HOST_MAC" 2>> "$LOG"; then
@@ -117,6 +127,51 @@ net_up() {
         log "ssh: no dropbear available yet"
     fi
     return 1
+}
+
+base_mounted() {
+    [ -r "$R/proc/mounts" ] || return 2
+    awk -v point="$R/mnt/base-us" '$2 == point { found=1 } END { exit !found }' "$R/proc/mounts"
+}
+
+storage_gadget_absent() {
+    modules=$(lsmod 2>> "$LOG") || { log "net: cannot read module state; not mounting userstore"; return 1; }
+    if printf '%s\n' "$modules" | grep -q '^g_mass_storage'; then
+        log "net: storage gadget present; not mounting userstore"
+        return 1
+    fi
+}
+
+restore_userstore() {
+    deadline=$(($(cut -d. -f1 /proc/uptime) + 5))
+    while :; do
+        storage_gadget_absent || return 1
+        if [ "$(cut -d. -f1 /proc/uptime)" -ge "$deadline" ]; then
+            log "net: drive mode did not clear; not mounting userstore"
+            return 1
+        fi
+        drive=$(timeout -t 1 -s KILL lipc-get-prop com.lab126.volumd driveModeState 2> /dev/null) || drive=unknown
+        [ "$drive" = 0 ] && break
+        sleep 1
+    done
+    if base_mounted; then
+        :
+    else
+        if [ "$?" != 1 ]; then
+            log "net: cannot read backing mount state; retrying later"
+            return 1
+        fi
+        storage_gadget_absent || return 1
+        if ! "$R/usr/sbin/mntus" mount >> "$LOG" 2>&1; then
+            log "net: backing userstore mount failed; retrying later"
+            return 1
+        fi
+        log "net: requested backing userstore mount"
+    fi
+    if ! base_mounted || [ ! -d "$R/mnt/us/." ]; then
+        log "net: userstore is not ready after mount; retrying later"
+        return 1
+    fi
 }
 
 # start_dropbear BINARY HOME
