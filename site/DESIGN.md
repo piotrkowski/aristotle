@@ -87,7 +87,7 @@ The demo uses real screenshots and clickable hotspots. Put the current instructi
 
 Greek text, English text, and Footnotes select separate reading samples, not consecutive pages. Continue reading returns to the last Greek or English sample. Menu and night-mode controls work in both themes. Reset returns to the initial library and clears the visited actions.
 
-Show actions marks the available hotspots. Tapping an inactive area also reveals them and explains the preview's limits. Hotspots and controls have a minimum 44px touch target. Keep the caption readable at 0.8125rem. Link More screenshots to the GitHub screenshot gallery.
+Show actions marks the available hotspots. Markers follow the screenshot coordinates. Touch targets can extend beyond a marker without changing its size. Tapping an inactive area also reveals the markers and explains the preview's limits. Hotspots and controls have a minimum 44px touch target. Keep the caption readable at 0.8125rem. Link More screenshots to the GitHub screenshot gallery.
 
 Header icons have accessible names and 44px touch targets. A hand-drawn arrow points at Continue reading on the initial demo screen. Hide it after opening a book, on screens up to 600px wide, and in the enlarged view. The footer holds only repository links.
 

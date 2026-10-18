@@ -120,6 +120,12 @@
         go(destination(spot.to), event.detail === 0);
       });
       spots.appendChild(button);
+      var marker = document.createElement("span");
+      marker.className = "hotspot-marker";
+      marker.setAttribute("aria-hidden", "true");
+      marker.dataset.id = spot.id;
+      position(marker, spot.rect);
+      spots.appendChild(marker);
       load(destination(spot.to)).catch(function () {});
     });
     if (frame.cue && !visited[frame.scene === "footnote-page" ? "footnote" : frame.scene === "english-page" ? "english-popup" : "greek-popup"]) {

@@ -6,34 +6,34 @@
     return { id: id, label: label, rect: rect, to: to, key: key };
   }
 
-  var library = spot("library", "Back to the library", [30, 10, 280, 130], "library");
+  var library = spot("library", "Back to the library", [58, 24, 232, 76], "library");
   var menu = spot("menu", "Open the reader menu", [0, 0, 1072, 173], "menu");
   var scenes = {
     library: {
       alt: "Aristotle's library, with Nicomachean Ethics as the book to continue, a book list, shelves and folders.",
       hint: "Open a book to try the reader.", action: "continue",
       spots: [
-        spot("continue", "Continue reading", [60, 215, 950, 250], "resume"),
-        spot("settings", "Open settings", [880, 60, 136, 120], "settings"),
-        spot("folders", "Browse folders", [215, 500, 195, 120], "folders")
+        spot("continue", "Continue reading", [58, 208, 956, 260], "resume"),
+        spot("settings", "Open settings", [908, 78, 80, 80], "settings"),
+        spot("folders", "Browse folders", [202, 519, 148, 68], "folders")
       ]
     },
     folders: {
       alt: "The library's Folders tab, with Aristotle, Marcus Aurelius and Plato folders.",
       hint: "Open Aristotle's folder.", action: "folder",
       spots: [
-        spot("books", "Back to books", [55, 500, 150, 120], "library", "Escape"),
-        spot("folder", "Open the Aristotle folder", [55, 620, 960, 130], "folder"),
-        spot("continue", "Continue reading", [60, 215, 950, 250], "resume"),
-        spot("settings", "Open settings", [880, 60, 136, 120], "settings")
+        spot("books", "Back to books", [58, 519, 128, 68], "library", "Escape"),
+        spot("folder", "Open the Aristotle folder", [58, 617, 956, 115], "folder"),
+        spot("continue", "Continue reading", [58, 208, 956, 260], "resume"),
+        spot("settings", "Open settings", [908, 78, 80, 80], "settings")
       ]
     },
     folder: {
       alt: "The Aristotle folder, with four books including Nicomachean Ethics, Book I.",
       hint: "Open Nicomachean Ethics from its folder.", action: "book",
       spots: [
-        spot("back", "Back to folders", [35, 55, 120, 140], "folders", "Escape"),
-        spot("book", "Open Nicomachean Ethics", [60, 195, 950, 140], "resume")
+        spot("back", "Back to folders", [58, 84, 78, 68], "folders", "Escape"),
+        spot("book", "Open Nicomachean Ethics", [58, 199, 956, 128], "resume")
       ]
     },
     "greek-page": {
@@ -56,8 +56,8 @@
       hint: "Close the definition to keep reading.", action: "close", sample: "greek-page",
       spots: [
         spot("page", "Dismiss the Greek definition", [0, 0, 1072, 760], "greek-page"),
-        spot("highlight", "Highlight the Greek word", [65, 1318, 240, 112], "greek-highlighted"),
-        spot("close", "Close the definition", [458, 1318, 140, 112], "greek-page", "Escape")
+        spot("highlight", "Highlight the Greek word", [65, 1318, 232, 118], "greek-highlighted"),
+        spot("close", "Close the definition", [460, 1318, 154, 118], "greek-page", "Escape")
       ]
     },
     "english-popup": {
@@ -65,7 +65,7 @@
       hint: "Close the definition to keep reading.", action: "close", sample: "english-page",
       spots: [
         spot("page", "Dismiss the English definition", [0, 0, 1072, 610], "english-page"),
-        spot("close", "Close the definition", [460, 1318, 150, 112], "english-page", "Escape")
+        spot("close", "Close the definition", [460, 1318, 154, 118], "english-page", "Escape")
       ]
     },
     "greek-highlighted": {
@@ -79,8 +79,8 @@
       spots: [
         library,
         spot("close", "Close the reader menu", [0, 240, 1072, 410], "resume", "Escape"),
-        spot("size", "Try larger text", [590, 820, 410, 110], "menu-size"),
-        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
+        spot("size", "Try larger text", [678, 854, 56, 56], "menu-size"),
+        spot("night", "Switch to night mode", [886, 1320, 126, 82], "toggle-night")
       ]
     },
     "greek-menu": {
@@ -89,7 +89,7 @@
       spots: [
         library,
         spot("close", "Close the reader menu", [0, 240, 1072, 420], "resume", "Escape"),
-        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
+        spot("night", "Switch to night mode", [886, 1320, 126, 82], "toggle-night")
       ]
     },
     "menu-size": {
@@ -97,22 +97,22 @@
       hint: "Try the original text size again.", action: "size", sample: "english-page",
       spots: [
         library,
-        spot("size", "Restore the original text size", [275, 820, 300, 110], "menu", "Escape"),
-        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
+        spot("size", "Restore the original text size", [533, 854, 56, 56], "menu", "Escape"),
+        spot("night", "Switch to night mode", [886, 1320, 126, 82], "toggle-night")
       ]
     },
     settings: {
       alt: "Settings for frontlight, night mode, library covers, battery and screensaver.",
       hint: "Switch on night mode.", action: "night",
       spots: [
-        spot("back", "Back to the library", [30, 50, 400, 136], "library", "Escape"),
-        spot("night", "Switch to night mode", [40, 545, 992, 120], "toggle-night")
+        spot("back", "Back to the library", [58, 84, 78, 68], "library", "Escape"),
+        spot("night", "Switch to night mode", [58, 534, 956, 112], "toggle-night")
       ]
     },
     "footnote-page": {
       alt: "A separate English reading sample with footnote references in Chapter I of Nicomachean Ethics.",
       hint: "Open the underlined footnote [3].", action: "note", sample: "footnote-page",
-      spots: [spot("note", "Open footnote 3", [835, 920, 90, 95], "footnote")],
+      spots: [spot("note", "Open footnote 3", [847, 934, 54, 55], "footnote")],
       cue: [857, 940, 35, 40]
     },
     footnote: {
@@ -120,7 +120,7 @@
       hint: "Close the note to return to the page.", action: "close", sample: "footnote-page",
       spots: [
         spot("page", "Dismiss the footnote", [0, 0, 1072, 925], "footnote-page"),
-        spot("close", "Close the footnote", [375, 1318, 160, 112], "footnote-page", "Escape")
+        spot("close", "Close the footnote", [377, 1318, 154, 118], "footnote-page", "Escape")
       ]
     }
   };
