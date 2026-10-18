@@ -4,6 +4,7 @@
 //! See `docs/ui-framework.md` for the architecture and design rules.
 
 pub mod canvas;
+pub mod components;
 pub mod geom;
 pub mod icons;
 pub mod input;

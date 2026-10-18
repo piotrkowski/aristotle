@@ -14,7 +14,8 @@
 //! offer the rows that ask for it.
 
 use super::icon_button;
-use super::library::{chip, page_of, status_line, StatusLine};
+use super::library::{page_of, status_line, StatusLine};
+use crate::components::chip;
 use crate::geom::{Insets, MIN_TARGET};
 use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};

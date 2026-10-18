@@ -11,7 +11,8 @@
 //! the change itself goes out with DU.
 
 use super::icon_button;
-use super::library::{chip, status_line, CoverMode, StatusLine};
+use super::library::{status_line, CoverMode, StatusLine};
+use crate::components::chip;
 use crate::geom::{mm, Insets, MIN_TARGET};
 use crate::icons::Icon;
 use crate::text::{Align, Paragraph, TextEngine};
