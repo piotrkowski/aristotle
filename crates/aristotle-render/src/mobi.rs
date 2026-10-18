@@ -313,7 +313,7 @@ fn parse_exth(exth: &[u8], info: &mut MobiInfo) {
             100 => info.author = Some(text()),
             503 => info.title = Some(text()),
             524 => info.language = Some(text()).filter(|l| !l.is_empty()),
-            121 => info.kf8_boundary = u32_at(value, 0),
+            121 => info.kf8_boundary = u32_at(value, 0).filter(|&i| i != u32::MAX),
             _ => {}
         }
         off += len.max(8) as usize;
@@ -998,7 +998,7 @@ mod tests {
 
     /// A PalmDB file: a MOBI header with a title in record 0, then
     /// uncompressed text records and a large fake image record.
-    fn mobi_file(title: &str, text: &[u8]) -> Vec<u8> {
+    fn mobi_file(title: &str, text: &[u8], boundary: Option<u32>) -> Vec<u8> {
         let mut r0 = vec![0u8; 16 + 0xe8];
         r0[0..2].copy_from_slice(&COMPRESSION_NONE.to_be_bytes());
         r0[4..8].copy_from_slice(&(text.len() as u32).to_be_bytes());
@@ -1007,6 +1007,13 @@ mod tests {
         r0[20..24].copy_from_slice(&0xe8u32.to_be_bytes());
         r0[28..32].copy_from_slice(&65001u32.to_be_bytes());
         r0[36..40].copy_from_slice(&6u32.to_be_bytes());
+        if let Some(boundary) = boundary {
+            r0[128..132].copy_from_slice(&0x40u32.to_be_bytes());
+            r0.extend_from_slice(b"EXTH");
+            for value in [24u32, 1, 121, 12, boundary] {
+                r0.extend_from_slice(&value.to_be_bytes());
+            }
+        }
         let title_at = r0.len() as u32;
         r0[84..88].copy_from_slice(&title_at.to_be_bytes());
         r0[88..92].copy_from_slice(&(title.len() as u32).to_be_bytes());
@@ -1026,7 +1033,7 @@ mod tests {
 
     #[test]
     fn header_only_read_matches_the_whole_file() {
-        let data = mobi_file("Lalka", b"<p>Tekst.</p>");
+        let data = mobi_file("Lalka", b"<p>Tekst.</p>", None);
         let path = testdir("head").join("book.mobi");
         fs::write(&path, &data).unwrap();
         let head = read_head(&path).unwrap();
@@ -1044,6 +1051,27 @@ mod tests {
         let (again, info, now) = cached_epub(&path, &cache).unwrap();
         assert_eq!((again, now), (epub, false));
         assert_eq!(info.title.as_deref(), Some("Lalka"));
+    }
+
+    #[test]
+    fn cached_metadata_normalizes_only_the_no_kf8_sentinel() {
+        let dir = testdir("kf8-boundary");
+        for boundary in [None, Some(u32::MAX), Some(0), Some(3)] {
+            let path = dir.join(format!("book-{boundary:?}.mobi"));
+            let data = mobi_file("Original test", b"<p>Original test text.</p>", boundary);
+            fs::write(&path, &data).unwrap();
+            let expected = boundary.filter(|&i| i != u32::MAX);
+            assert_eq!(parse(&data).unwrap().info.kf8_boundary, expected);
+            let cache = dir.join("cache");
+            let (epub, cold, converted) = cached_epub(&path, &cache).unwrap();
+            assert!(converted);
+            assert_eq!(cold.kf8_boundary, expected);
+            let (again, warm, converted) = cached_epub(&path, &cache).unwrap();
+            assert!(!converted);
+            assert_eq!(again, epub);
+            assert_eq!(warm.kf8_boundary, expected);
+        }
+        fs::remove_dir_all(dir).unwrap();
     }
 
     /// Stock Kindle positions (bytes of MOBI text) must land on the same
