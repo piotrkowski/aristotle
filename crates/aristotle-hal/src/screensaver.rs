@@ -14,7 +14,7 @@ impl Screensaver {
     /// Unload blanket before allowing powerd to suspend, or hold suspend off.
     pub fn acquire(follow_powerd: bool) -> io::Result<Self> {
         Ok(Self {
-            state: State::acquire(Device, follow_powerd)?,
+            state: State::acquire(Device { framework: None }, follow_powerd)?,
         })
     }
 
@@ -24,14 +24,27 @@ impl Screensaver {
 }
 
 trait Control {
+    fn framework(&mut self) -> io::Result<()>;
+    fn release_framework(&mut self);
     fn prevented(&mut self) -> io::Result<bool>;
     fn prevent(&mut self, value: bool) -> io::Result<()>;
     fn blanket(&mut self, load: bool) -> io::Result<()>;
 }
 
-struct Device;
+struct Device {
+    framework: Option<crate::framework::Framework>,
+}
 
 impl Control for Device {
+    fn framework(&mut self) -> io::Result<()> {
+        self.framework = crate::framework::Framework::acquire()?;
+        Ok(())
+    }
+
+    fn release_framework(&mut self) {
+        self.framework.take();
+    }
+
     fn prevented(&mut self) -> io::Result<bool> {
         power::screensaver_prevented()
     }
@@ -50,6 +63,7 @@ struct State<C: Control> {
     prevent_was: bool,
     restore_prevent: bool,
     reload: bool,
+    framework: bool,
 }
 
 impl<C: Control> State<C> {
@@ -60,8 +74,11 @@ impl<C: Control> State<C> {
             prevent_was,
             restore_prevent: false,
             reload: false,
+            framework: false,
         };
         if follow_powerd {
+            state.framework = true;
+            state.control.framework()?;
             // A failed command may still have changed the module state.
             state.reload = true;
             state.control.blanket(false)?;
@@ -86,6 +103,10 @@ impl<C: Control> State<C> {
                 Ok(()) => self.restore_prevent = false,
                 Err(error) => eprintln!("aristotle: restoring preventScreenSaver: {error}"),
             }
+        }
+        if self.framework {
+            self.control.release_framework();
+            self.framework = false;
         }
     }
 }
@@ -136,6 +157,14 @@ mod tests {
     }
 
     impl Control for Fake {
+        fn framework(&mut self) -> io::Result<()> {
+            self.call("framework")
+        }
+
+        fn release_framework(&mut self) {
+            self.call("release_framework").unwrap();
+        }
+
         fn prevented(&mut self) -> io::Result<bool> {
             self.call("read")?;
             Ok(self.0.borrow().prevented)
@@ -154,9 +183,20 @@ mod tests {
     fn managed_takeover_unloads_before_releasing_suspend() {
         let control = Fake::new(true, None);
         let state = State::acquire(control.clone(), true).unwrap();
-        assert_eq!(control.log(), ["read", "unload", "release"]);
+        assert_eq!(control.log(), ["read", "framework", "unload", "release"]);
         drop(state);
-        assert_eq!(control.log(), ["read", "unload", "release", "load", "hold"]);
+        assert_eq!(
+            control.log(),
+            [
+                "read",
+                "framework",
+                "unload",
+                "release",
+                "load",
+                "hold",
+                "release_framework"
+            ]
+        );
     }
 
     #[test]
@@ -170,14 +210,35 @@ mod tests {
     fn failed_unload_does_not_release_suspend() {
         let control = Fake::new(true, Some("unload"));
         assert!(State::acquire(control.clone(), true).is_err());
-        assert_eq!(control.log(), ["read", "unload", "load"]);
+        assert_eq!(
+            control.log(),
+            ["read", "framework", "unload", "load", "release_framework"]
+        );
+    }
+
+    #[test]
+    fn failed_framework_acquisition_does_not_change_power_policy() {
+        let control = Fake::new(true, Some("framework"));
+        assert!(State::acquire(control.clone(), true).is_err());
+        assert_eq!(control.log(), ["read", "framework", "release_framework"]);
     }
 
     #[test]
     fn failed_release_rolls_back_both_changes() {
         let control = Fake::new(true, Some("release"));
         assert!(State::acquire(control.clone(), true).is_err());
-        assert_eq!(control.log(), ["read", "unload", "release", "load", "hold"]);
+        assert_eq!(
+            control.log(),
+            [
+                "read",
+                "framework",
+                "unload",
+                "release",
+                "load",
+                "hold",
+                "release_framework"
+            ]
+        );
     }
 
     #[test]
@@ -202,7 +263,18 @@ mod tests {
         }
         let control = Fake::new(true, None);
         assert!(startup(control.clone()).is_err());
-        assert_eq!(control.log(), ["read", "unload", "release", "load", "hold"]);
+        assert_eq!(
+            control.log(),
+            [
+                "read",
+                "framework",
+                "unload",
+                "release",
+                "load",
+                "hold",
+                "release_framework"
+            ]
+        );
     }
 
     #[test]
@@ -219,7 +291,10 @@ mod tests {
         state.restore();
         state.restore();
         drop(state);
-        assert_eq!(control.log(), ["read", "unload", "load"]);
+        assert_eq!(
+            control.log(),
+            ["read", "framework", "unload", "load", "release_framework"]
+        );
     }
 
     #[test]
@@ -231,7 +306,16 @@ mod tests {
         drop(state);
         assert_eq!(
             control.log(),
-            ["read", "unload", "release", "load", "hold", "load"]
+            [
+                "read",
+                "framework",
+                "unload",
+                "release",
+                "load",
+                "hold",
+                "release_framework",
+                "load"
+            ]
         );
     }
 }
