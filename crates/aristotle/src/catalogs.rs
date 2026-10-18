@@ -787,6 +787,7 @@ impl App {
 
     /// Results of network workers, between events.
     pub(crate) fn poll_net(&mut self) -> Result<(), Error> {
+        let previous_sync_message = self.sync.message.clone();
         for done in self.net.poll() {
             match done {
                 Done::Login { register, result } => {
@@ -801,7 +802,7 @@ impl App {
                     token,
                     result,
                 } => self.on_pulled(book, token, result)?,
-                Done::Pushed { book, result } => self.on_pushed(&book, result),
+                Done::Pushed { receipt, outcome } => self.on_pushed(receipt, outcome),
                 Done::Feed { token, result } => self.on_feed(token, result)?,
                 Done::Progress {
                     token,
@@ -809,6 +810,16 @@ impl App {
                     total,
                 } => self.on_download_progress(token, bytes, total)?,
                 Done::Downloaded { token, result } => self.on_downloaded(token, result)?,
+            }
+        }
+        if previous_sync_message != self.sync.message && self.asleep.is_none() {
+            if let Screen::Network(ns) = &self.screen {
+                if matches!(ns.view, NetView::Sync) {
+                    if let Some(frame) = &ns.frame {
+                        frame.set_message(&mut self.ui.tree, &self.sync.message);
+                        self.render_ui()?;
+                    }
+                }
             }
         }
         if self.sync.offer.is_some() {
