@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 pub const EPDC_DEBUG: &str = "/sys/devices/soc0/soc/2000000.aips-bus/20f4000.epdc/mxc_epdc_debug";
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Update {
     pub start_us: u64,
     pub end_us: Option<u64>,

@@ -1,0 +1,44 @@
+# Start the isolated Latency fixture at its first page, menu closed.
+# Use a fresh --library and the generated fixture --root, never personal books.
+# Keep default font settings, day mode, and page-turn mode 9 for both runs.
+# Warm up before the six measured forward turns and six reverse turns.
+# Waits exceed panel completion plus the observer's 1.5 s quiet window.
+wait 5000
+label warmup-forward
+tap 900 800
+wait 3000
+label warmup-back
+tap 150 800
+wait 3000
+label page-forward
+tap 900 800
+wait 3000
+tap 900 800
+wait 3000
+tap 900 800
+wait 3000
+tap 900 800
+wait 3000
+tap 900 800
+wait 3000
+tap 900 800
+wait 3000
+label page-back
+tap 150 800
+wait 3000
+tap 150 800
+wait 3000
+tap 150 800
+wait 3000
+tap 150 800
+wait 3000
+tap 150 800
+wait 3000
+tap 150 800
+wait 3000
+label menu-open
+tap 536 60
+wait 3000
+label menu-close
+tap 536 450
+wait 3000
