@@ -9,7 +9,8 @@
 //!
 //! ```text
 //! aristotle-observe watch SECONDS          observe real use
-//! aristotle-observe run SCRIPT             inject a script and observe it
+//! aristotle-observe run SCRIPT [--trace PATH] inject a script and save timings
+//! aristotle-observe replay TRACE [--json]  analyze a saved trace on any host
 //! aristotle-observe tap X Y                inject one tap
 //! aristotle-observe caps                   the axes the touchscreen declares
 //! aristotle-observe raw SECONDS            the touchscreen's raw evdev stream
@@ -31,6 +32,7 @@
 mod bench;
 mod kmsg;
 mod report;
+mod trace;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, Read, Write};
@@ -44,7 +46,7 @@ use kmsg::{parse_record, UpdateLog, EPDC_DEBUG};
 /// Maximum quiet gap between release or the last update and the next update.
 const SETTLE_US: u64 = 1_500_000;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Interaction {
     label: String,
     down_us: u64,
@@ -309,7 +311,17 @@ impl Drop for Observer {
 
 // ---------------------------------------------------------------- commands
 
-fn run_script(path: &str) -> io::Result<()> {
+fn finish(obs: &Observer, trace_path: Option<&str>) -> io::Result<()> {
+    let updates = obs.log.updates();
+    if let Some(path) = trace_path {
+        trace::Capture::new(obs.interactions.clone(), updates.clone(), obs.lost_records)
+            .write(path)?;
+    }
+    report::print(&obs.interactions, &updates, obs.lost_records);
+    Ok(())
+}
+
+fn run_script(path: &str, trace_path: Option<&str>) -> io::Result<()> {
     let script = io::BufReader::new(File::open(path)?);
     let mut obs = Observer::start()?;
     let mut inj = Injector::open()?;
@@ -357,8 +369,7 @@ fn run_script(path: &str) -> io::Result<()> {
         obs.pump(Duration::from_millis(1))?;
     }
     obs.pump_for(SETTLE_US / 1000 + 500)?;
-    report::print(&obs.interactions, &obs.log.updates(), obs.lost_records);
-    Ok(())
+    finish(&obs, trace_path)
 }
 
 /// Where snaps go: the userstore, not `/var/tmp`. `/var` is a 64 MB tmpfs
@@ -481,31 +492,46 @@ fn raw(seconds: u64) -> io::Result<()> {
     Ok(())
 }
 
-fn watch(seconds: u64) -> io::Result<()> {
+fn watch(seconds: u64, trace_path: Option<&str>) -> io::Result<()> {
     let mut obs = Observer::start()?;
     println!("observing for {seconds} s; touch the screen");
     obs.pump_for(seconds * 1000)?;
-    report::print(&obs.interactions, &obs.log.updates(), obs.lost_records);
-    Ok(())
+    finish(&obs, trace_path)
+}
+
+fn trace_path(args: &[String]) -> io::Result<Option<&str>> {
+    match args {
+        [] => Ok(None),
+        [flag, path] if flag == "--trace" => Ok(Some(path)),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "expected --trace PATH",
+        )),
+    }
 }
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let n = |i: usize| args.get(i).and_then(|a| a.parse::<u32>().ok()).unwrap_or(0);
     match args.first().map(String::as_str) {
-        Some("watch") => watch(n(1).max(1) as u64),
+        Some("watch") => watch(
+            n(1).max(1) as u64,
+            trace_path(args.get(2..).unwrap_or_default())?,
+        ),
         Some("run") => run_script(
             args.get(1)
                 .map(String::as_str)
                 .unwrap_or("/var/tmp/scenario.txt"),
+            trace_path(args.get(2..).unwrap_or_default())?,
         ),
+        Some("replay") => trace::replay(&args[1..]),
         Some("tap") => Injector::open()?.tap(n(1), n(2), 60),
         Some("raw") => raw(n(1).max(1) as u64),
         Some("caps") => caps(),
         Some("bench") => bench::run(&args[1..]),
         _ => {
             eprintln!(
-                "usage: aristotle-observe watch SECONDS | run SCRIPT | tap X Y | caps | raw SECONDS | {}",
+                "usage: aristotle-observe watch SECONDS [--trace PATH] | run SCRIPT [--trace PATH] | replay TRACE [--json] | tap X Y | caps | raw SECONDS | {}",
                 bench::USAGE
             );
             std::process::exit(2);

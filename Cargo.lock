@@ -99,6 +99,8 @@ version = "0.1.0"
 dependencies = [
  "aristotle-hal",
  "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

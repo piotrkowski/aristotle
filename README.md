@@ -45,7 +45,7 @@ The Paperwhite 4 has 512 MB of RAM, of which 490 MB is usable.
 - Reading positions sync with [KOReader](docs/glossary.md#koreader) through a [KOSync](docs/glossary.md#kosync) server (EPUB chapters, PDF pages).
 - Books download from OPDS catalogs, such as calibre's content server, into the library.
 
-A page turn takes 0.57 s from release in stock and 0.44 s in Aristotle. Opening a book takes 0.8 s in stock and 0.56 s in Aristotle, from its saved page.
+Historical device measurements recorded 0.57 s for a stock page turn and 0.44 s for Aristotle's earlier touch-down path. The current reader turns on release and has not been remeasured. Opening a book from a saved page snapshot took 0.56 s, versus 0.8 s in stock.
 
 The speed, size and memory numbers here come from [`docs/benchmarks.md`](docs/benchmarks.md), which describes the method.
 

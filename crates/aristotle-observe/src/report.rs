@@ -4,12 +4,13 @@
 use crate::kmsg::Update;
 use crate::{Interaction, SETTLE_US};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Measurement<'a> {
     pub interaction: &'a Interaction,
     pub updates: Vec<&'a Update>,
     pub pre_release: usize,
     pub incomplete: usize,
+    pub valid: bool,
     pub first_start_us: Option<u64>,
     pub first_done_us: Option<u64>,
     pub page_done_us: Option<u64>,
@@ -86,6 +87,7 @@ pub fn measure<'a>(
                 updates: mine,
                 pre_release,
                 incomplete,
+                valid,
                 first_start_us,
                 first_done_us,
                 page_done_us,

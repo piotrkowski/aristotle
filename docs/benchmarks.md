@@ -2,6 +2,11 @@
 
 Device results use a PW4 on firmware 5.13.6 unless marked otherwise. These numbers also appear in the README. [Host results](#host-measurements) are separate. See [E-ink rendering](ui-framework.md#e-ink-rendering) for panel timings.
 
+The tables below are historical measurements, not a benchmark of the current
+commit. Their original observer included touch-down acknowledgements in
+`first✓`. Follow [Compare reader latency](benchmark-latency.md) for new
+release-driven measurements with replayable traces.
+
 ## Method
 
 `aristotle-observe` measures both interfaces with the same method:
