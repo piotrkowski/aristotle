@@ -201,37 +201,32 @@ pub fn charger_online() -> io::Result<bool> {
 /// extension sets, and KOReader while it runs). A runtime property: a reboot
 /// or a `powerd` restart clears it. Runs the stock `lipc-set-prop`.
 pub fn prevent_screensaver(on: bool) -> io::Result<()> {
-    use std::process::{Command, Stdio};
-    let status = Command::new("lipc-set-prop")
-        .args([
-            "com.lab126.powerd",
-            "preventScreenSaver",
-            if on { "1" } else { "0" },
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("lipc-set-prop: {status}")))
-    }
+    crate::powerd::set_prop(
+        "com.lab126.powerd",
+        "preventScreenSaver",
+        if on { "1" } else { "0" },
+        false,
+    )
 }
 
-/// Whether `preventScreenSaver` is set now (`lipc-get-prop`), so a caller
-/// can put it back as it found it.
+/// Read `preventScreenSaver`; refuse values that cannot be restored exactly.
 pub fn screensaver_prevented() -> io::Result<bool> {
-    use std::process::{Command, Stdio};
-    let out = Command::new("lipc-get-prop")
-        .args(["-i", "com.lab126.powerd", "preventScreenSaver"])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()?;
-    if !out.status.success() {
-        return Err(io::Error::other(format!("lipc-get-prop: {}", out.status)));
+    parse_prevented(&crate::powerd::get_prop(
+        "com.lab126.powerd",
+        "preventScreenSaver",
+        true,
+    )?)
+}
+
+fn parse_prevented(value: &str) -> io::Result<bool> {
+    match value {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid preventScreenSaver value",
+        )),
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim() != "0")
 }
 
 #[cfg(test)]
@@ -239,6 +234,18 @@ mod tests {
     use super::*;
 
     const MAX: u32 = 2047;
+
+    #[test]
+    fn screensaver_policy_requires_a_boolean_value() {
+        assert!(!parse_prevented("0").unwrap());
+        assert!(parse_prevented("1").unwrap());
+        for value in ["", "2", "-1", "error", "0 1"] {
+            assert_eq!(
+                parse_prevented(value).unwrap_err().kind(),
+                io::ErrorKind::InvalidData
+            );
+        }
+    }
 
     #[test]
     fn light_curve_ends_and_monotony() {

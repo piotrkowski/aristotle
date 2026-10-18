@@ -234,9 +234,11 @@ Startup shows the saved library index, then scans `/mnt/us/documents`. The libra
 
 The default screensaver saves progress, turns off the light, and shows a book card. A touch wakes it without taking another action. The app holds [`powerd`](glossary.md#powerd)'s `preventScreenSaver`, so the CPU does not suspend and the power button has no effect.
 
-`ARISTOTLE_POWERD=1` enables the implemented `powerd` event path in `powerd.rs`. It releases `preventScreenSaver`, handles sleep and wake events, and restores stock screensaver behavior on exit. This path has host tests only; device suspend, wake light levels, and battery use are unverified.
+`ARISTOTLE_POWERD=1` enables the implemented `powerd` event path in `powerd.rs`. It releases `preventScreenSaver`, handles sleep and wake events, and restores stock screensaver behavior on exit. Host tests cover listener shutdown and power-policy rollback. A [standalone HAL probe on the PW4](power-validation.md) verified policy restoration and listener cleanup, not suspend or wake. App suspend, wake light levels, and battery use remain unverified.
 
-The app reads the existing power policy before changing it and unloads the stock screensaver before allowing suspend. Failed takeover falls back to the default policy. If the app cannot read or hold that policy, startup fails without starting the reader. Normal exits and startup errors restore the saved policy; queued power commands finish before stock screensaver restoration.
+The app reads the existing power policy before changing it and unloads the stock screensaver before allowing suspend. Failed takeover falls back to the default policy. If the app cannot read or hold that policy, startup fails without starting the reader. Normal exits and startup errors restore the saved policy.
+
+Shutdown cancels queued power commands and waits for the in-flight command before restoring the stock screensaver. LIPC property commands have a 5-second timeout and a 4 KiB output limit. Timed-out children are killed and reaped.
 
 Progress saves 3 seconds after the last turn, or at most 20 seconds after the first unsaved turn. It also saves on return to the library and exit, including `SIGTERM` and `SIGINT`. Background pagination writes page numbers under `/mnt/us/.aristotle/pages/`.
 
