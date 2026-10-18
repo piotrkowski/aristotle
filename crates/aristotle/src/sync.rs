@@ -20,6 +20,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -86,21 +87,34 @@ pub enum PushOutcome {
 type PushKey = (String, String, String);
 
 #[derive(Clone, Default)]
-struct PushGate(Arc<Mutex<BTreeMap<PushKey, u64>>>);
+struct PushGate(Arc<Mutex<BTreeMap<PushKey, Arc<PushSlot>>>>);
+
+#[derive(Default)]
+struct PushSlot {
+    latest_requested: AtomicU64,
+    sending: Mutex<()>,
+}
 
 impl PushGate {
-    fn run(
-        &self,
-        key: PushKey,
-        sequence: u64,
-        send: impl FnOnce() -> Result<(), kosync::Error>,
-    ) -> PushOutcome {
-        let mut latest = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        let previous = latest.entry(key).or_default();
-        if sequence <= *previous {
+    fn request(&self, key: PushKey, sequence: u64) -> Arc<PushSlot> {
+        let slot = self
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(key)
+            .or_default()
+            .clone();
+        slot.latest_requested.fetch_max(sequence, Ordering::SeqCst);
+        slot
+    }
+}
+
+impl PushSlot {
+    fn run(&self, sequence: u64, send: impl FnOnce() -> Result<(), kosync::Error>) -> PushOutcome {
+        let _sending = self.sending.lock().unwrap_or_else(|e| e.into_inner());
+        if sequence < self.latest_requested.load(Ordering::SeqCst) {
             return PushOutcome::Superseded;
         }
-        *previous = sequence;
         PushOutcome::Finished(send())
     }
 }
@@ -175,7 +189,7 @@ fn push_progress(format: Format, path: &std::path::Path, locator: &Locator) -> O
 struct Push {
     account: kosync::Account,
     receipt: PushReceipt,
-    gate: PushGate,
+    slot: Arc<PushSlot>,
     format: Format,
     path: PathBuf,
     fraction: f32,
@@ -198,12 +212,7 @@ impl Push {
             device_id: self.device_id,
             timestamp: None,
         };
-        let key = (
-            self.account.server.clone(),
-            self.account.username.clone(),
-            p.document.clone(),
-        );
-        let outcome = self.gate.run(key, self.receipt.sequence, || {
+        let outcome = self.slot.run(self.receipt.sequence, || {
             Kosync::new(Net::policy())
                 .push(&self.account, &p)
                 .map(|_| ())
@@ -350,10 +359,20 @@ impl App {
             return;
         };
         let moved = o.needs_push(&p.locator);
-        self.sync.next_push += 1;
-        if moved {
-            o.pending.insert(self.sync.next_push, p.locator.clone());
+        if !moved {
+            if closing {
+                self.sync.opened = None;
+            }
+            return;
         }
+        self.sync.next_push += 1;
+        o.pending.insert(self.sync.next_push, p.locator.clone());
+        let key = (
+            account.server.clone(),
+            account.username.clone(),
+            lk::document(&o.id).to_string(),
+        );
+        let slot = self.sync.push_gate.request(key, self.sync.next_push);
         let push = Push {
             account,
             receipt: PushReceipt {
@@ -362,7 +381,7 @@ impl App {
                 sequence: self.sync.next_push,
                 locator: p.locator,
             },
-            gate: self.sync.push_gate.clone(),
+            slot,
             format: o.format,
             path: o.path.clone(),
             fraction: p.fraction,
@@ -370,9 +389,6 @@ impl App {
         };
         if closing {
             self.sync.opened = None;
-        }
-        if !moved {
-            return;
         }
         if wait {
             let _ = push.run();
@@ -635,22 +651,93 @@ mod tests {
     use super::*;
 
     #[test]
-    fn older_requests_cannot_overwrite_newer_progress_on_the_server() {
+    fn queued_obsolete_requests_skip_the_network_before_the_newest_send() {
+        use std::sync::mpsc;
+        use std::time::Duration;
         let gate = PushGate::default();
         let key = ("server".into(), "user".into(), "book".into());
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let first_sent = sent.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let first_slot = gate.request(key.clone(), 1);
+        let first = std::thread::spawn(move || {
+            first_slot.run(1, || {
+                first_sent.lock().unwrap().push(1);
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+        });
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut queued = Vec::new();
+        for sequence in 2..6 {
+            let slot = gate.request(key.clone(), sequence);
+            queued.push(std::thread::spawn(move || {
+                slot.run(sequence, || panic!("obsolete push sent"))
+            }));
+        }
+        let newest_slot = gate.request(key, 6);
+        let newest_sent = sent.clone();
+        let newest = std::thread::spawn(move || {
+            newest_slot.run(6, || {
+                newest_sent.lock().unwrap().push(6);
+                Ok(())
+            })
+        });
+        release_tx.send(()).unwrap();
         assert!(matches!(
-            gate.run(key.clone(), 2, || Ok(())),
+            first.join().unwrap(),
+            PushOutcome::Finished(Ok(()))
+        ));
+        for job in queued {
+            assert!(matches!(job.join().unwrap(), PushOutcome::Superseded));
+        }
+        assert!(matches!(
+            newest.join().unwrap(),
+            PushOutcome::Finished(Ok(()))
+        ));
+        assert_eq!(*sent.lock().unwrap(), [1, 6]);
+    }
+
+    #[test]
+    fn a_different_document_can_send_while_another_is_blocked() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let gate = PushGate::default();
+        let first_slot = gate.request(("server".into(), "user".into(), "first".into()), 1);
+        let second_slot = gate.request(("server".into(), "user".into(), "second".into()), 2);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let first = std::thread::spawn(move || {
+            first_slot.run(1, || {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+        });
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let (sent_tx, sent_rx) = mpsc::channel();
+        let second = std::thread::spawn(move || {
+            second_slot.run(2, || {
+                sent_tx.send(()).unwrap();
+                Ok(())
+            })
+        });
+        let concurrent = sent_rx.recv_timeout(Duration::from_secs(5)).is_ok();
+        release_tx.send(()).unwrap();
+        assert!(matches!(
+            first.join().unwrap(),
             PushOutcome::Finished(Ok(()))
         ));
         assert!(matches!(
-            gate.run(key, 1, || panic!("obsolete push sent")),
-            PushOutcome::Superseded
-        ));
-        let other = ("server".into(), "user".into(), "other book".into());
-        assert!(matches!(
-            gate.run(other, 1, || Ok(())),
+            second.join().unwrap(),
             PushOutcome::Finished(Ok(()))
         ));
+        assert!(
+            concurrent,
+            "a different document waited for the blocked sender"
+        );
     }
 
     #[test]
