@@ -4,8 +4,7 @@
 //!
 //! - [`positions`] lists where to open a book, most exact first: the
 //!   stored locator, then the stored fraction. Stock-imported progress
-//!   (`kindle` locators of MOBI books) maps through the converter's
-//!   position map to the same words.
+//!   (`kindle` locators of single-part MOBI 7 books) maps through the converter.
 //! - [`progress_at`] is what a page turn writes back.
 //! - [`Debounce`] decides when the index goes to disk: after a pause in
 //!   reading, or at the latest every [`Debounce::MAX_DELAY`] while turning
@@ -21,10 +20,16 @@ use std::time::{Duration, Instant};
 
 use aristotle_library::index::{write_atomic, INDEX_FILE};
 use aristotle_library::{Library, Locator, Progress};
-use aristotle_render::book::Position;
+use aristotle_render::book::{Book, Position};
+
+/// Whether imported Kindle offsets share the active converter's address space.
+pub fn stock_positions_compatible(book: &Book) -> bool {
+    book.mobi()
+        .is_some_and(|m| m.info.version < 8 && m.info.kf8_boundary.is_none())
+}
 
 /// Where to open a book with this progress, most exact first.
-pub fn positions(progress: Option<&Progress>) -> Vec<Position> {
+pub fn positions(progress: Option<&Progress>, stock_position_compatible: bool) -> Vec<Position> {
     let Some(p) = progress else {
         return Vec::new();
     };
@@ -34,7 +39,12 @@ pub fn positions(progress: Option<&Progress>) -> Vec<Position> {
             item: *spine as usize,
             offset: *offset as usize,
         }),
-        Locator::Kindle { position } => out.push(Position::Kindle(*position)),
+        Locator::Kindle { position }
+            if stock_position_compatible || p.source.as_deref() == Some("aristotle") =>
+        {
+            out.push(Position::Kindle(*position));
+        }
+        Locator::Kindle { .. } => {}
         Locator::Page { index } => out.push(Position::Page(*index as usize)),
         // Plain text offsets and KOReader XPointers mean nothing to Plato's
         // engine; the fraction gets close.
@@ -171,6 +181,9 @@ impl Saver {
 }
 
 #[cfg(test)]
+mod mobi_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -192,7 +205,7 @@ mod tests {
                 source: Some("kindle".into()),
                 page: Some("4".into()),
             };
-            let pos = positions(Some(&p));
+            let pos = positions(Some(&p), true);
             assert_eq!(pos.len(), 2);
             assert_eq!(pos[1], Position::Fraction(0.25));
             assert_eq!(locator(&pos[0]), loc);
@@ -213,8 +226,8 @@ mod tests {
             source: Some("koreader".into()),
             page: None,
         };
-        assert_eq!(positions(Some(&p)), vec![Position::Fraction(0.6)]);
-        assert!(positions(None).is_empty());
+        assert_eq!(positions(Some(&p), false), vec![Position::Fraction(0.6)]);
+        assert!(positions(None, false).is_empty());
     }
 
     #[test]
