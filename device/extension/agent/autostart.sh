@@ -91,6 +91,7 @@ on)
         say "aristotle: copying the app failed (space on /var/local?)"
         exit 1
     fi
+    cp "$APP/SOURCE.txt" "$S/app.new/USB-SOURCE.txt"
     chmod 700 "$S/app.new/aristotle"
     activate
     say "Aristotle starts at the next boot; the previous app is kept"
@@ -103,6 +104,9 @@ rollback)
     fi
     rm -rf "$S/app.new"
     mv "$S/app.previous" "$S/app.new"
+    if [ -s "$APP/SOURCE.txt" ]; then
+        cp "$APP/SOURCE.txt" "$S/app.new/USB-SOURCE.txt"
+    fi
     activate
     say "Previous boot app restored; reading data was not changed"
     ;;

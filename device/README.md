@@ -108,6 +108,7 @@ repository, and in `/mnt/us/extensions/aristotle/` when it comes on stdin
 | *Return to the Kindle interface* | `bin/aristotle-stop.sh` |
 | *Start Aristotle at boot: on (agent installed)* | `agent/autostart.sh on` |
 | *Start Aristotle at boot: off* | `agent/autostart.sh off` |
+| *Restore previous boot app (reading data unchanged)* | `agent/autostart.sh rollback` |
 | *Install agent (SSH on every boot, no Amazon updates)* | `agent/install.sh` |
 | *USB drive mode for 10 minutes (agent installed)* | `aristotlectl mode storage 10` |
 | *Remove agent completely (jobs, state, SSH key)* | `agent/uninstall.sh` |
@@ -157,6 +158,8 @@ State and logs live in `/var/local/aristotle` (persistent ext3). Deleting
 runs the agent's copy of `dropbear` from there; if it does not start, the
 agent falls back to KOReader's.
 
+If `/mnt/us` is still unmounted after the boot wait, the agent stays idle. It leaves USB to the stock system because it cannot check `aristotle-disable`. This fail-closed path has host model tests only.
+
 `aristotlectl` is the remote control, run over SSH as root:
 
 ```sh
@@ -184,13 +187,17 @@ The app's settings screen switches the USB mode through the same script
 nothing unless `/var/local/aristotle/autostart` exists. *KUAL › Aristotle ›
 Start Aristotle at boot: on* (`agent/autostart.sh on`) copies the app from
 `/mnt/us/aristotle` to `/var/local/aristotle/app`, where USB drive mode cannot
-take it away, and creates that file; off deletes both. The job runs
+take it away, and creates that file. Updates retain the prior internal app in
+`app.previous`. Off removes the autostart marker but keeps the copies.
+See [rollback](../docs/maintenance.md#roll-back-the-boot-app) for the KUAL action and its limits. The job runs
 `ui-boot.sh`, which stops the stock GUI as `takeover.sh start` does (the
 stock boot is unchanged up to `lab126_gui`), unloads `blanket`'s boot splash,
 sends [`powerd`](../docs/glossary.md#powerd) the `bootSplashCleanup` that the framework would have sent, and
 runs the app. It falls back to the stock GUI for the rest of the boot when:
 
 - `/mnt/us/aristotle-disable` exists;
+- `/mnt/us` does not mount in time, so the kill switch cannot be checked;
+- the USB app's `SOURCE.txt` differs from the one recorded at the last explicit boot selection, or the boot copy has no such record;
 - three launches in a row did not stay up for two minutes. The count
   survives reboots, so three forced restarts also count, and later boots
   stay stock until autostart is turned on again;
@@ -198,6 +205,8 @@ runs the app. It falls back to the stock GUI for the rest of the boot when:
 - `aristotlectl app stop` asks for it (not counted as a failure).
   `run-aristotle.sh` stops a boot-started Aristotle this way first, with
   `--keep-takeover`, so developers can run their own build.
+
+`aristotlectl app status` reports the internal, previous, and USB release identities. Refresh autostart after a USB app update. An explicit rollback records the current USB identity without changing the selected older binary. These checks compare release metadata, not a signature or the binary's contents. The missing-mount and changed-source fallbacks have host tests only.
 
 The job logs to `ui.log`, and the app logs to `app.log`. Measured on our PW4:[^3]
 the job started at 37.2 s of uptime, the stock GUI was down at
