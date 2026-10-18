@@ -44,8 +44,7 @@ KO=$R/mnt/us/koreader
 PIDFILE=$S/dropbear.pid
 DISABLE=$R/mnt/us/aristotle-disable
 TAKEOVER=$R/var/run/aristotle-takeover
-# How long to wait for the userstore (/mnt/us) before giving up on the kill
-# switch check.
+# Wait for the userstore before allowing any agent action.
 MOUNT_WAIT=${MOUNT_WAIT:-60}
 DEV_IP=192.168.15.244
 # Fixed MACs for both ends of the USB link, so the host's NetworkManager
@@ -204,8 +203,9 @@ log "agent: boot (uptime $(cut -d' ' -f1 "$R/proc/uptime") s)"
 i=0
 until grep -q ' /mnt/us ' "$R/proc/mounts" 2> /dev/null; do
     if [ $i -ge "$MOUNT_WAIT" ]; then
-        log "agent: /mnt/us not mounted after ${MOUNT_WAIT}s; kill switch not checked"
-        break
+        log "agent: /mnt/us not mounted after ${MOUNT_WAIT}s; cannot check kill switch; staying idle"
+        lipc-set-prop com.lab126.volumd useUsbForNetwork 0 2> /dev/null
+        exec sleep 2147483647
     fi
     sleep 1
     i=$((i + 1))

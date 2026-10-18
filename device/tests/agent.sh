@@ -350,7 +350,8 @@ echo "boot: the userstore never comes"
 r=$(booted nomount)
 : > "$r/proc/mounts"
 boot "$r" 1
-check "gives up on the check and starts" "wait_for $r/calls '^dropbear ' && grep -q 'kill switch not checked' $r/var/local/aristotle/log"
+check "stays idle when the kill switch cannot be checked" "wait_for $r/var/local/aristotle/log 'cannot check kill switch; staying idle' && ! called $r modprobe && ! called $r dropbear && ! called $r iptables"
+check "does not respawn and leaves USB to volumd" "kill -0 \$(cat $r/jobs/boot.pid) && called $r 'lipc-set-prop com.lab126.volumd useUsbForNetwork 0'"
 
 # persistent ROOT: the files outside the tmpfs (/var/local, /etc) with their
 # checksums.
@@ -617,6 +618,29 @@ mv "$r/var/local/aristotle/app" "$r/var/local/aristotle/app.previous"
 ui_boot "$r"
 done_ui "$r"
 check "runs the complete previous copy" "called $r app && grep -q 'activation interrupted' $r/var/local/aristotle/ui.log"
+
+echo "ui-boot: cannot check the kill switch"
+r=$(autostarted uiunmounted)
+: > "$r/proc/mounts"
+MOUNT_WAIT=0 ui_boot "$r"
+done_ui "$r"
+check "leaves stock running without touching the app" "! called $r 'stop lab126_gui' && ! called $r app && grep -q 'cannot check the kill switch' $r/var/local/aristotle/ui.log"
+
+echo "ui-boot: USB app replaced without refreshing autostart"
+r=$(autostarted uistale)
+printf 'fsp %s/mnt/us fuse.fsp rw 0 0\n' "$r" > "$r/proc/mounts"
+echo 'test release 2' > "$r/mnt/us/aristotle/SOURCE.txt"
+ui_boot "$r"
+done_ui "$r"
+check "stays stock instead of silently launching an older app" "! called $r 'stop lab126_gui' && ! called $r app && grep -q 'USB app changed' $r/var/local/aristotle/ui.log"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh "$r/var/local/aristotle/aristotlectl" app status > "$r.out" 2>&1
+check "status shows both release identities and the mismatch" "grep -q 'release 1' $r.out && grep -q 'release 2' $r.out && grep -q 'changed or untracked' $r.out"
+run "$r" agent/autostart.sh on
+run "$r" agent/autostart.sh rollback
+: > "$r/calls"
+ui_boot "$r"
+done_ui "$r"
+check "explicit rollback still launches the selected older app" "called $r app && grep -q 'release 1' $r/var/local/aristotle/app/SOURCE.txt"
 
 echo "ui-boot: app update in progress"
 r=$(autostarted uiupdating)

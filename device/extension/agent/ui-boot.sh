@@ -29,6 +29,7 @@ LOG=$S/ui.log
 FAILS=$S/ui-fails
 MAX_FAILS=${MAX_FAILS:-3}
 HEALTHY_AFTER=${HEALTHY_AFTER:-120}
+MOUNT_WAIT=${MOUNT_WAIT:-30}
 APP=$S/app/aristotle
 TAKEOVER=$R/var/run/aristotle-takeover
 
@@ -74,7 +75,11 @@ log "start (uptime $(uptime_s) s$([ $manual = 1 ] && echo ', by hand'))"
 # The kill switch. The userstore is mounted long before the stock GUI
 # starts; wait a little in case it is not.
 i=0
-until grep -q " $R/mnt/us " "$R/proc/mounts" 2> /dev/null || [ $i -ge 30 ]; do
+until grep -q " $R/mnt/us " "$R/proc/mounts" 2> /dev/null; do
+    if [ $i -ge "$MOUNT_WAIT" ]; then
+        log "/mnt/us unavailable; cannot check the kill switch; staying on the stock GUI"
+        exit 0
+    fi
     sleep 1
     i=$((i + 1))
 done
@@ -90,6 +95,10 @@ fi
 if [ ! -e "$S/app" ] && [ -x "$S/app.previous/aristotle" ]; then
     APP=$S/app.previous/aristotle
     log "activation interrupted; using the previous boot app"
+fi
+if ! cmp -s "$(dirname "$APP")/USB-SOURCE.txt" "$R/mnt/us/aristotle/SOURCE.txt"; then
+    log "USB app changed or boot copy untracked; refresh autostart from KUAL; staying on the stock GUI"
+    exit 0
 fi
 n=$(fails)
 if [ "$n" -ge "$MAX_FAILS" ] && [ $manual = 0 ]; then

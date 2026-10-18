@@ -114,6 +114,19 @@ app)
     case "${2:-status}" in
     status)
         printf 'autostart: %s\n' "$([ -e "$S/autostart" ] && echo on || echo off)"
+        for copy in app app.previous; do
+            printf '%s source:\n' "$copy"
+            cat "$S/$copy/SOURCE.txt" 2> /dev/null || echo 'unknown (refresh autostart from KUAL)'
+        done
+        printf 'USB app source:\n'
+        cat "$R/mnt/us/aristotle/SOURCE.txt" 2> /dev/null || echo unavailable
+        selected=$S/app
+        [ -d "$selected" ] || selected=$S/app.previous
+        if cmp -s "$selected/USB-SOURCE.txt" "$R/mnt/us/aristotle/SOURCE.txt"; then
+            echo 'USB app: matches the last explicit boot selection'
+        else
+            echo 'USB app: changed or untracked; refresh autostart from KUAL'
+        fi
         if app_running; then
             printf 'running: yes, pid %s\n' "$(cat "$S/app.pid" 2> /dev/null || echo '?')"
         else
