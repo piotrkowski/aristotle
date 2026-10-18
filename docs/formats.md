@@ -34,7 +34,7 @@ KFX, CBR, CB7, FB2, DjVu, and Topaz are unsupported by the library. A custom `MU
 | Clippings export | New highlights and attached notes. Bookmarks are not exported. |
 | Markdown export | Aristotle highlights and attached notes, not bookmarks or imported highlights. Not a replacement for `library.json`. |
 
-Stock annotation imports and KF8 sidecars have no device-data verification. Imported stock highlights are stored in the index, but are not shown on reader pages or in the Highlights list. KOReader import preserves progress and status, not highlights. See [Library imports](library.md#stock-files-sidecars-and-my-clippingstxt).
+Stock annotation imports and KF8 sidecars have no device-data verification. Imported highlights, notes, and bookmarks appear in the Highlights list as read-only entries. Tapping an entry shows its full text and attached note. Exact sidecar positions offer navigation only in converted, single-part MOBI 7 books. Joint MOBI/KF8, KF8-only, and clippings positions do not provide exact navigation, and imported ranges are not painted on reader pages. KOReader import preserves progress and status, not highlights. See [Library imports](library.md#stock-files-sidecars-and-my-clippingstxt).
 
 ## Progress sync
 

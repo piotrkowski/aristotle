@@ -100,6 +100,11 @@ pub enum Overlay {
         rows: Vec<MarkRow>,
         page: usize,
     },
+    Annotation {
+        text: RichText,
+        target: Option<Position>,
+        page: usize,
+    },
     /// The reading fonts (fonts.rs).
     Fonts {
         rows: Vec<crate::fonts::FontRow>,
@@ -139,6 +144,7 @@ impl Overlay {
             | Overlay::Note { page, .. }
             | Overlay::Toc { page, .. }
             | Overlay::Marks { page, .. }
+            | Overlay::Annotation { page, .. }
             | Overlay::Fonts { page, .. } => Some(page),
             _ => None,
         }
@@ -149,7 +155,8 @@ impl Overlay {
 pub struct MarkRow {
     pub text: String,
     pub meta: String,
-    pub target: Position,
+    pub target: Option<Position>,
+    pub detail: Option<String>,
 }
 
 /// Nodes of the current overlay that change without a rebuild.
@@ -212,6 +219,7 @@ impl App {
             Overlay::Dict { .. }
                 | Overlay::Gloss { .. }
                 | Overlay::Note { .. }
+                | Overlay::Annotation { .. }
                 | Overlay::Sync { .. }
         ) {
             return None;
@@ -277,6 +285,7 @@ impl App {
                 )),
                 Some(Overlay::Gloss { text, .. }) => Some(overlay::dictionary_text(text)),
                 Some(Overlay::Note { text, .. }) => Some(text.clone()),
+                Some(Overlay::Annotation { text, .. }) => Some(text.clone()),
                 Some(Overlay::Sync { text, .. }) => Some(RichText::plain(text)),
                 _ => None,
             }
@@ -413,6 +422,27 @@ impl App {
                         height: popup_height(&page_words, Place::Bottom, h, max),
                     },
                 )),
+                Overlay::Annotation { target, .. } => {
+                    let mut actions = Vec::new();
+                    if target.is_some() {
+                        actions.push((tr(Msg::ReaderGo), act::GO_ANNOTATION));
+                    }
+                    actions.push((tr(Msg::CommonBack), act::NAV_MARKS));
+                    Some(overlay::popup(
+                        t,
+                        &styles,
+                        &PopupSpec {
+                            title: tr(Msg::ReaderImportedAnnotation).into(),
+                            subtitle: None,
+                            tabs: Vec::new(),
+                            body: &body,
+                            suggestions: Vec::new(),
+                            actions,
+                            place: Place::Bottom,
+                            height: popup_height(&page_words, Place::Bottom, h, max),
+                        },
+                    ))
+                }
                 Overlay::Sync { .. } => Some(overlay::popup(
                     t,
                     &styles,
@@ -1127,22 +1157,29 @@ impl App {
         };
         let mut rows = Vec::new();
         if let Some(rec) = self.lib.book(&r.session.id) {
-            let mut all: Vec<(usize, &aristotle_library::index::Annotation, Position)> = rec
+            let mobi = r.session.book().mobi().map(|m| m.info.clone());
+            let mut all: Vec<_> = rec
                 .annotations
                 .iter()
-                .filter(|a| a.source == marks::SOURCE)
-                .filter_map(|a| {
-                    let p = marks::decode(&a.position.as_ref()?.0)?;
-                    let loc = r.session.book().location_of(&p)?;
-                    Some((loc, a, p))
+                .map(|a| {
+                    let p = marks::target(a, rec.format, mobi.as_ref())
+                        .filter(|p| r.session.book().location_of(p).is_some());
+                    let loc = p.as_ref().and_then(|p| r.session.book().location_of(p));
+                    (loc.unwrap_or(usize::MAX), a, p)
                 })
+                .filter(|(_, a, p)| a.source != marks::SOURCE || p.is_some())
                 .collect();
             all.sort_by_key(|x| x.0);
             for (_, a, p) in all {
                 let date = a.created.as_deref().map(|c| c.get(..10).unwrap_or(c));
                 let meta: Vec<String> = [
+                    (a.source != marks::SOURCE)
+                        .then(|| tr(Msg::ReaderImportedAnnotation).to_string()),
                     a.chapter.clone(),
                     aristotle_library::export::location_note(a.location),
+                    a.page
+                        .as_ref()
+                        .map(|page| tf!(Msg::ReaderAnnotationPage, page = page)),
                     date.map(String::from),
                 ]
                 .into_iter()
@@ -1151,12 +1188,28 @@ impl App {
                 .collect();
                 let text = match a.kind {
                     AnnotationKind::Bookmark => tr(Msg::ReaderBookmark).to_string(),
-                    _ => aristotle_i18n::quoted(a.text.as_deref().unwrap_or_default()),
+                    AnnotationKind::Note => a.text.clone().unwrap_or_default(),
+                    _ => a
+                        .text
+                        .as_deref()
+                        .map(aristotle_i18n::quoted)
+                        .unwrap_or_else(|| tr(Msg::ReaderHighlight).to_string()),
                 };
+                let detail = (a.source != marks::SOURCE).then(|| {
+                    let mut parts = vec![meta.join(" · "), text.clone()];
+                    if let Some(note) = &a.note {
+                        parts.push(note.clone());
+                    }
+                    if p.is_none() {
+                        parts.push(tr(Msg::ReaderAnnotationNoPosition).to_string());
+                    }
+                    parts.join("\n\n")
+                });
                 rows.push(MarkRow {
                     text,
                     meta: meta.join(" · "),
                     target: p,
+                    detail,
                 });
             }
         }
@@ -1258,6 +1311,23 @@ impl App {
             act::NAV_TOC => self.open_toc(),
             act::NAV_MARKS => self.open_marks(),
             act::NAV_GOTO => self.open_goto(),
+            act::GO_ANNOTATION => {
+                let target = match self.reading().map(|r| &r.overlay) {
+                    Some(Overlay::Annotation { target, .. }) => target.clone(),
+                    _ => None,
+                };
+                let location = target.and_then(|p| {
+                    let r = self.reading()?;
+                    r.session
+                        .book()
+                        .location_of(&p)
+                        .and_then(|l| r.session.book().page_start(l))
+                });
+                match location {
+                    Some(l) => self.jump_to(l),
+                    None => Ok(()),
+                }
+            }
             act::PREV => self.overlay_page(-1),
             act::NEXT => self.overlay_page(1),
             act::BACK
@@ -1379,13 +1449,27 @@ impl App {
         if matches!(r.overlay, Overlay::Fonts { .. }) {
             return self.pick_font(i);
         }
+        if let Overlay::Marks { rows, .. } = &r.overlay {
+            if let Some(row) = rows.get(i).filter(|row| row.detail.is_some()) {
+                let overlay = Overlay::Annotation {
+                    text: RichText::plain(row.detail.as_deref().unwrap_or_default()),
+                    target: row.target.clone(),
+                    page: 0,
+                };
+                if let Screen::Reader(r) = &mut self.screen {
+                    r.overlay = overlay;
+                }
+                self.rebuild_reader(Refresh::Auto)?;
+                return self.present_full();
+            }
+        }
         let target = match &r.overlay {
             Overlay::Toc { items, .. } => {
                 let index = items.get(i).map(|it| it.index);
                 index.and_then(|ix| r.session.book().toc_page(ix))
             }
             Overlay::Marks { rows, .. } => {
-                let pos = rows.get(i).map(|m| m.target.clone());
+                let pos = rows.get(i).and_then(|m| m.target.clone());
                 let book = r.session.book();
                 pos.and_then(|p| book.location_of(&p))
                     .and_then(|l| book.page_start(l))

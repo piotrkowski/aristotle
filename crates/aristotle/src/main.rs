@@ -2756,6 +2756,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn imported_annotation_opens_read_only_without_changing_the_reading_position() {
+        use aristotle_library::index::{Annotation, AnnotationKind};
+        fn reader(app: &App) -> &Reading {
+            match &app.screen {
+                Screen::Reader(r) => r,
+                _ => panic!("not reading"),
+            }
+        }
+        let Some((library, root, id)) = reopen_fixture(false) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        reopen(&mut app, "Reopened");
+        let imported = Annotation {
+            kind: AnnotationKind::Highlight,
+            text: Some("A passage written for this test.".into()),
+            page: Some("xii".into()),
+            location: Some((10, 11)),
+            position: None,
+            created: Some("2026-01-02 03:04:05".into()),
+            source: "kindle-clippings".into(),
+            chapter: None,
+            note: Some("An imported note.".into()),
+        };
+        app.lib.add_annotation(&id, imported.clone());
+        let before = reader(&app).session.current;
+        app.open_marks().unwrap();
+        let Overlay::Marks { rows, .. } = &reader(&app).overlay else {
+            panic!("no annotation list");
+        };
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].target.is_none());
+        app.on_overlay_event(UiEvent::Action {
+            id: overlay::act::ITEM,
+            node: NodeId(0),
+            at: aristotle_ui::geom::Point { x: 0, y: 0 },
+        })
+        .unwrap();
+        let Overlay::Annotation { text, target, .. } = &reader(&app).overlay else {
+            panic!("no annotation detail");
+        };
+        assert!(text.text().contains("A passage written for this test."));
+        assert!(text.text().contains("An imported note."));
+        assert!(text.text().contains("xii"));
+        assert!(target.is_none());
+        assert_eq!(reader(&app).session.current, before);
+        assert_eq!(app.lib.book(&id).unwrap().annotations, [imported]);
+        app.leave().unwrap();
+    }
+
     fn touch(app: &mut App, phase: HalPhase, x: u32, y: u32, time_us: u64) {
         let ev = aristotle_hal::input::TouchEvent {
             phase,
@@ -2820,6 +2871,7 @@ mod tests {
             Overlay::Note { .. } => "note",
             Overlay::Toc { .. } => "toc",
             Overlay::Marks { .. } => "marks",
+            Overlay::Annotation { .. } => "annotation",
             Overlay::Fonts { .. } => "fonts",
             Overlay::GoTo { .. } => "go to",
             Overlay::Sync { .. } => "sync",
