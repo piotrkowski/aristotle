@@ -190,6 +190,8 @@ Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatibl
 
 Automatic sync fetches progress on open with a 5-second timeout. Responses from a previous reading session are ignored, including when the same book has been closed and reopened. A different remote position on another page needs confirmation before a jump. Timestamps are not compared. Closing a book sends changed progress only when a usable EPUB or page locator is available. MOBI, AZW3, and TXT do not send progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
 
+The sync screen reports when an outgoing position was sent, failed, or had no compatible KOReader position. A successful push replaces an earlier error message. The screen's format summary does not promise outgoing MOBI, AZW3, or TXT sync.
+
 ### Catalogs (OPDS 1.2)
 
 OPDS catalogs support Atom navigation, acquisition, paging, and OpenSearch or `{searchTerms}` search at the protocol level. Typed search is unavailable without the on-screen keyboard. EPUB, AZW3, MOBI, PDF, CBZ, and TXT downloads are offered, EPUB first. The default reader cannot open CBZ ([Format support](formats.md)). Shop, loan, and indirect links are skipped. Feeds are limited to 2 MiB and show no covers.
