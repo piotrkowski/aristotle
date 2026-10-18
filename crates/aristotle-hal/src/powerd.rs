@@ -25,9 +25,8 @@
 use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -81,8 +80,24 @@ pub struct PowerEvents {
     rx: Receiver<PowerEvent>,
     /// Readable whenever an event is queued (one byte per event).
     wake: OwnedFd,
-    child_pid: Arc<AtomicU32>,
-    stop: Arc<AtomicBool>,
+    child: Arc<Mutex<ListenerChild>>,
+    stop: Sender<()>,
+    worker: Option<thread::JoinHandle<()>>,
+}
+
+#[derive(Default)]
+struct ListenerChild {
+    process: Option<Child>,
+    stopped: bool,
+}
+
+impl ListenerChild {
+    fn reap(&mut self) {
+        if let Some(mut child) = self.process.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 fn spawn_waiter() -> io::Result<Child> {
@@ -99,6 +114,13 @@ impl PowerEvents {
     /// child dies later (lipcd restarting, say), the thread starts another
     /// after a pause.
     pub fn listen() -> io::Result<PowerEvents> {
+        Self::listen_with(spawn_waiter, Duration::from_secs(5))
+    }
+
+    fn listen_with<F>(mut spawn: F, retry: Duration) -> io::Result<PowerEvents>
+    where
+        F: FnMut() -> io::Result<Child> + Send + 'static,
+    {
         let mut fds = [0; 2];
         // SAFETY: pipe2 fills the two-element array on success.
         if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) } != 0 {
@@ -106,19 +128,29 @@ impl PowerEvents {
         }
         // SAFETY: both descriptors were just created and are owned here.
         let (read, write) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
-        let first = spawn_waiter()?;
+        let child = Arc::new(Mutex::new(ListenerChild {
+            process: Some(spawn()?),
+            stopped: false,
+        }));
         let (tx, rx) = mpsc::channel();
-        let child_pid = Arc::new(AtomicU32::new(first.id()));
-        let stop = Arc::new(AtomicBool::new(false));
-        let (pid, halt) = (child_pid.clone(), stop.clone());
-        thread::Builder::new()
+        let (stop, halt) = mpsc::channel();
+        let process = child.clone();
+        let worker = match thread::Builder::new()
             .name("powerd-events".into())
-            .spawn(move || read_events(first, tx, write, pid, halt))?;
+            .spawn(move || read_events(tx, write, process, halt, spawn, retry))
+        {
+            Ok(worker) => worker,
+            Err(error) => {
+                child.lock().unwrap().reap();
+                return Err(error);
+            }
+        };
         Ok(PowerEvents {
             rx,
             wake: read,
-            child_pid,
+            child,
             stop,
+            worker: Some(worker),
         })
     }
 
@@ -139,52 +171,66 @@ impl PowerEvents {
 
 impl Drop for PowerEvents {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let pid = self.child_pid.load(Ordering::Relaxed);
-        if pid != 0 {
-            // SAFETY: plain kill(2) of our own child; the thread reaps it.
-            unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+        {
+            let mut child = self.child.lock().unwrap();
+            child.stopped = true;
+            child.reap();
+        }
+        let _ = self.stop.send(());
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
         }
     }
 }
 
-fn read_events(
-    mut child: Child,
+fn read_events<F>(
     tx: Sender<PowerEvent>,
     wake: OwnedFd,
-    pid: Arc<AtomicU32>,
-    stop: Arc<AtomicBool>,
-) {
+    child: Arc<Mutex<ListenerChild>>,
+    stop: Receiver<()>,
+    mut spawn: F,
+    retry: Duration,
+) where
+    F: FnMut() -> io::Result<Child>,
+{
     loop {
-        if let Some(out) = child.stdout.take() {
+        let stdout = {
+            let mut child = child.lock().unwrap();
+            child.process.as_mut().and_then(|c| c.stdout.take())
+        };
+        if let Some(out) = stdout {
             for line in BufReader::new(out).lines() {
                 let Ok(line) = line else { break };
                 if let Some(ev) = parse_event(&line) {
                     if tx.send(ev).is_err() {
-                        let _ = child.kill();
-                        let _ = child.wait();
+                        child.lock().unwrap().reap();
                         return;
                     }
-                    // SAFETY: one byte to our own pipe; a full pipe only
-                    // means the loop has plenty to read already.
+                    // SAFETY: one byte to our nonblocking wake pipe; EAGAIN means it is already readable.
                     unsafe { libc::write(wake.as_raw_fd(), [1u8].as_ptr().cast(), 1) };
                 }
             }
         }
-        let _ = child.wait();
-        if stop.load(Ordering::Relaxed) {
-            return;
-        }
-        thread::sleep(Duration::from_secs(5));
-        if stop.load(Ordering::Relaxed) {
-            return;
-        }
-        match spawn_waiter() {
-            Ok(c) => {
-                pid.store(c.id(), Ordering::Relaxed);
-                child = c;
+        {
+            let mut child = child.lock().unwrap();
+            child.reap();
+            if child.stopped {
+                return;
             }
-            Err(_) => return,
+        }
+        if !matches!(
+            stop.recv_timeout(retry),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ) {
+            return;
+        }
+        let mut child = child.lock().unwrap();
+        if child.stopped {
+            return;
+        }
+        match spawn() {
+            Ok(process) => child.process = Some(process),
+            Err(error) => eprintln!("aristotle: restarting powerd listener: {error}"),
         }
     }
 }
@@ -274,6 +320,102 @@ impl Lipc {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn listener(script: &'static str, retry: Duration) -> PowerEvents {
+        PowerEvents::listen_with(
+            move || {
+                Command::new("sh")
+                    .args(["-c", script])
+                    .stdout(Stdio::piped())
+                    .spawn()
+            },
+            retry,
+        )
+        .unwrap()
+    }
+
+    fn receive(events: &PowerEvents) -> Vec<PowerEvent> {
+        let mut fd = libc::pollfd {
+            fd: events.fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: poll receives one initialized descriptor for a bounded wait.
+        assert_eq!(unsafe { libc::poll(&mut fd, 1, 2000) }, 1);
+        events.drain()
+    }
+
+    #[test]
+    fn dropping_listener_reaps_its_child() {
+        let events = listener(
+            "printf 'goingToScreenSaver 2\n'; exec sleep 60",
+            Duration::from_secs(5),
+        );
+        let pid = events.child.lock().unwrap().process.as_ref().unwrap().id();
+        assert_eq!(receive(&events), vec![PowerEvent::GoingToScreenSaver(2)]);
+        drop(events);
+        // SAFETY: WNOHANG only inspects the former child; it cannot block.
+        assert_eq!(
+            unsafe { libc::waitpid(pid as i32, std::ptr::null_mut(), libc::WNOHANG) },
+            -1
+        );
+        assert_eq!(
+            io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+    }
+
+    #[test]
+    fn listener_restarts_after_exit() {
+        let events = listener("printf 'outOfScreenSaver 1\n'", Duration::from_millis(10));
+        assert!(receive(&events).contains(&PowerEvent::OutOfScreenSaver(1)));
+        assert!(receive(&events).contains(&PowerEvent::OutOfScreenSaver(1)));
+    }
+
+    #[test]
+    fn listener_retries_a_failed_restart() {
+        let mut attempts = 0;
+        let events = PowerEvents::listen_with(
+            move || {
+                let attempt = attempts;
+                attempts += 1;
+                if attempt == 1 {
+                    return Err(io::Error::other("temporary listener failure"));
+                }
+                Command::new("sh")
+                    .args(["-c", "printf 'charging\n'"])
+                    .stdout(Stdio::piped())
+                    .spawn()
+            },
+            Duration::from_millis(10),
+        )
+        .unwrap();
+        assert!(receive(&events).contains(&PowerEvent::Charging));
+        assert!(receive(&events).contains(&PowerEvent::Charging));
+    }
+
+    #[test]
+    fn dropping_listener_interrupts_restart_delay() {
+        let events = listener("printf 'readyToSuspend 5\n'", Duration::from_secs(60));
+        assert_eq!(receive(&events), vec![PowerEvent::ReadyToSuspend(5)]);
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while events.child.lock().unwrap().process.is_some() {
+            assert!(std::time::Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(1));
+        }
+        let started = std::time::Instant::now();
+        drop(events);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn missing_listener_does_not_start_a_worker() {
+        let result = PowerEvents::listen_with(
+            || Err(io::Error::new(io::ErrorKind::NotFound, "test listener")),
+            Duration::from_secs(5),
+        );
+        assert!(matches!(result, Err(e) if e.kind() == io::ErrorKind::NotFound));
+    }
 
     #[test]
     fn events() {
