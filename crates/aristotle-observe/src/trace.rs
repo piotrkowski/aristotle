@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-use crate::capture::End;
+use crate::capture::{self, End};
 use crate::kmsg::Update;
 use crate::{report, Interaction};
 
@@ -21,6 +21,13 @@ pub struct Capture {
 }
 
 impl Capture {
+    fn horizon_verified(&self) -> Option<bool> {
+        self.end.captured_until_us.map(|until| {
+            let release = self.interactions.last().map_or(0, |i| i.up_us);
+            capture::drain(until, until, release, &self.updates, false) == capture::Drain::Complete
+        })
+    }
+
     pub fn new(
         interactions: Vec<Interaction>,
         updates: Vec<Update>,
@@ -103,6 +110,7 @@ pub fn replay(args: &[String]) -> io::Result<()> {
     );
     let valid = capture.kernel_log_overruns == 0
         && !capture.end.drain_timed_out
+        && capture.horizon_verified() != Some(false)
         && rows.iter().all(|row| row.valid)
         && rows
             .last()
@@ -114,6 +122,7 @@ pub fn replay(args: &[String]) -> io::Result<()> {
             "kernel_log_overruns": capture.kernel_log_overruns,
             "captured_until_us": capture.end.captured_until_us,
             "drain_timed_out": capture.end.drain_timed_out,
+            "capture_horizon_verified": capture.horizon_verified(),
             "measurements": rows,
         });
         let stdout = io::stdout();
@@ -231,5 +240,23 @@ mod tests {
         let mut capture = capture();
         capture.end.captured_until_us = Some(799);
         assert!(Capture::read(serde_json::to_vec(&capture).unwrap().as_slice()).is_err());
+    }
+
+    #[test]
+    fn final_horizon_covers_unassigned_raw_updates_and_pending_completions() {
+        let mut capture = capture();
+        capture.updates.push(Update {
+            start_us: 3_000_000,
+            end_us: Some(3_500_000),
+            ..Default::default()
+        });
+        capture.end.captured_until_us = Some(4_000_000);
+        let rows = report::measure(&capture.interactions, &capture.updates, 0, capture.end);
+        assert_eq!(rows[0].settlement_verified, Some(true));
+        assert_eq!(capture.horizon_verified(), Some(false));
+        capture.end.captured_until_us = Some(5_000_000);
+        assert_eq!(capture.horizon_verified(), Some(true));
+        capture.updates.last_mut().unwrap().end_us = None;
+        assert_eq!(capture.horizon_verified(), Some(false));
     }
 }

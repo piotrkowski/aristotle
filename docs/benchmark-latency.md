@@ -77,6 +77,8 @@ drains until all submitted updates finish and the 1.5 s quiet window expires.
 Its final drain has a 10 s budget. A timeout preserves the raw trace, marks
 it invalid, and suppresses completion metrics. Replay checks the recorded
 end time against the rolling quiet deadline instead of trusting the flag.
+Its `capture_horizon_verified` check includes all raw updates and pending
+completions, including updates outside an interaction's attribution window.
 
 Each measurement reports `settlement_verified`. A new capture reports `true`
 only when it proves the quiet horizon. An interrupted or truncated horizon
