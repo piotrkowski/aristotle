@@ -62,12 +62,34 @@ pub struct Opened {
     /// The initial locator or the last successfully sent locator.
     pub at_open: Option<Locator>,
     acknowledged: u64,
+    uncertain: Option<u64>,
     pending: BTreeMap<u64, Locator>,
 }
 
 impl Opened {
     fn needs_push(&self, locator: &Locator) -> bool {
-        self.at_open.as_ref() != Some(locator) || self.pending.values().any(|p| p != locator)
+        self.uncertain.is_some()
+            || self.at_open.as_ref() != Some(locator)
+            || self.pending.values().any(|p| p != locator)
+    }
+
+    fn finish_push(&mut self, sequence: u64, locator: &Locator, outcome: &PushOutcome) {
+        self.pending.remove(&sequence);
+        match outcome {
+            PushOutcome::Finished(Ok(())) => {
+                if sequence > self.acknowledged {
+                    self.at_open = Some(locator.clone());
+                    self.acknowledged = sequence;
+                }
+                if self.uncertain.is_some_and(|failed| failed <= sequence) {
+                    self.uncertain = None;
+                }
+            }
+            PushOutcome::Finished(Err(_)) if sequence > self.acknowledged => {
+                self.uncertain = Some(self.uncertain.unwrap_or(0).max(sequence));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -244,12 +266,7 @@ impl App {
             .as_mut()
             .filter(|o| o.id == receipt.book && o.token == receipt.token);
         if let Some(o) = opened {
-            o.pending.remove(&receipt.sequence);
-            if matches!(outcome, PushOutcome::Finished(Ok(()))) && receipt.sequence > o.acknowledged
-            {
-                o.at_open = Some(receipt.locator);
-                o.acknowledged = receipt.sequence;
-            }
+            o.finish_push(receipt.sequence, &receipt.locator, &outcome);
         }
         if matches!(outcome, PushOutcome::Superseded) {
             return;
@@ -305,6 +322,7 @@ impl App {
             path: path.clone(),
             at_open,
             acknowledged: 0,
+            uncertain: None,
             pending: BTreeMap::new(),
         });
         self.sync.offer = None;
@@ -650,6 +668,83 @@ impl App {
 mod tests {
     use super::*;
 
+    fn opened_at(locator: Locator) -> Opened {
+        Opened {
+            id: "book".into(),
+            token: 1,
+            format: Format::Pdf,
+            path: PathBuf::new(),
+            at_open: Some(locator),
+            acknowledged: 0,
+            uncertain: None,
+            pending: BTreeMap::new(),
+        }
+    }
+
+    fn timeout() -> PushOutcome {
+        PushOutcome::Finished(Err(kosync::Error::Http(
+            aristotle_net::http::Error::Timeout,
+        )))
+    }
+
+    #[test]
+    fn a_lost_acknowledgment_requires_correction_after_returning_to_the_baseline() {
+        let baseline = Locator::Page { index: 0 };
+        let moved = Locator::Page { index: 5 };
+        let mut server = baseline.clone();
+        let mut opened = opened_at(baseline.clone());
+        let gate = PushGate::default();
+        let key = ("server".into(), "user".into(), "book".into());
+        opened.pending.insert(1, moved.clone());
+        let first = gate.request(key.clone(), 1).run(1, || {
+            server = moved.clone();
+            Err(kosync::Error::Http(aristotle_net::http::Error::Timeout))
+        });
+        opened.finish_push(1, &moved, &first);
+        assert_eq!(server, moved);
+        assert_eq!(opened.at_open.as_ref(), Some(&baseline));
+        assert!(opened.pending.is_empty());
+        assert!(opened.needs_push(&baseline));
+        opened.pending.insert(2, baseline.clone());
+        let correction = gate.request(key, 2).run(2, || {
+            server = baseline.clone();
+            Ok(())
+        });
+        opened.finish_push(2, &baseline, &correction);
+        assert_eq!(server, baseline);
+        assert!(!opened.needs_push(&baseline));
+        opened.finish_push(1, &moved, &timeout());
+        assert!(!opened.needs_push(&baseline));
+    }
+
+    #[test]
+    fn skipped_jobs_do_not_change_uncertainty_and_old_acks_do_not_clear_newer_errors() {
+        let baseline = Locator::Page { index: 0 };
+        let moved = Locator::Page { index: 5 };
+        let mut opened = opened_at(baseline.clone());
+        for (sequence, outcome) in [(1, PushOutcome::Superseded), (2, PushOutcome::Unsupported)] {
+            opened.pending.insert(sequence, moved.clone());
+            opened.finish_push(sequence, &moved, &outcome);
+            assert!(opened.pending.is_empty());
+            assert!(!opened.needs_push(&baseline));
+        }
+        opened.finish_push(3, &moved, &timeout());
+        assert!(opened.needs_push(&baseline));
+        for (sequence, outcome) in [(4, PushOutcome::Superseded), (5, PushOutcome::Unsupported)] {
+            opened.pending.insert(sequence, baseline.clone());
+            opened.finish_push(sequence, &baseline, &outcome);
+            assert!(opened.needs_push(&baseline));
+        }
+        opened.finish_push(6, &baseline, &PushOutcome::Finished(Ok(())));
+        assert!(!opened.needs_push(&baseline));
+        opened.finish_push(7, &moved, &timeout());
+        assert!(opened.needs_push(&baseline));
+        opened.finish_push(6, &baseline, &PushOutcome::Finished(Ok(())));
+        assert!(opened.needs_push(&baseline));
+        opened.finish_push(8, &baseline, &PushOutcome::Finished(Ok(())));
+        assert!(!opened.needs_push(&baseline));
+    }
+
     #[test]
     fn queued_obsolete_requests_skip_the_network_before_the_newest_send() {
         use std::sync::mpsc;
@@ -750,6 +845,7 @@ mod tests {
             path: PathBuf::new(),
             at_open: Some(baseline.clone()),
             acknowledged: 0,
+            uncertain: None,
             pending: BTreeMap::new(),
         };
         assert!(!opened.needs_push(&baseline));
