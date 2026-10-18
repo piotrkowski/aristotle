@@ -1,115 +1,152 @@
-// Device screenshots and clickable areas, in panel pixels.
-window.ARISTOTLE_DEMO = {
-  "screen": { "width": 1072, "height": 1448 },
-  "start": "library",
-  "frames": {
-    "library": {
-      "image": "demo/frames/library.png",
-      "alt": "The library: Nicomachean Ethics, Book I, by Aristotle as the book to continue, at 33 %, above a list of four books with the shelves All, Reading, New and Finished.",
-      "hint": "Tap Continue reading to start.",
-      "hotspots": [
-        { "id": "continue", "label": "Open Nicomachean Ethics", "rect": [60, 215, 950, 250], "to": "greek-page", "kind": "flash" },
-        { "id": "settings", "label": "Settings", "rect": [880, 60, 136, 120], "to": "settings", "kind": "flash" }
+// Device captures and clickable areas, in panel pixels; samples are not consecutive pages.
+(function () {
+  "use strict";
+
+  function spot(id, label, rect, to, key) {
+    return { id: id, label: label, rect: rect, to: to, key: key };
+  }
+
+  var library = spot("library", "Back to the library", [30, 10, 280, 130], "library");
+  var menu = spot("menu", "Open the reader menu", [0, 0, 1072, 173], "menu");
+  var scenes = {
+    library: {
+      alt: "Aristotle's library, with Nicomachean Ethics as the book to continue, a book list, shelves and folders.",
+      hint: "Open a book to try the reader.", action: "continue",
+      spots: [
+        spot("continue", "Continue reading", [60, 215, 950, 250], "resume"),
+        spot("settings", "Open settings", [880, 60, 136, 120], "settings"),
+        spot("folders", "Browse folders", [215, 500, 195, 120], "folders")
+      ]
+    },
+    folders: {
+      alt: "The library's Folders tab, with Aristotle, Marcus Aurelius and Plato folders.",
+      hint: "Open Aristotle's folder.", action: "folder",
+      spots: [
+        spot("books", "Back to books", [55, 500, 150, 120], "library", "Escape"),
+        spot("folder", "Open the Aristotle folder", [55, 620, 960, 130], "folder"),
+        spot("continue", "Continue reading", [60, 215, 950, 250], "resume"),
+        spot("settings", "Open settings", [880, 60, 136, 120], "settings")
+      ]
+    },
+    folder: {
+      alt: "The Aristotle folder, with four books including Nicomachean Ethics, Book I.",
+      hint: "Open Nicomachean Ethics from its folder.", action: "book",
+      spots: [
+        spot("back", "Back to folders", [35, 55, 120, 140], "folders", "Escape"),
+        spot("book", "Open Nicomachean Ethics", [60, 195, 950, 140], "resume")
       ]
     },
     "greek-page": {
-      "image": "demo/frames/greek-page.png",
-      "alt": "The first page of Book I in Bywater's Greek text, Βιβλίον Α, justified, with the chapter and progress in the footer.",
-      "hint": "Tap ἀγαθοῦ to look it up.",
-      "hotspots": [
-        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "english-page", "kind": "turn", "key": "ArrowRight" },
-        { "id": "word", "label": "Look up ἀγαθοῦ", "rect": [352, 318, 172, 80], "to": "greek-popup", "kind": "turn" }
-      ]
-    },
-    "greek-popup": {
-      "image": "demo/frames/greek-popup.png",
-      "alt": "The dictionary popup for ἀγαθοῦ: its base form ἀγαθός, an adjective, good; brave; noble; moral; gentle, from the grc-en dictionary, with a tab for grc-pl and the buttons Highlight, More and Close.",
-      "hint": "Tap Close to keep reading.",
-      "hotspots": [
-        { "id": "page", "label": "Close the popup", "rect": [0, 0, 1072, 760], "to": "greek-page", "kind": "turn" },
-        { "id": "close", "label": "Close", "rect": [458, 1318, 140, 112], "to": "greek-page", "kind": "turn", "key": "Escape" }
-      ]
+      alt: "The opening of Book I of Nicomachean Ethics, in Bywater's Greek text.",
+      hint: "Look up the underlined Greek word.", action: "word", sample: "greek-page",
+      spots: [
+        Object.assign({}, menu, { to: "greek-menu" }),
+        spot("word", "Look up ἀγαθοῦ", [352, 318, 172, 80], "greek-popup")
+      ],
+      cue: [365, 331, 150, 55]
     },
     "english-page": {
-      "image": "demo/frames/english-page.png",
-      "alt": "Book I, Chapter I in Chase's English translation, justified and hyphenated: Every art, and every science reduced to a teachable form, and in like manner every action and moral choice, aims, it is thought, at some good.",
-      "hint": "Tap the top edge for the menu.",
-      "hotspots": [
-        { "id": "menu", "label": "Open the menu", "rect": [0, 0, 1072, 173], "to": "menu", "kind": "overlay" },
-        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "greek-page", "kind": "turn", "key": "ArrowLeft" }
+      alt: "The opening of Book I, Chapter I, in Chase's English translation of Nicomachean Ethics.",
+      hint: "Look up “science” in the dictionary.", action: "word", sample: "english-page",
+      spots: [menu, spot("word", "Look up science", [475, 275, 150, 75], "english-popup")],
+      cue: [478, 285, 145, 46]
+    },
+    "greek-popup": {
+      alt: "The dictionary definition of ἀγαθοῦ, with its base form ἀγαθός and English meanings.",
+      hint: "Close the definition to keep reading.", action: "close", sample: "greek-page",
+      spots: [
+        spot("page", "Dismiss the Greek definition", [0, 0, 1072, 760], "greek-page"),
+        spot("highlight", "Highlight the Greek word", [65, 1318, 240, 112], "greek-highlighted"),
+        spot("close", "Close the definition", [458, 1318, 140, 112], "greek-page", "Escape")
       ]
     },
-    "menu": {
-      "image": "demo/frames/menu.png",
-      "alt": "The reader menu over the English page: a top bar with Library, the title, Contents, Highlights and Go to, and a bottom sheet with the chapter and page, size, spacing, margins, light and a Night switch.",
-      "hint": "Back to the library, or tap the page.",
-      "hotspots": [
-        { "id": "library", "label": "Back to the library", "rect": [30, 10, 280, 110], "to": "library", "kind": "flash" },
-        { "id": "close", "label": "Close the menu", "rect": [0, 240, 1072, 420], "to": "english-page", "kind": "turn", "key": "Escape" }
+    "english-popup": {
+      alt: "An offline English-Polish dictionary defining science as nauka and wiedza.",
+      hint: "Close the definition to keep reading.", action: "close", sample: "english-page",
+      spots: [
+        spot("page", "Dismiss the English definition", [0, 0, 1072, 610], "english-page"),
+        spot("close", "Close the definition", [460, 1318, 150, 112], "english-page", "Escape")
       ]
     },
-    "settings": {
-      "image": "demo/frames/settings.png",
-      "alt": "Settings: the frontlight at 2 of 24 with presets, a Night mode switch, covers in the library, battery and the screensaver delay.",
-      "hint": "Try night mode.",
-      "hotspots": [
-        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library", "kind": "flash", "key": "Escape" },
-        { "id": "night", "label": "Night mode", "rect": [40, 545, 992, 120], "to": "settings-night", "kind": "flash" }
+    "greek-highlighted": {
+      alt: "The Greek page with ἀγαθοῦ highlighted.",
+      hint: "Open the reader menu to try night mode.", action: "menu", sample: "greek-page",
+      spots: [Object.assign({}, menu, { to: "greek-menu" })]
+    },
+    menu: {
+      alt: "The reader menu over the English sample, with text size, spacing, margins, light and a Night switch.",
+      hint: "Switch on night mode.", action: "night", sample: "english-page",
+      spots: [
+        library,
+        spot("close", "Close the reader menu", [0, 240, 1072, 410], "resume", "Escape"),
+        spot("size", "Try larger text", [590, 820, 410, 110], "menu-size"),
+        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
       ]
     },
-    "settings-night": {
-      "image": "demo/frames/settings-night.png",
-      "alt": "Settings in night mode, white on black, with the Night mode switch on.",
-      "hint": "Go back to the library.",
-      "hotspots": [
-        { "id": "back", "label": "Back to the library", "rect": [30, 50, 400, 136], "to": "library-night", "kind": "flash", "key": "Escape" },
-        { "id": "night", "label": "Day mode", "rect": [40, 545, 992, 120], "to": "settings", "kind": "flash" }
+    "greek-menu": {
+      alt: "The reader menu over the Greek sample, with text size, spacing, margins, light and a Night switch.",
+      hint: "Switch on night mode.", action: "night", sample: "greek-page",
+      spots: [
+        library,
+        spot("close", "Close the reader menu", [0, 240, 1072, 420], "resume", "Escape"),
+        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
       ]
     },
-    "library-night": {
-      "image": "demo/frames/library-night.png",
-      "alt": "The library in night mode, white on black.",
-      "hint": "Open the book in night mode.",
-      "hotspots": [
-        { "id": "continue", "label": "Open Nicomachean Ethics", "rect": [60, 215, 950, 250], "to": "greek-page-night", "kind": "flash" },
-        { "id": "settings", "label": "Settings", "rect": [880, 60, 136, 120], "to": "settings-night", "kind": "flash" }
+    "menu-size": {
+      alt: "The English reader menu with text two steps larger.",
+      hint: "Try the original text size again.", action: "size", sample: "english-page",
+      spots: [
+        library,
+        spot("size", "Restore the original text size", [275, 820, 300, 110], "menu", "Escape"),
+        spot("night", "Switch to night mode", [790, 1290, 240, 150], "toggle-night")
       ]
     },
-    "greek-page-night": {
-      "image": "demo/frames/greek-page-night.png",
-      "alt": "The first page of Book I in Greek, in night mode.",
-      "hint": "Tap a word, or the top edge for the menu.",
-      "hotspots": [
-        { "id": "menu", "label": "Open the menu", "rect": [0, 0, 1072, 173], "to": "menu-night", "kind": "overlay" },
-        { "id": "next", "label": "Next page", "rect": [321, 173, 751, 1275], "to": "english-page-night", "kind": "turn", "key": "ArrowRight" },
-        { "id": "word", "label": "Look up ἀγαθοῦ", "rect": [352, 318, 172, 80], "to": "greek-popup-night", "kind": "turn" }
+    settings: {
+      alt: "Settings for frontlight, night mode, library covers, battery and screensaver.",
+      hint: "Switch on night mode.", action: "night",
+      spots: [
+        spot("back", "Back to the library", [30, 50, 400, 136], "library", "Escape"),
+        spot("night", "Switch to night mode", [40, 545, 992, 120], "toggle-night")
       ]
     },
-    "greek-popup-night": {
-      "image": "demo/frames/greek-popup-night.png",
-      "alt": "The dictionary popup for ἀγαθοῦ in night mode.",
-      "hint": "Tap Close to keep reading.",
-      "hotspots": [
-        { "id": "page", "label": "Close the popup", "rect": [0, 0, 1072, 760], "to": "greek-page-night", "kind": "turn" },
-        { "id": "close", "label": "Close", "rect": [458, 1318, 140, 112], "to": "greek-page-night", "kind": "turn", "key": "Escape" }
-      ]
+    "footnote-page": {
+      alt: "A separate English reading sample with footnote references in Chapter I of Nicomachean Ethics.",
+      hint: "Open the underlined footnote [3].", action: "note", sample: "footnote-page",
+      spots: [spot("note", "Open footnote 3", [835, 920, 90, 95], "footnote")],
+      cue: [857, 940, 35, 40]
     },
-    "english-page-night": {
-      "image": "demo/frames/english-page-night.png",
-      "alt": "Book I, Chapter I in English, in night mode.",
-      "hint": "Tap the left side to go back.",
-      "hotspots": [
-        { "id": "prev", "label": "Previous page", "rect": [0, 173, 321, 1275], "to": "greek-page-night", "kind": "turn", "key": "ArrowLeft" }
-      ]
-    },
-    "menu-night": {
-      "image": "demo/frames/menu-night.png",
-      "alt": "The reader menu over the Greek page in night mode, with the Night switch on.",
-      "hint": "Tap Library to go back.",
-      "hotspots": [
-        { "id": "library", "label": "Back to the library", "rect": [30, 10, 280, 110], "to": "library-night", "kind": "flash" },
-        { "id": "close", "label": "Close the menu", "rect": [0, 240, 1072, 420], "to": "greek-page-night", "kind": "turn", "key": "Escape" }
+    footnote: {
+      alt: "Footnote 3 in a popup, without leaving the reading page.",
+      hint: "Close the note to return to the page.", action: "close", sample: "footnote-page",
+      spots: [
+        spot("page", "Dismiss the footnote", [0, 0, 1072, 925], "footnote-page"),
+        spot("close", "Close the footnote", [375, 1318, 160, 112], "footnote-page", "Escape")
       ]
     }
-  }
-};
+  };
+
+  var frames = {};
+  Object.keys(scenes).forEach(function (id) {
+    [false, true].forEach(function (night) {
+      var scene = scenes[id];
+      var suffix = night ? "-night" : "";
+      frames[id + suffix] = {
+        scene: id, night: night, sample: scene.sample,
+        image: "demo/frames/" + id + suffix + ".png",
+        alt: scene.alt + (night ? " In night mode." : ""),
+        hint: night && scene.action === "night" ? "Return to the library in night mode." : scene.hint,
+        action: night && scene.action === "night" ? (id === "settings" ? "back" : "library") : scene.action,
+        cue: scene.cue,
+        hotspots: scene.spots.map(function (item) {
+          var to = item.to;
+          if (to === "toggle-night") to = id + (night ? "" : "-night");
+          else if (to !== "resume") to += suffix;
+          return Object.assign({}, item, { to: to,
+            label: item.id === "night" && night ? "Switch to day mode" : item.label });
+        })
+      };
+    });
+  });
+
+  window.ARISTOTLE_DEMO = { screen: { width: 1072, height: 1448 }, start: "library", frames: frames };
+})();
