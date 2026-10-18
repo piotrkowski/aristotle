@@ -2756,7 +2756,8 @@ mod tests {
         reopen(&mut app, "Reopened");
         let old_token = app.sync.opened.as_ref().unwrap().token;
         app.back_to_library().unwrap();
-        reopen(&mut app, "Reopened");
+        app.open_by_title("Reopened").unwrap();
+        wait(&mut app, |a| matches!(a.screen, Screen::Reader(_)));
         let current_token = app.sync.opened.as_ref().unwrap().token;
         assert_ne!(old_token, current_token);
         app.sync.message = "current status".into();
