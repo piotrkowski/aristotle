@@ -51,6 +51,21 @@ Replacing the release files does not reinstall the agent's private scripts or up
 
 Boot startup uses the internal copy refreshed by the autostart action. Starting from KUAL uses the USB copy. Updating only the USB copy leaves the old version running at the next boot.
 
+The autostart action refuses to replace a running boot app. It stages the binary, data, and `SOURCE.txt` together before activating them. A failed copy leaves the current app intact. A failed activation attempts to restore the current app. The prior complete copy stays in internal storage as `app.previous`. Both copies need enough free space on `/var/local`.
+
+## Roll back the boot app
+
+An older app may not accept reading data changed by a newer release. Keep the matching data backup before an upgrade.
+
+1. Quit Aristotle and wait for the stock interface.
+2. Open **KUAL > Aristotle > Restore previous boot app (reading data unchanged)**.
+3. Restart the Kindle to test the restored boot app.
+4. Check the version, a reading position, and a highlight.
+
+This action swaps the two internal app copies. It does not replace the USB app, downgrade the agent, or restore reading data. To restore those files, use the matching release zip and [data backup](#restore-a-backup). A second rollback selects the newer internal copy again.
+
+If an activation is interrupted between directory renames, the boot launcher can use `app.previous` when `app` is absent. This is host-tested behavior, not a verified recovery path for an unbootable PW4. Turning autostart off retains the internal copies. Removing the agent deletes them.
+
 ## Restore a backup
 
 1. Quit Aristotle and connect the Kindle in USB drive mode.
