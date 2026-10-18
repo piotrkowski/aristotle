@@ -56,7 +56,7 @@ I'd recommend installing it with an AI agent like Claude Code or Codex. Just poi
 > [!WARNING]
 > Changing a Kindle's software can **brick** it, and no recovery method has been verified for the Paperwhite 4. Aristotle is alpha software.
 >
-> The default screensaver does not suspend the CPU, and the power button has no effect while Aristotle runs. Battery use is unverified. Quit to the stock interface when you finish reading.
+> Managed sleep follows stock powerd by default. The fallback screensaver does not suspend the CPU and disables the power button. A temporary helper passed a PW4 suspend/wake test; the app-owned helper still needs device validation. Battery use remains unverified. See [Power validation](docs/power-validation.md).
 
 You need:
 
