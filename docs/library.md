@@ -190,7 +190,7 @@ Aristotle uses [KOSync](glossary.md#kosync), KOReader's protocol, with compatibl
 
 `Fragments` maps EPUB spine items between [Plato](glossary.md#plato) and KOReader's `DocFragment` chapter numbers. It does not resolve element paths after `DocFragment[N]`.
 
-Automatic sync fetches progress on open with a 5-second timeout. A different remote position on another page needs confirmation before a jump. Timestamps are not compared. Closing a book sends changed progress only when a usable EPUB or page locator is available. MOBI, AZW3, and TXT do not send progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
+Automatic sync fetches progress on open with a 5-second timeout. Responses from a previous reading session are ignored, including when the same book has been closed and reopened. A different remote position on another page needs confirmation before a jump. Timestamps are not compared. Closing a book sends changed progress only when a usable EPUB or page locator is available. MOBI, AZW3, and TXT do not send progress. Errors appear on the sync screen without interrupting reading. Failed pushes are not queued.
 
 ### Catalogs (OPDS 1.2)
 

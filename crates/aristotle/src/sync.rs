@@ -53,6 +53,7 @@ pub enum Remote {
 /// The book open now, as it was when it opened.
 pub struct Opened {
     pub id: String,
+    pub token: u64,
     pub format: Format,
     pub path: PathBuf,
     /// The locator stored when the book opened: no push if it is still
@@ -63,6 +64,7 @@ pub struct Opened {
 #[derive(Default)]
 pub struct SyncState {
     pub opened: Option<Opened>,
+    next_token: u64,
     /// The progress a book had before this open touched it: what a pulled
     /// position is compared with.
     pub before_open: Option<(String, Option<Progress>)>,
@@ -200,8 +202,11 @@ impl App {
         };
         let format = rec.format;
         let at_open = rec.progress.as_ref().map(|p| p.locator.clone());
+        self.sync.next_token = self.sync.next_token.wrapping_add(1);
+        let token = self.sync.next_token;
         self.sync.opened = Some(Opened {
             id: id.clone(),
+            token,
             format,
             path: path.clone(),
             at_open,
@@ -231,7 +236,11 @@ impl App {
                     Err(e) => e.to_string(),
                 }
             );
-            Done::Pulled { book: id, result }
+            Done::Pulled {
+                book: id,
+                token,
+                result,
+            }
         });
     }
 
@@ -280,8 +289,17 @@ impl App {
     pub(crate) fn on_pulled(
         &mut self,
         book: String,
+        token: u64,
         result: Result<Option<(Position, Remote)>, kosync::Error>,
     ) -> Result<(), Error> {
+        if !self
+            .sync
+            .opened
+            .as_ref()
+            .is_some_and(|o| o.id == book && o.token == token)
+        {
+            return Ok(());
+        }
         let (remote, target) = match result {
             Ok(Some(x)) => x,
             Ok(None) => return Ok(()),

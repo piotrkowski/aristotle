@@ -43,6 +43,7 @@ pub enum Done {
     /// The position the server has for a book just opened.
     Pulled {
         book: String,
+        token: u64,
         result: Result<Option<(kosync::Position, crate::sync::Remote)>, kosync::Error>,
     },
     Pushed {

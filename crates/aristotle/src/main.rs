@@ -2807,6 +2807,38 @@ mod tests {
         app.leave().unwrap();
     }
 
+    #[test]
+    fn a_pull_from_a_previous_open_of_the_same_book_is_ignored() {
+        let Some((library, root, id)) = reopen_fixture(false) else {
+            return;
+        };
+        let mut app = memory_app(&library, &root);
+        reopen(&mut app, "Reopened");
+        let old_token = app.sync.opened.as_ref().unwrap().token;
+        app.back_to_library().unwrap();
+        app.open_by_title("Reopened").unwrap();
+        wait(&mut app, |a| matches!(a.screen, Screen::Reader(_)));
+        let current_token = app.sync.opened.as_ref().unwrap().token;
+        assert_ne!(old_token, current_token);
+        app.sync.message = "current status".into();
+        app.on_pulled(
+            id.clone(),
+            old_token,
+            Err(aristotle_net::kosync::Error::Invalid("stale")),
+        )
+        .unwrap();
+        assert_eq!(app.sync.message, "current status");
+        assert!(app.sync.offer.is_none());
+        app.on_pulled(
+            id,
+            current_token,
+            Err(aristotle_net::kosync::Error::Invalid("current")),
+        )
+        .unwrap();
+        assert_ne!(app.sync.message, "current status");
+        app.leave().unwrap();
+    }
+
     fn touch(app: &mut App, phase: HalPhase, x: u32, y: u32, time_us: u64) {
         let ev = aristotle_hal::input::TouchEvent {
             phase,
