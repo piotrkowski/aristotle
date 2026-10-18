@@ -812,7 +812,7 @@ impl App {
                 Done::Downloaded { token, result } => self.on_downloaded(token, result)?,
             }
         }
-        if previous_sync_message != self.sync.message {
+        if previous_sync_message != self.sync.message && self.asleep.is_none() {
             if let Screen::Network(ns) = &self.screen {
                 if matches!(ns.view, NetView::Sync) {
                     if let Some(frame) = &ns.frame {
