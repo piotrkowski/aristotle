@@ -208,18 +208,30 @@ ipv6() {
 
 apply() {
     mkdir -p "$S" || return 1
-    apply_locked 9>> "$LOCK"
+    apply_locked "${1:-wait}" 9>> "$LOCK"
 }
 
 apply_locked() {
     # The kernel releases the lock when its last holder exits, even on SIGKILL.
-    if ! flock -n 9; then
+    if [ "$1" = try ]; then
+        flock -n 9
+    else
+        flock 9
+    fi
+    if [ $? != 0 ]; then
         log "policy update busy: retry after it finishes"
         echo "net: policy update busy; retry after it finishes" >&2
         return 1
     fi
     if [ "$(mode)" = off ]; then
         echo | run_rules off || { log "removing the rules failed"; return 1; }
+        iptables -L INPUT -n > /dev/null 2>> "$S/log" || return 1
+        for chain in "$IN" "$OUT" "${IN}_NEW" "${OUT}_NEW"; do
+            if iptables -L "$chain" -n > /dev/null 2>&1; then
+                log "removing the rules failed: $chain still exists"
+                return 1
+            fi
+        done
         ipv6 0
         rm -f "$S/net-resolved" "$S/net-sig" "$S/net-applied" "$S/net-refreshed"
         log "off: stock firewall"
@@ -256,11 +268,11 @@ apply_locked() {
 tick() {
     [ "$(mode)" = scoped ] || return 0
     last=$(cat "$S/net-refreshed" 2> /dev/null)
-    case "$last" in '' | *[!0-9]*) apply; return $? ;; esac
+    case "$last" in '' | *[!0-9]*) apply try; return $? ;; esac
     now=$(uptime_seconds) || return 1
     if [ "$(signature)" != "$(cat "$S/net-sig" 2> /dev/null)" ] ||
         [ "$now" -lt "$last" ] || [ $((now - last)) -ge "$REFRESH_SECS" ]; then
-        apply
+        apply try
     fi
 }
 
@@ -335,6 +347,8 @@ status() {
         echo "applied: $(date -d "@$(cat "$S/net-applied" 2> /dev/null || echo 0)" 2> /dev/null)"
         echo "allowed:"
         sed 's/^allow /  /' "$S/net-resolved" 2> /dev/null
+    else
+        return 0
     fi
     iptables -L $IN -n -v 2> /dev/null
     iptables -L $OUT -n -v 2> /dev/null

@@ -97,9 +97,10 @@ printf 'invalid\n' > "$S/net-refreshed"
 $NET tick
 check "scoped: an invalid refresh timestamp is repaired" "[ \"\$(cat $S/net-refreshed)\" = 1900 ]"
 cp "$S/net-rules.sh" "$WORK/rules-before-contention"
-flock "$S/net-policy.lock" $NET apply 2> "$WORK/contention-errors"
-check "scoped: a held lock rejects a second apply" "[ $? = 1 ]"
-check "scoped: a contender leaves the owner's rules alone" "diff $WORK/rules-before-contention $S/net-rules.sh"
+printf 'invalid\n' > "$S/net-refreshed"
+flock "$S/net-policy.lock" $NET tick 2> "$WORK/contention-errors"
+check "scoped: a held lock skips a periodic tick" "[ $? = 1 ]"
+check "scoped: a skipped tick leaves the owner's rules alone" "diff $WORK/rules-before-contention $S/net-rules.sh"
 sort "$S/net-resolved" > "$WORK/resolved-sorted"
 FAKE_DNS_DOWN=dash.example.org $NET apply
 check "scoped: an unlocked lock file does not block an update" "[ $? = 0 ]"
@@ -155,6 +156,7 @@ $NET apply
 check "off again: stock INPUT and OUTPUT restored" "diff $WORK/stock-INPUT $T/INPUT && diff $WORK/stock-OUTPUT $T/OUTPUT"
 
 if [ $failures = 0 ]; then
+    sh "$HERE/net-overlap.sh" || exit 1
     echo "net: all checks passed"
 else
     echo "net: $failures checks failed (output in $WORK)"

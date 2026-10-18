@@ -509,11 +509,16 @@ reboot. The displayed `applied` time still uses the wall clock.
 
 Before resolving, an update removes addresses whose host, port and protocol
 are no longer allowed. A slow DNS response does not extend a removed entry's
-access. Updates use a non-blocking `flock` on `net-policy.lock` in the agent directory;
-another update returns an error and leaves the active update alone. The
-kernel releases the lock when its last holder exits, including after
-`SIGKILL`. In `scoped` mode, the agent retries a failed update on its next tick. BusyBox
-`flock -n FD` is available on our PW4, measured on 2026-10-18.
+access. Updates use `flock` on `net-policy.lock` in the agent directory.
+Explicit changes wait for an active update to finish. Periodic ticks use
+non-blocking acquisition and retry on the next tick in `scoped` mode.
+The kernel releases the lock when its last holder exits, including after
+`SIGKILL`. BusyBox `flock -n FD` is available on our PW4, measured on
+2026-10-18.
+
+Switching to `off` waits for the active update, then confirms that all
+Aristotle chains are gone. Uninstall stops if policy removal fails and keeps
+the jobs, keys and scripts so you can retry removal.
 
 ### Limits
 
