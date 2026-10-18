@@ -165,7 +165,7 @@ fn benchmark_prewarms_owned_books_without_imported_kindle_snapshots() {
     assert!(crate::prewarm::job_for(&lib, rec, &style, &cache, 30.0).is_none());
     assert!(!crate::snapshot::path(&library, &imported).exists());
     let target = lib.book(&target).unwrap();
-    let (source, _) = crate::prewarm::job_for(&lib, target, &style, &cache, 30.0).unwrap();
-    assert!(crate::open::find_snapshot(&source, &style).is_some());
+    assert!(crate::prewarm::job_for(&lib, target, &style, &cache, 30.0).is_some());
+    assert!(crate::snapshot::path(&library, &target.id).exists());
     std::fs::remove_dir_all(dir).unwrap();
 }
