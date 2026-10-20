@@ -246,8 +246,11 @@ impl Chrome {
 
         if let Some(left) = folio.left.as_deref().filter(|l| !l.is_empty()) {
             let mut plan = self.regular.plan(left, None, None);
-            // Keep clear of the centred page number.
-            self.regular.crop_right(&mut plan, max_width / 2 - 120);
+            // Keep clear of the centred page number: 120 px at 300 DPI.
+            let gap = aristotle_screen::Density::new(self.dpi)
+                .unwrap_or_default()
+                .px(120);
+            self.regular.crop_right(&mut plan, max_width / 2 - gap);
             self.regular.render(
                 page,
                 color,

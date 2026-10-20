@@ -8,17 +8,19 @@
 
 use aristotle_render::book::{Bounds, Word};
 
-/// How far from a word a finger may land and still pick it: 3 mm. Wider
-/// than the gap between lines (about 1 mm at 10 pt), so the nearest word
-/// wins, but not so wide that a press in the margin selects text.
+/// How far from a word a finger may land and still pick it, in 300 DPI
+/// reference pixels: 3 mm. Wider than the gap between lines (about 1 mm at
+/// 10 pt), so the nearest word wins, but not so wide that a press in the
+/// margin selects text.
 pub const SLOP: i32 = 36;
 
-/// The word under (or nearest to) a point, within [`SLOP`].
-pub fn hit(words: &[Word], x: i32, y: i32) -> Option<usize> {
+/// The word under (or nearest to) a point, within `slop` native pixels:
+/// [`SLOP`] at the screen's density.
+pub fn hit(words: &[Word], x: i32, y: i32, slop: i32) -> Option<usize> {
     let mut best: Option<(i64, usize)> = None;
     for (i, w) in words.iter().enumerate() {
         let d = w.rect.dist2(x, y);
-        if d <= (SLOP as i64).pow(2) && best.is_none_or(|(bd, _)| d < bd) {
+        if d <= (slop as i64).pow(2) && best.is_none_or(|(bd, _)| d < bd) {
             best = Some((d, i));
         }
     }
@@ -269,17 +271,21 @@ pub(crate) mod tests {
         let w = sample();
         // Inside "jest".
         let j = &w[1].rect;
-        assert_eq!(hit(&w, j.x0 + 5, j.y0 + 5), Some(1));
+        assert_eq!(hit(&w, j.x0 + 5, j.y0 + 5, SLOP), Some(1));
         // In the gap between "Dusza" and "jest": the nearer one.
         let d = &w[0].rect;
-        assert_eq!(hit(&w, d.x1 + 3, d.y0 + 10), Some(0));
-        assert_eq!(hit(&w, j.x0 - 3, j.y0 + 10), Some(1));
+        assert_eq!(hit(&w, d.x1 + 3, d.y0 + 10, SLOP), Some(0));
+        assert_eq!(hit(&w, j.x0 - 3, j.y0 + 10, SLOP), Some(1));
         // Between lines: the nearer line.
-        assert_eq!(hit(&w, d.x0 + 10, d.y1 + 4), Some(0));
-        assert_eq!(hit(&w, d.x0 + 10, d.y1 + 10), Some(3));
+        assert_eq!(hit(&w, d.x0 + 10, d.y1 + 4, SLOP), Some(0));
+        assert_eq!(hit(&w, d.x0 + 10, d.y1 + 10, SLOP), Some(3));
         // Far in the margin: nothing.
-        assert_eq!(hit(&w, 1000, 1300), None);
-        assert_eq!(hit(&w, 5, 5), None);
+        assert_eq!(hit(&w, 1000, 1300, SLOP), None);
+        assert_eq!(hit(&w, 5, 5, SLOP), None);
+        // The radius is the caller's: a smaller one at a lower density.
+        let near = d.y0 - SLOP + 4;
+        assert_eq!(hit(&w, d.x0 + 10, near, SLOP), Some(0));
+        assert_eq!(hit(&w, d.x0 + 10, near, SLOP / 2), None);
     }
 
     #[test]

@@ -481,10 +481,12 @@ pub fn build_menu(t: &mut Tree, st: &Styles, spec: &MenuSpec, s: &Settings) -> M
 ///
 /// `page` is 8-bit gray, `stride` bytes per row, `width` × `height`. The top
 /// bar's nominal bottom edge is `top_edge`, the sheet's nominal top edge
-/// `sheet_edge`. The edge (and its 2 px rule) moves outwards, over the page,
-/// into the first band of four blank rows within `reach` pixels; then the
-/// bar hides whole lines only. Returns `(top_extra, bottom_extra)`, 0 when
-/// the edge is already in white or no gap is near (a full-page image).
+/// `sheet_edge`. The edge (and its `rule` px rule) moves outwards, over the
+/// page, into the first band of blank rows, four or twice the rule, within
+/// `reach` pixels; then the bar hides whole lines only. Returns
+/// `(top_extra, bottom_extra)`, 0 when the edge is already in white or no
+/// gap is near (a full-page image).
+#[allow(clippy::too_many_arguments)]
 pub fn mask_extents(
     page: &[u8],
     stride: usize,
@@ -493,8 +495,9 @@ pub fn mask_extents(
     top_edge: i32,
     sheet_edge: i32,
     reach: i32,
+    rule: i32,
 ) -> (i32, i32) {
-    const BAND: i32 = 4;
+    let band_h = (2 * rule).max(4);
     let blank = |y: i32| -> bool {
         if y < 0 || y as usize >= height {
             return true;
@@ -502,16 +505,16 @@ pub fn mask_extents(
         let row = &page[y as usize * stride..y as usize * stride + width];
         row.iter().all(|&v| v >= 0xd0)
     };
-    let band = |y: i32| (y..y + BAND).all(blank);
-    // The bar's rule takes the two rows below the band's start.
+    let band = |y: i32| (y..y + band_h).all(blank);
+    // The bar's rule takes the first rows of the band.
     let top = (0..reach)
         .find(|&d| band(top_edge + d))
-        .map(|d| d + 2)
+        .map(|d| d + rule)
         .unwrap_or(0);
-    // The sheet's rule takes the two rows above its edge.
+    // The sheet's rule takes the rows below its edge, inside the band.
     let bottom = (0..reach)
-        .find(|&d| band(sheet_edge - d - BAND))
-        .map(|d| d + BAND - 2)
+        .find(|&d| band(sheet_edge - d - band_h))
+        .map(|d| d + band_h - rule)
         .unwrap_or(0);
     (top, bottom)
 }
@@ -936,7 +939,7 @@ mod tests {
         }
         // Nominal edges cut lines: the top bar ends at 110 (inside the line
         // 100..120) and the sheet starts at 345 (inside the line 340..360).
-        let (top, bottom) = mask_extents(&page, w, w, h, 110, 345, 60);
+        let (top, bottom) = mask_extents(&page, w, w, h, 110, 345, 60, 2);
         let bar_end = 110 + top;
         let sheet_start = 345 - bottom;
         let blank = |y: usize| page[y * w..y * w + w].iter().all(|&v| v == 255);
@@ -950,7 +953,16 @@ mod tests {
         assert!(bottom > 0 && bottom < 40, "{bottom}");
         // A full-page picture has no gap: the edges stay.
         let dark = vec![0u8; w * h];
-        assert_eq!(mask_extents(&dark, w, w, h, 110, 345, 60), (0, 0));
+        assert_eq!(mask_extents(&dark, w, w, h, 110, 345, 60, 2), (0, 0));
+        // A thicker rule at a higher density still lands on white rows only.
+        for rule in [1, 3, 4] {
+            let (top, bottom) = mask_extents(&page, w, w, h, 110, 345, 60, rule);
+            let bar_end = (110 + top) as usize;
+            let sheet_start = (345 - bottom) as usize;
+            let rule = rule as usize;
+            assert!((bar_end - rule..bar_end + 1).all(blank), "{rule}");
+            assert!((sheet_start - 1..sheet_start + rule).all(blank), "{rule}");
+        }
     }
 
     #[test]

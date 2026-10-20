@@ -270,7 +270,11 @@ impl App {
                 .filter_map(|&i| dicts.get(i))
                 .map(|d| text.measure(d, &style))
                 .collect();
-            let max = overlay::tab_width(&widths, row - styles.density.scale(overlay::TITLE_MIN));
+            let max = overlay::tab_width(
+                &widths,
+                row - styles.density.scale(overlay::TITLE_MIN),
+                styles.density,
+            );
             dicts
                 .iter()
                 .map(|d| overlay::fit_label(d, max, |s| text.measure(s, &style)))
@@ -708,7 +712,8 @@ impl App {
         }
         let loc = r.session.current;
         let words = r.session.words(loc);
-        let Some(i) = selection::hit(&words, at.x, at.y) else {
+        let Some(i) = selection::hit(&words, at.x, at.y, self.styles.density.px(selection::SLOP))
+        else {
             return Ok(());
         };
         let sel = Selection::word(&words, i);

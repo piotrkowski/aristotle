@@ -40,10 +40,6 @@ impl Density {
         }
     }
 
-    pub fn reference(self, pixels: i32) -> i32 {
-        (pixels as f32 * REFERENCE_DPI as f32 / self.0 as f32).round() as i32
-    }
-
     pub fn mm(self, value: f32) -> i32 {
         (value * self.0 as f32 / 25.4).round() as i32
     }

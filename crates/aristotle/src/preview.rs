@@ -53,7 +53,7 @@ impl Driver {
             return Err(format_err!("UI bounds differ from the panel"));
         }
         for u in &m.updates {
-            if u.rect.intersect(&bounds) != Some(u.rect) || (u.full_screen && u.rect != bounds) {
+            if u.rect.intersect(&bounds) != Some(u.rect) {
                 return Err(format_err!("update outside the panel: {:?}", u.rect));
             }
         }

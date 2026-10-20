@@ -2478,9 +2478,11 @@ fn fit_menu(
     ui.tree.set_hidden(menu.root, false);
     ui.tree.set_hidden(*nav, false);
     ui.layout();
-    let top =
-        ui.tree.rect(menu.top).bottom() - menu.top_extra + ui.profile().density.px(overlay::NAV_H);
+    // The row of reading actions as laid out, so per-piece rounding at
+    // other densities cannot move the edge off the opaque part.
+    let top = ui.tree.rect(overlay::nav_row(&ui.tree, *nav)).bottom() - menu.top_extra;
     let sheet = ui.tree.rect(menu.sheet).y + menu.bottom_extra;
+    let density = ui.profile().density;
     let extents = mask_extents(
         &page.data,
         page.stride,
@@ -2488,7 +2490,8 @@ fn fit_menu(
         page.height as usize,
         top,
         sheet,
-        ui.profile().density.px(120),
+        density.px(120),
+        density.px(2),
     );
     if extents != (menu.top_extra, menu.bottom_extra) {
         let (tree, m, pn, nv) =

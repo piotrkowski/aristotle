@@ -251,7 +251,7 @@ fn library_screens(profile: Screen, out: &Path) {
     );
     save(&o, &out.join("library-pressed-damage.png"));
     touch(&mut ui, Phase::Move, c.x + profile.density.px(200), c.y, 40);
-    touch(&mut ui, Phase::Up, c.x + 200, c.y, 80);
+    touch(&mut ui, Phase::Up, c.x + profile.density.px(200), c.y, 80);
     ui.render();
 
     // Next page of the list.
@@ -1039,7 +1039,12 @@ fn parse_size(value: &str) -> Result<Size, &'static str> {
 }
 
 fn main() {
-    let mut profile = Screen::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, 300).unwrap();
+    let mut profile = Screen::new(
+        SCREEN_WIDTH as u32,
+        SCREEN_HEIGHT as u32,
+        aristotle_screen::REFERENCE_DPI,
+    )
+    .unwrap();
     let mut lang = String::from("en");
     let mut out = None;
     let mut args = std::env::args_os().skip(1);

@@ -135,7 +135,8 @@ impl Ui {
         Self::with_screen(
             tree,
             text,
-            crate::geom::Screen::new(width, height, 300).expect("valid screen"),
+            crate::geom::Screen::new(width, height, aristotle_screen::REFERENCE_DPI)
+                .expect("valid screen"),
         )
     }
 

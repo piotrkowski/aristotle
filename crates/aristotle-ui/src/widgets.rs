@@ -285,7 +285,7 @@ impl Widget for Cover {
         if self.large(density) {
             // An inner frame, like a border blocked on a cloth binding.
             let inset = (w * 0.06).round() as i32;
-            p.stroke_rect(r.outset(-inset), 2, ink);
+            p.stroke_rect(r.outset(-inset), density.px(2), ink);
             if let Some(m) = &self.mark_layout {
                 m.draw(cx.text, cx.painter, x, r.y as f32 + h * 0.11);
             }
@@ -295,8 +295,10 @@ impl Widget for Cover {
                 t.draw(cx.text, cx.painter, x, y);
                 let rule_y = (y + t.height + h * 0.05) as i32;
                 let rw = (w * 0.16) as i32;
-                cx.painter
-                    .fill_rect(Rect::new(r.center().x - rw / 2, rule_y, rw, 3), ink);
+                cx.painter.fill_rect(
+                    Rect::new(r.center().x - rw / 2, rule_y, rw, density.px(3)),
+                    ink,
+                );
             }
             if let Some(a) = &self.author_layout {
                 let ay = r.bottom() as f32 - h * 0.13 - a.height;
