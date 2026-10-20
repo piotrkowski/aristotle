@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Desktop preview: renders every screen to PNG, in day and night mode.
+//! `--size WIDTHxHEIGHT` and `--dpi DPI` select the screen profile (default: PW4).
 //!
 //! Every screen goes through the same `Ui` the device runs, including
 //! simulated touches, so the damage overlays show the real update
@@ -17,7 +18,7 @@
 
 use aristotle_i18n::{fmt_date, tr, Msg};
 use aristotle_ui::canvas::{Canvas, Painter};
-use aristotle_ui::geom::{Point, Rect, SCREEN_HEIGHT, SCREEN_WIDTH};
+use aristotle_ui::geom::{Point, Rect, Screen, Size, SCREEN_HEIGHT, SCREEN_WIDTH};
 use aristotle_ui::icons::{self, Icon};
 use aristotle_ui::input::{Phase, TouchEvent};
 use aristotle_ui::screens::library::{
@@ -36,9 +37,6 @@ use aristotle_ui::tree::{Hit, Node, Tree};
 use aristotle_ui::ui::{Damage, Ui, UiEvent};
 use aristotle_ui::widgets::{dashed_rect, Cover, CoverMark};
 use std::path::{Path, PathBuf};
-
-const W: u32 = SCREEN_WIDTH as u32;
-const H: u32 = SCREEN_HEIGHT as u32;
 
 fn save(c: &Canvas, path: &Path) {
     let mut q = c.clone();
@@ -113,6 +111,8 @@ fn set(text: &mut TextEngine, s: &str, style: TextStyle, width: f32) -> Paragrap
 /// outlined (large ones labelled), the coalesced update described in the
 /// caption.
 fn damage_overlay(ui: &mut Ui, sent: &[Damage], caption: &str) -> Canvas {
+    let density = ui.profile().density;
+    let (w, h) = (ui.bounds().w as u32, ui.bounds().h as u32);
     let damage = ui.minimal_damage().to_vec();
     let caption = format!(
         "{caption}. Sent as: {}.",
@@ -122,8 +122,11 @@ fn damage_overlay(ui: &mut Ui, sent: &[Damage], caption: &str) -> Canvas {
             .join(", ")
     );
     let mut c = ui.screen().clone();
-    let all = Rect::new(0, 0, W as i32, H as i32);
-    let label = TextStyle::new(FamilyId(0), 30.0).bold().gray(255);
+    let all = Rect::new(0, 0, w as i32, h as i32);
+    let label = TextStyle::new(FamilyId(0), 30.0)
+        .at_density(density)
+        .bold()
+        .gray(255);
     for d in &damage {
         let mut p = Painter::new(&mut c, all);
         dashed_rect(&mut p, d.rect.outset(3), 4, 14, 0);
@@ -141,13 +144,15 @@ fn damage_overlay(ui: &mut Ui, sent: &[Damage], caption: &str) -> Canvas {
             tag.y as f32 + 4.0,
         );
     }
-    let style = TextStyle::new(FamilyId(0), 34.0).italic();
-    let l = set(&mut ui.text, &caption, style, W as f32 - 80.0);
+    let style = TextStyle::new(FamilyId(0), 34.0)
+        .at_density(density)
+        .italic();
+    let l = set(&mut ui.text, &caption, style, w as f32 - 80.0);
     let mut p = Painter::new(&mut c, all);
     let band = Rect::new(
         0,
-        H as i32 - l.height as i32 - 24,
-        W as i32,
+        h as i32 - l.height as i32 - 24,
+        w as i32,
         l.height as i32 + 24,
     );
     p.fill_rect(band, 235);
@@ -194,29 +199,35 @@ const STATUS: StatusLine<'static> = StatusLine {
 };
 
 /// A library screen in a fresh `Ui`, laid out and synced.
-fn shelf_ui(shelf: &Shelf) -> (Ui, Library) {
+fn shelf_ui(profile: Screen, shelf: &Shelf) -> (Ui, Library) {
+    let size = Size::new(profile.width as i32, profile.height as i32);
     let mut text = TextEngine::new(Fonts::embedded());
-    let styles = Styles::new(FamilyId(0));
-    let (tree, lib) = Library::build_shelf(&mut text, &styles, shelf);
-    let mut ui = Ui::new(tree, text, W, H);
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
+    let (tree, lib) = Library::build_shelf_for_width(&mut text, &styles, shelf, size.w);
+    let mut ui = Ui::with_screen(tree, text, profile);
     ui.layout();
     lib.sync(&mut ui.tree);
     (ui, lib)
 }
 
-fn library_screens(out: &Path) {
+fn library_screens(profile: Screen, out: &Path) {
+    let size = Size::new(profile.width as i32, profile.height as i32);
+    let (w, h) = (size.w as u32, size.h as u32);
     let books = library::sample_books();
     let hero = &books[0];
     let rest = &books[1..];
     let home = |view, filter, covers, items: &[Item]| -> (Ui, Library) {
-        shelf_ui(&Shelf {
-            place: Place::Home { view, filter },
-            hero: Some(hero),
-            items,
-            sort: tr(Msg::LibrarySortRecent),
-            status: STATUS,
-            covers,
-        })
+        shelf_ui(
+            profile,
+            &Shelf {
+                place: Place::Home { view, filter },
+                hero: Some(hero),
+                items,
+                sort: tr(Msg::LibrarySortRecent),
+                status: STATUS,
+                covers,
+            },
+        )
     };
 
     let all = sample_items(rest, View::Books);
@@ -239,8 +250,8 @@ fn library_screens(out: &Path) {
         "Touch-down on a row: only the outline goes out, with A2",
     );
     save(&o, &out.join("library-pressed-damage.png"));
-    touch(&mut ui, Phase::Move, c.x + 200, c.y, 40);
-    touch(&mut ui, Phase::Up, c.x + 200, c.y, 80);
+    touch(&mut ui, Phase::Move, c.x + profile.density.px(200), c.y, 40);
+    touch(&mut ui, Phase::Up, c.x + profile.density.px(200), c.y, 80);
     ui.render();
 
     // Next page of the list.
@@ -278,14 +289,17 @@ fn library_screens(out: &Path) {
         .cloned()
         .map(Item::Book)
         .collect();
-    let (mut ui, _) = shelf_ui(&Shelf {
-        place: Place::Folder { name: "Platon" },
-        hero: None,
-        items: &platon,
-        sort: tr(Msg::LibrarySortTitle),
-        status: STATUS,
-        covers: CoverMode::Cards,
-    });
+    let (mut ui, _) = shelf_ui(
+        profile,
+        &Shelf {
+            place: Place::Folder { name: "Platon" },
+            hero: None,
+            items: &platon,
+            sort: tr(Msg::LibrarySortTitle),
+            status: STATUS,
+            covers: CoverMode::Cards,
+        },
+    );
     day_night(&mut ui, out, "folder");
     let witcher: Vec<Item> = books
         .iter()
@@ -293,28 +307,34 @@ fn library_screens(out: &Path) {
         .cloned()
         .map(Item::Book)
         .collect();
-    let (mut ui, _) = shelf_ui(&Shelf {
-        place: Place::Series { name: "Trylogia" },
-        hero: None,
-        items: &witcher,
-        sort: "",
-        status: STATUS,
-        covers: CoverMode::None,
-    });
+    let (mut ui, _) = shelf_ui(
+        profile,
+        &Shelf {
+            place: Place::Series { name: "Trylogia" },
+            hero: None,
+            items: &witcher,
+            sort: "",
+            status: STATUS,
+            covers: CoverMode::None,
+        },
+    );
     day_night(&mut ui, out, "series");
 
     // A library with no books yet.
-    let (mut ui, _) = shelf_ui(&Shelf {
-        place: Place::Home {
-            view: View::Books,
-            filter: Filter::All,
+    let (mut ui, _) = shelf_ui(
+        profile,
+        &Shelf {
+            place: Place::Home {
+                view: View::Books,
+                filter: Filter::All,
+            },
+            hero: None,
+            items: &[],
+            sort: tr(Msg::LibrarySortRecent),
+            status: STATUS,
+            covers: CoverMode::None,
         },
-        hero: None,
-        items: &[],
-        sort: tr(Msg::LibrarySortRecent),
-        status: STATUS,
-        covers: CoverMode::None,
-    });
+    );
     day_night(&mut ui, out, "library-empty");
 
     // Side by side with the stock home screen, when a capture of it is
@@ -326,22 +346,22 @@ fn library_screens(out: &Path) {
         let (mut ui, _) = home(View::Books, Filter::All, CoverMode::None, &all);
         ui.render();
         let gap = 40;
-        let mut both = Canvas::new(W * 2 + gap, H);
-        both.fill(Rect::new(W as i32, 0, gap as i32, H as i32), 128);
-        for y in 0..H as i32 {
-            for x in 0..W as i32 {
+        let mut both = Canvas::new(w * 2 + gap, h);
+        both.fill(Rect::new(w as i32, 0, gap as i32, h as i32), 128);
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
                 let i = (y as u32 * both.stride + x as u32) as usize;
                 if x < s.width as i32 && y < s.height as i32 {
                     both.pixels[i] = s.get(x, y);
                 }
-                both.pixels[i + (W + gap) as usize] = ui.screen().get(x, y);
+                both.pixels[i + (w + gap) as usize] = ui.screen().get(x, y);
             }
         }
         save(&both, &out.join("compare-library.png"));
     }
 }
 
-fn settings_screens(out: &Path) {
+fn settings_screens(profile: Screen, out: &Path) {
     let about = settings_screen::sample_about();
     let date = fmt_date(2026, 10, 17, 6);
     let view = SystemView {
@@ -369,9 +389,9 @@ fn settings_screens(out: &Path) {
         exit_message: None,
     };
     let mut text = TextEngine::new(Fonts::embedded());
-    let styles = Styles::new(FamilyId(0));
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
     let (tree, ids) = settings_screen::Settings::build(&mut text, &styles, &view);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     ui.layout();
     ids.sync(&mut ui.tree);
     day_night(&mut ui, out, "settings");
@@ -410,7 +430,7 @@ fn settings_screens(out: &Path) {
     };
     let mut text = TextEngine::new(Fonts::embedded());
     let (tree, ids) = settings_screen::Settings::build(&mut text, &styles, &view);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     ui.layout();
     ids.sync(&mut ui.tree);
     ui.set_night(true);
@@ -424,10 +444,10 @@ fn settings_screens(out: &Path) {
 }
 
 /// Settings › Network: sync, the catalogs, a feed and a book.
-fn network_screens(out: &Path) {
-    let styles = Styles::new(FamilyId(0));
+fn network_screens(profile: Screen, out: &Path) {
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
     let shown = |tree: Tree, text: TextEngine, f: &network::Frame| {
-        let mut ui = Ui::new(tree, text, W, H);
+        let mut ui = Ui::with_screen(tree, text, profile);
         ui.layout();
         f.sync(&mut ui.tree);
         ui
@@ -510,38 +530,40 @@ fn network_screens(out: &Path) {
     day_night(&mut ui, out, "catalog-entry");
 }
 
-fn sleep_screens(out: &Path) {
+fn sleep_screens(profile: Screen, out: &Path) {
     let books = library::sample_books();
-    let styles = Styles::new(FamilyId(0));
-    let mut ui = Ui::new(
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
+    let mut ui = Ui::with_screen(
         sleep::build(&styles, Some(&books[0]), false),
         TextEngine::new(Fonts::embedded()),
-        W,
-        H,
+        profile,
     );
     day_night(&mut ui, out, "screensaver");
 }
 
 /// Every icon at 72, 48 and 32 px with its name.
-fn icons_sheet(out: &Path) {
+fn icons_sheet(profile: Screen, out: &Path) {
+    let d = profile.density;
+    let size = Size::new(profile.width as i32, profile.height as i32);
+    let (w, h) = (size.w as u32, size.h as u32);
     let mut text = TextEngine::new(Fonts::embedded());
-    let mut c = Canvas::new(W, H);
-    let all = Rect::new(0, 0, W as i32, H as i32);
+    let mut c = Canvas::new(w, h);
+    let all = Rect::new(0, 0, w as i32, h as i32);
     let cols = 6;
-    let cell_w = W as i32 / cols;
-    let cell_h = 196;
-    let top = 60;
-    let label = TextStyle::new(FamilyId(0), 24.0).gray(0x44);
-    let head = TextStyle::new(FamilyId(0), 34.0).bold();
+    let cell_w = w as i32 / cols;
+    let cell_h = d.px(196);
+    let top = d.px(60);
+    let label = TextStyle::new(FamilyId(0), 24.0).at_density(d).gray(0x44);
+    let head = TextStyle::new(FamilyId(0), 34.0).at_density(d).bold();
     {
         let l = set(
             &mut text,
             "Aristotle icons · 24-unit grid · 72, 48 and 32 px",
             head,
-            W as f32,
+            w as f32,
         );
         let mut p = Painter::new(&mut c, all);
-        l.draw(&mut text, &mut p, 40.0, 12.0);
+        l.draw(&mut text, &mut p, d.scale(40.0), d.scale(12.0));
     }
     for (i, icon) in Icon::ALL.iter().enumerate() {
         let (col, row) = (i as i32 % cols, i as i32 / cols);
@@ -551,36 +573,41 @@ fn icons_sheet(out: &Path) {
         icons::draw(
             &mut p,
             *icon,
-            Rect::new(x + (cell_w - 72) / 2, y + 8, 72, 72),
+            Rect::new(x + (cell_w - d.px(72)) / 2, y + d.px(8), d.px(72), d.px(72)),
             0,
             0.0,
         );
-        let base = y + 96;
+        let base = y + d.px(96);
         icons::draw(
             &mut p,
             *icon,
-            Rect::new(x + cell_w / 2 - 56, base, 48, 48),
+            Rect::new(x + cell_w / 2 - d.px(56), base, d.px(48), d.px(48)),
             0,
             0.0,
         );
         icons::draw(
             &mut p,
             *icon,
-            Rect::new(x + cell_w / 2 + 16, base + 8, 32, 32),
+            Rect::new(
+                x + cell_w / 2 + d.px(16),
+                base + d.px(8),
+                d.px(32),
+                d.px(32),
+            ),
             0,
             0.0,
         );
         let l = set(&mut text, icon.name(), label.clone(), cell_w as f32);
         let lx = x as f32 + (cell_w as f32 - l.width) / 2.0;
-        l.draw(&mut text, &mut p, lx, (base + 54) as f32);
+        l.draw(&mut text, &mut p, lx, (base + d.px(54)) as f32);
     }
     save(&c, &out.join("icons.png"));
     save(&invert(&c), &out.join("icons-night.png"));
 }
 
 /// The typographic cards: four bindings, a series, and list sizes.
-fn covers_sheet(out: &Path) {
-    let styles = Styles::new(FamilyId(0));
+fn covers_sheet(profile: Screen, out: &Path) {
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
     let fam = styles.family;
     let books = library::sample_books();
     let mut t = Tree::new();
@@ -625,15 +652,18 @@ fn covers_sheet(out: &Path) {
     let col = t.add(Node::column(40), [caption, large, series, small]);
     let root = t.pad(aristotle_ui::Insets::all(40), col);
     t.set_root(root);
-    let mut ui = Ui::new(t, TextEngine::new(Fonts::embedded()), W, H);
+    let mut ui = Ui::with_screen(t, TextEngine::new(Fonts::embedded()), profile);
     day_night(&mut ui, out, "covers");
 }
 
-fn reader_screens(out: &Path, fonts_dir: &Path) {
+fn reader_screens(profile: Screen, out: &Path, fonts_dir: &Path) {
+    let size = Size::new(profile.width as i32, profile.height as i32);
+    let (w, h) = (size.w as u32, size.h as u32);
     let (mut text, families) = engine(fonts_dir);
-    let styles = Styles::new(FamilyId(0));
-    let (tree, mut r) = Reader::build(&mut text, &styles, families, Settings::default());
-    let mut ui = Ui::new(tree, text, W, H);
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
+    let (tree, mut r) =
+        Reader::build_for_size(&mut text, &styles, families, Settings::default(), size);
+    let mut ui = Ui::with_screen(tree, text, profile);
     {
         let d = ui.render();
         log("reader: first frame", &ui, &d)
@@ -649,9 +679,12 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
             Zone::Next => "Next page",
             Zone::Menu => "Menu",
         };
-        let style = TextStyle::new(FamilyId(0), 44.0).bold().gray(255);
+        let style = TextStyle::new(FamilyId(0), 44.0)
+            .at_density(profile.density)
+            .bold()
+            .gray(255);
         let l = set(&mut ui.text, name, style, 600.0);
-        let mut p = Painter::new(&mut z, Rect::new(0, 0, W as i32, H as i32));
+        let mut p = Painter::new(&mut z, Rect::new(0, 0, w as i32, h as i32));
         dashed_rect(&mut p, rect.outset(-6), 6, 24, 0);
         let c = rect.center();
         let tag = Rect::new(
@@ -671,7 +704,14 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     save(&z, &out.join("reader-zones.png"));
 
     // Turn the page with a tap in the right zone.
-    for ev in tap(&mut ui, Point { x: 850, y: 900 }, 0) {
+    for ev in tap(
+        &mut ui,
+        Point {
+            x: size.w * 4 / 5,
+            y: size.h * 3 / 5,
+        },
+        0,
+    ) {
         r.handle(&mut ui, ev);
     }
     let d = ui.render();
@@ -686,18 +726,25 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
 
     // Back to page 1 with a swipe to the right.
     for (ph, x, ms) in [
-        (Phase::Down, 300, 2000),
-        (Phase::Move, 500, 2050),
-        (Phase::Up, 750, 2100),
+        (Phase::Down, size.w / 4, 2000),
+        (Phase::Move, size.w / 2, 2050),
+        (Phase::Up, size.w * 3 / 4, 2100),
     ] {
-        for ev in touch(&mut ui, ph, x, 800, ms) {
+        for ev in touch(&mut ui, ph, x, size.h / 2, ms) {
             r.handle(&mut ui, ev);
         }
     }
     ui.render();
 
     // Open the menu from the top band.
-    for ev in tap(&mut ui, Point { x: 536, y: 70 }, 3000) {
+    for ev in tap(
+        &mut ui,
+        Point {
+            x: size.w / 2,
+            y: profile.density.px(70),
+        },
+        3000,
+    ) {
         r.handle(&mut ui, ev);
     }
     let d = ui.render();
@@ -713,8 +760,8 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
     // Press feedback inside the menu, on the larger-text button.
     let size_row = ui.tree.rect(r.night_toggle);
     let probe = Point {
-        x: W as i32 - 110,
-        y: size_row.y - 3 * 120 - 50,
+        x: w as i32 - profile.density.px(110),
+        y: size_row.y - profile.density.px(410),
     };
     if let Hit::Target(node) = ui.tree.hit(probe) {
         let c = ui.tree.rect(node).center();
@@ -722,8 +769,14 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
         let d = ui.render();
         log("reader menu: press", &ui, &d);
         save(ui.screen(), &out.join("reader-menu-pressed.png"));
-        touch(&mut ui, Phase::Move, c.x, c.y + 300, 4040);
-        touch(&mut ui, Phase::Up, c.x, c.y + 300, 4080);
+        touch(
+            &mut ui,
+            Phase::Move,
+            c.x,
+            c.y + profile.density.px(300),
+            4040,
+        );
+        touch(&mut ui, Phase::Up, c.x, c.y + profile.density.px(300), 4080);
         ui.render();
     }
 
@@ -737,7 +790,9 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
         log("reader: night mode from the menu", &ui, &d)
     };
     save(ui.screen(), &out.join("reader-menu-night-on.png"));
-    for ev in tap(&mut ui, Point { x: 700, y: 400 }, 6000) {
+    let children = &ui.tree.node(r.menu).children;
+    let gap = ui.tree.rect(children[1]).center();
+    for ev in tap(&mut ui, gap, 6000) {
         r.handle(&mut ui, ev);
     }
     ui.render();
@@ -750,8 +805,8 @@ fn reader_screens(out: &Path, fonts_dir: &Path) {
         spacing: 2,
         ..Default::default()
     };
-    let (tree, _) = Reader::build(&mut text, &styles, families, s);
-    let mut ui = Ui::new(tree, text, W, H);
+    let (tree, _) = Reader::build_for_size(&mut text, &styles, families, s, size);
+    let mut ui = Ui::with_screen(tree, text, profile);
     day_night(&mut ui, out, "reader-charis");
 }
 
@@ -779,7 +834,7 @@ fn dump_targets(ui: &mut Ui, screen: &str, out: &mut String) {
 /// Control coordinates of the app's screens with the sample library: home
 /// (books, folders, series), a folder, settings pages and the app's reader
 /// menu (no font row, night row on).
-fn targets(out: &Path) {
+fn targets(profile: Screen, out: &Path) {
     use aristotle_ui::screens::reader::{build_menu, MenuSpec};
     let mut s = String::from("# screen action-id centre-x centre-y width height\n");
     let books = library::sample_books();
@@ -792,17 +847,20 @@ fn targets(out: &Path) {
             },
             view,
         );
-        let (mut ui, _) = shelf_ui(&Shelf {
-            place: Place::Home {
-                view,
-                filter: Filter::All,
+        let (mut ui, _) = shelf_ui(
+            profile,
+            &Shelf {
+                place: Place::Home {
+                    view,
+                    filter: Filter::All,
+                },
+                hero: Some(&books[0]),
+                items: &items,
+                sort: tr(Msg::LibrarySortRecent),
+                status: STATUS,
+                covers: CoverMode::None,
             },
-            hero: Some(&books[0]),
-            items: &items,
-            sort: tr(Msg::LibrarySortRecent),
-            status: STATUS,
-            covers: CoverMode::None,
-        });
+        );
         dump_targets(&mut ui, &format!("library-{view:?}"), &mut s);
     }
     let platon: Vec<Item> = books
@@ -811,14 +869,17 @@ fn targets(out: &Path) {
         .cloned()
         .map(Item::Book)
         .collect();
-    let (mut ui, _) = shelf_ui(&Shelf {
-        place: Place::Folder { name: "Platon" },
-        hero: None,
-        items: &platon,
-        sort: tr(Msg::LibrarySortTitle),
-        status: STATUS,
-        covers: CoverMode::None,
-    });
+    let (mut ui, _) = shelf_ui(
+        profile,
+        &Shelf {
+            place: Place::Folder { name: "Platon" },
+            hero: None,
+            items: &platon,
+            sort: tr(Msg::LibrarySortTitle),
+            status: STATUS,
+            covers: CoverMode::None,
+        },
+    );
     dump_targets(&mut ui, "folder", &mut s);
     let about = settings_screen::sample_about();
     let view = SystemView {
@@ -846,8 +907,12 @@ fn targets(out: &Path) {
         exit_message: None,
     };
     let mut text = TextEngine::new(Fonts::embedded());
-    let (tree, ids) = settings_screen::Settings::build(&mut text, &Styles::new(FamilyId(0)), &view);
-    let mut ui = Ui::new(tree, text, W, H);
+    let (tree, ids) = settings_screen::Settings::build(
+        &mut text,
+        &Styles::new(FamilyId(0)).with_density(profile.density),
+        &view,
+    );
+    let mut ui = Ui::with_screen(tree, text, profile);
     ui.layout();
     dump_targets(&mut ui, "settings-1", &mut s);
     ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
@@ -855,7 +920,7 @@ fn targets(out: &Path) {
     ids.handle(&mut ui.tree, settings_screen::action::NEXT_PAGE);
     dump_targets(&mut ui, "settings-3", &mut s);
     // The network screens, with a sync account and two catalogs.
-    let styles = Styles::new(FamilyId(0));
+    let styles = Styles::new(FamilyId(0)).with_density(profile.density);
     let mut text = TextEngine::new(Fonts::embedded());
     let v = SyncView {
         status: STATUS,
@@ -867,7 +932,7 @@ fn targets(out: &Path) {
         import_path: "/mnt/us/aristotle/sync.json",
     };
     let (tree, _) = network::build_sync(&mut text, &styles, &v);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     dump_targets(&mut ui, "sync", &mut s);
     let cats = network::sample::catalogs();
     let mut text = TextEngine::new(Fonts::embedded());
@@ -878,7 +943,7 @@ fn targets(out: &Path) {
         import_path: "/mnt/us/aristotle/catalogs.json",
     };
     let (tree, _) = network::build_catalogs(&mut text, &styles, &v);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     dump_targets(&mut ui, "catalogs", &mut s);
     let rows = network::sample::feed_rows();
     let mut text = TextEngine::new(Fonts::embedded());
@@ -892,7 +957,7 @@ fn targets(out: &Path) {
         message: "",
     };
     let (tree, _) = network::build_feed(&mut text, &styles, &v);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     dump_targets(&mut ui, "catalog-feed", &mut s);
     let formats = vec!["EPUB · 1.2 MB".to_string(), "PDF".to_string()];
     let mut text = TextEngine::new(Fonts::embedded());
@@ -906,7 +971,7 @@ fn targets(out: &Path) {
         message: "",
     };
     let (tree, _) = network::build_entry(&mut text, &styles, &v);
-    let mut ui = Ui::new(tree, text, W, H);
+    let mut ui = Ui::with_screen(tree, text, profile);
     dump_targets(&mut ui, "catalog-entry", &mut s);
     let mut t = Tree::new();
     let page = t.spacer(1);
@@ -920,7 +985,7 @@ fn targets(out: &Path) {
     };
     let menu = build_menu(
         &mut t,
-        &Styles::new(FamilyId(0)),
+        &Styles::new(FamilyId(0)).with_density(profile.density),
         &spec,
         &Settings::default(),
     );
@@ -930,7 +995,7 @@ fn targets(out: &Path) {
     );
     t.set_root(root);
     t.set_hidden(menu.root, false);
-    let mut ui = Ui::new(t, TextEngine::new(Fonts::embedded()), W, H);
+    let mut ui = Ui::with_screen(t, TextEngine::new(Fonts::embedded()), profile);
     dump_targets(&mut ui, "reader-menu", &mut s);
     let path = out.join("targets.txt");
     std::fs::write(&path, s).expect("targets.txt");
@@ -950,25 +1015,49 @@ fn cache_dir() -> PathBuf {
         })
 }
 
-fn render_all(out: &Path) {
+fn render_all(profile: Screen, out: &Path) {
     std::fs::create_dir_all(out).expect("output directory");
     let fonts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts");
-    icons_sheet(out);
-    covers_sheet(out);
-    library_screens(out);
-    settings_screens(out);
-    network_screens(out);
-    sleep_screens(out);
-    reader_screens(out, &fonts_dir);
-    targets(out);
+    icons_sheet(profile, out);
+    covers_sheet(profile, out);
+    library_screens(profile, out);
+    settings_screens(profile, out);
+    network_screens(profile, out);
+    sleep_screens(profile, out);
+    reader_screens(profile, out, &fonts_dir);
+    targets(profile, out);
+}
+
+fn parse_size(value: &str) -> Result<Size, &'static str> {
+    let (w, h) = value.split_once('x').ok_or("expected WIDTHxHEIGHT")?;
+    let w = w.parse::<i32>().map_err(|_| "invalid width")?;
+    let h = h.parse::<i32>().map_err(|_| "invalid height")?;
+    if !(600..=4096).contains(&w) || !(800..=4096).contains(&h) {
+        return Err("width must be 600..4096, height must be 800..4096");
+    }
+    Ok(Size::new(w, h))
 }
 
 fn main() {
+    let mut profile = Screen::new(
+        SCREEN_WIDTH as u32,
+        SCREEN_HEIGHT as u32,
+        aristotle_screen::REFERENCE_DPI,
+    )
+    .unwrap();
     let mut lang = String::from("en");
     let mut out = None;
     let mut args = std::env::args_os().skip(1);
     while let Some(a) = args.next() {
-        if a == "--lang" {
+        if a == "--size" {
+            let value = args.next().expect("--size needs WIDTHxHEIGHT");
+            let size = parse_size(&value.to_string_lossy()).expect("invalid --size");
+            profile = Screen::new(size.w as u32, size.h as u32, profile.density.dpi()).unwrap();
+        } else if a == "--dpi" {
+            let value = args.next().expect("--dpi needs a density");
+            let dpi = value.to_string_lossy().parse().expect("invalid --dpi");
+            profile = Screen::new(profile.width, profile.height, dpi).expect("invalid --dpi");
+        } else if a == "--lang" {
             let v = args.next().expect("--lang needs a language code or `all`");
             lang = v.to_string_lossy().into_owned();
         } else {
@@ -979,7 +1068,7 @@ fn main() {
     if lang == "all" {
         for l in aristotle_i18n::locales() {
             aristotle_i18n::set_language(l.code);
-            render_all(&out.join(l.code));
+            render_all(profile, &out.join(l.code));
         }
     } else {
         let codes: Vec<&str> = aristotle_i18n::locales().iter().map(|l| l.code).collect();
@@ -987,6 +1076,6 @@ fn main() {
             aristotle_i18n::set_language(&lang),
             "unknown language {lang:?}; embedded: {codes:?}"
         );
-        render_all(&out);
+        render_all(profile, &out);
     }
 }

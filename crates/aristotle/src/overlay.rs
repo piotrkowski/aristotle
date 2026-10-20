@@ -10,7 +10,7 @@
 use aristotle_i18n::{tr, Msg};
 use aristotle_render::book::Bounds;
 use aristotle_render::richtext::{Block, RichText};
-use aristotle_ui::geom::{pt, Insets, Point, Rect, Size, MIN_TARGET};
+use aristotle_ui::geom::{pt, Density, Insets, Point, Rect, Size, MIN_TARGET};
 use aristotle_ui::icons::Icon;
 use aristotle_ui::screens::{icon_button, text_button};
 use aristotle_ui::text::TextEngine;
@@ -69,6 +69,7 @@ impl Widget for SelectionMarks {
     }
 
     fn paint(&self, _r: Rect, cx: &mut PaintCx) {
+        let d = cx.text.density();
         let p = &mut *cx.painter;
         for b in &self.boxes {
             // A little air around the glyphs, as a marker pen would leave.
@@ -79,9 +80,19 @@ impl Widget for SelectionMarks {
             return;
         }
         if let Some(((x0, t0, b0), (x1, t1, b1))) = crate::selection::handles(&self.boxes) {
-            for (x, top, bottom) in [(x0 - 4, t0, b0), (x1 + 4, t1, b1)] {
-                p.fill_rect(Rect::new(x - 3, top - 2, 6, bottom - top + 14), INK);
-                p.fill_circle(Point { x, y: bottom + 22 }, 14.0, INK);
+            for (x, top, bottom) in [(x0 - d.px(4), t0, b0), (x1 + d.px(4), t1, b1)] {
+                p.fill_rect(
+                    Rect::new(x - d.px(3), top - d.px(2), d.px(6), bottom - top + d.px(14)),
+                    INK,
+                );
+                p.fill_circle(
+                    Point {
+                        x,
+                        y: bottom + d.px(22),
+                    },
+                    d.scale(14.0),
+                    INK,
+                );
             }
         }
     }
@@ -146,7 +157,9 @@ const CHUNK: usize = 320;
 pub const POPUP_H: i32 = 700;
 
 fn body_style(st: &Styles) -> TextStyle {
-    TextStyle::new(st.family, pt(BODY_PT)).line_height(1.32)
+    TextStyle::new(st.family, pt(BODY_PT))
+        .at_density(st.density)
+        .line_height(1.32)
 }
 
 /// Split a block into pieces of at most about [`CHUNK`] characters, at
@@ -426,7 +439,7 @@ pub fn popup(t: &mut Tree, st: &Styles, spec: &PopupSpec) -> Popup {
     };
     let sheet = t.add(Node::column(0).bg(255), sheet_children);
     let sheet = if has_body {
-        t.fixed(None, Some(spec.height), Some(sheet))
+        t.fixed_pixels(None, Some(spec.height), Some(sheet))
     } else {
         sheet
     };
@@ -604,22 +617,27 @@ pub fn percent_label(value: f32, detail: &str) -> String {
 
 /// Room the word keeps in the popup's title row, beside the switcher.
 pub const TITLE_MIN: f32 = 200.0;
-/// What a switcher tab adds to its label: padding, border and the gap.
-const TAB_CHROME: f32 = 2.0 * 14.0 + 4.0 + 10.0;
+/// What a switcher tab adds to its label at `density`: padding, border and
+/// the gap, as the tree scales them.
+fn tab_chrome(density: Density) -> f32 {
+    (2 * density.px(14) + 2 * density.px(2) + density.px(10)) as f32
+}
 
 /// The widest label each switcher tab may have when the tabs, with labels
-/// `widths` wide, share `room`: tabs that fit their share keep their width,
-/// the rest split what is left (never under 150 px).
-pub fn tab_width(widths: &[f32], room: f32) -> f32 {
+/// `widths` wide, share `room`, all in native pixels at `density`: tabs that
+/// fit their share keep their width, the rest split what is left (never
+/// under 150 reference pixels).
+pub fn tab_width(widths: &[f32], room: f32, density: Density) -> f32 {
+    let chrome = tab_chrome(density);
     let mut long: Vec<f32> = widths.to_vec();
     let mut left = room;
     loop {
-        let share = left / long.len().max(1) as f32 - TAB_CHROME;
+        let share = left / long.len().max(1) as f32 - chrome;
         let (short, rest): (Vec<f32>, Vec<f32>) = long.iter().partition(|&&w| w <= share);
         if short.is_empty() || rest.is_empty() {
-            return share.max(150.0);
+            return share.max(density.scale(150.0));
         }
-        left -= short.iter().map(|w| w + TAB_CHROME).sum::<f32>();
+        left -= short.iter().map(|w| w + chrome).sum::<f32>();
         long = rest;
     }
 }
@@ -692,7 +710,7 @@ pub fn nav_bar(t: &mut Tree, st: &Styles, top_extra: i32) -> NodeId {
     let row = t.pad(Insets::vh(0, m - 16), row);
     let line = t.rule(2, INK);
     let bar = t.add(Node::column(0).bg(255), [row, line]);
-    let above = t.gap(1, 122 + top_extra.max(0));
+    let above = t.gap_pixels(1, st.density.px(122) + top_extra.max(0));
     let fill = t.spacer(1);
     t.add(Node::column(0).hidden(true), [above, bar, fill])
 }
@@ -759,15 +777,29 @@ mod tests {
 
     #[test]
     fn short_tabs_keep_their_width_and_long_ones_share_the_rest() {
-        use super::{tab_width, TAB_CHROME};
+        use super::{tab_chrome, tab_width, Density};
+        let pw4 = Density::default();
+        assert_eq!(tab_chrome(pw4), 42.0);
         // Three language pairs and a long name in 730 px.
-        let w = tab_width(&[90.0, 80.0, 85.0, 600.0], 730.0);
-        let expected = 730.0 - (90.0 + 80.0 + 85.0) - 4.0 * TAB_CHROME;
+        let w = tab_width(&[90.0, 80.0, 85.0, 600.0], 730.0, pw4);
+        let expected = 730.0 - (90.0 + 80.0 + 85.0) - 4.0 * tab_chrome(pw4);
         assert!((w - expected).abs() < 0.01, "{w}");
         // Everything fits: the share is at least as wide as the widest.
-        assert!(tab_width(&[90.0, 80.0], 730.0) >= 90.0);
+        assert!(tab_width(&[90.0, 80.0], 730.0, pw4) >= 90.0);
         // Many long names never squeeze below the floor.
-        assert_eq!(tab_width(&[600.0; 6], 730.0), 150.0);
+        assert_eq!(tab_width(&[600.0; 6], 730.0, pw4), 150.0);
+    }
+
+    #[test]
+    fn tab_chrome_and_floor_follow_the_density() {
+        use super::{tab_chrome, tab_width, Density};
+        let low = Density::new(167).unwrap();
+        // Padding 8 + 8, border 1 + 1, gap 6, as the tree rounds them.
+        assert_eq!(tab_chrome(low), 24.0);
+        let w = tab_width(&[50.0, 45.0, 330.0], 400.0, low);
+        let expected = 400.0 - (50.0 + 45.0) - 3.0 * tab_chrome(low);
+        assert!((w - expected).abs() < 0.01, "{w}");
+        assert_eq!(tab_width(&[330.0; 6], 400.0, low), low.scale(150.0));
     }
 
     #[test]

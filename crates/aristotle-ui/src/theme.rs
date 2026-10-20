@@ -78,15 +78,26 @@ impl IconSize {
 #[derive(Clone)]
 pub struct Styles {
     pub family: FamilyId,
+    pub density: crate::geom::Density,
 }
 
 impl Styles {
     pub fn new(family: FamilyId) -> Self {
-        Self { family }
+        Self {
+            family,
+            density: crate::geom::Density::default(),
+        }
+    }
+
+    pub fn with_density(mut self, density: crate::geom::Density) -> Self {
+        self.density = density;
+        self
     }
 
     fn style(&self, points: f32) -> TextStyle {
-        TextStyle::new(self.family, pt(points)).line_height(1.3)
+        TextStyle::new(self.family, pt(points))
+            .at_density(self.density)
+            .line_height(1.3)
     }
 
     pub fn display(&self) -> TextStyle {

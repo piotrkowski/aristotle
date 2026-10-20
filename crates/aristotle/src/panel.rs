@@ -367,21 +367,23 @@ impl Device {
 
     /// Send a UI frame's damage (see the module documentation).
     pub fn present(&mut self, ui: &Ui, damage: &[Damage], content: Content) -> io::Result<()> {
+        let (w, h) = self.size();
+        let all = Rect::new(0, 0, w as i32, h as i32);
         for d in damage {
             let req = plan(
                 d.waveform,
                 d.rect,
-                Rect::screen(),
+                all,
                 content,
                 self.night.is_some(),
                 self.turn,
-                self.ghosts.spent(Rect::screen()),
+                self.ghosts.spent(all),
             );
             self.ghosts.note(req, d.rect);
             match req {
                 Request::FullScreen(wf) => {
                     // Full-screen, full-mode: clears ghosting.
-                    self.blit_ui_wait(ui, Rect::screen())?;
+                    self.blit_ui_wait(ui, all)?;
                     let all = self.fb.full_screen();
                     let m = self.fb.update(all, wf, true)?;
                     self.full_updates += 1;
@@ -561,7 +563,7 @@ pub struct Memory {
 
 impl Memory {
     pub fn new(width: u32, height: u32, turn_mode: u32) -> Memory {
-        let stride = 1088.max(width as usize);
+        let stride = (width as usize).div_ceil(32) * 32;
         Memory {
             width,
             height,
@@ -683,6 +685,13 @@ impl Panel {
         match self {
             Panel::Device(d) => d.size(),
             Panel::Memory(m) => (m.width, m.height),
+        }
+    }
+
+    pub fn stride(&self) -> usize {
+        match self {
+            Panel::Device(d) => d.fb.geometry().stride as usize,
+            Panel::Memory(m) => m.stride,
         }
     }
 

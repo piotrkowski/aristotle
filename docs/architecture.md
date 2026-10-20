@@ -26,6 +26,7 @@ See the [glossary](glossary.md) for hardware, rendering, and device terms.
 
 | Crate | Role |
 | --- | --- |
+| `aristotle-screen` | Screen dimensions, density, and physical-unit conversions |
 | `aristotle-hal` | [Framebuffer](glossary.md#framebuffer), panel updates, display thread, touch, battery, frontlight, and USB mode |
 | `aristotle-ui` | Screen toolkit and `aristotle-ui-preview` ([UI framework](ui-framework.md)) |
 | `aristotle-i18n` | Translations, plurals, dates, and numbers |

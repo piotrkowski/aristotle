@@ -15,7 +15,7 @@
 //! of an e-reader, and keeps layout linear in the number of nodes.
 
 use crate::canvas::Painter;
-use crate::geom::{Insets, Point, Rect, Size, MIN_TARGET};
+use crate::geom::{Density, Insets, Point, Rect, Size, MIN_TARGET};
 use crate::icons::{self, Icon};
 use crate::text::{layout_paragraph, Paragraph, ParagraphLayout, TextEngine, TextStyle};
 use std::any::Any;
@@ -182,6 +182,7 @@ pub enum Kind {
 }
 
 pub struct Node {
+    native_units: bool,
     pub kind: Kind,
     pub children: Vec<NodeId>,
     pub flex: u16,
@@ -203,6 +204,7 @@ pub struct Node {
 impl Node {
     pub fn new(kind: Kind) -> Self {
         Self {
+            native_units: false,
             kind,
             children: Vec::new(),
             flex: 0,
@@ -224,6 +226,48 @@ impl Node {
     /// constructors such as [`Tree::button`] that supply the kind.
     pub fn plain() -> Self {
         Self::new(Kind::Spacer)
+    }
+
+    /// Keeps measured dimensions in native pixels instead of reference pixels.
+    pub fn in_pixels(mut self) -> Self {
+        self.native_units = true;
+        self
+    }
+
+    fn at_density(&mut self, d: Density) {
+        if let Some(b) = &mut self.border {
+            b.width = d.px(b.width);
+            b.radius = d.px(b.radius);
+        }
+        if let Kind::Text { para, cache } = &mut self.kind {
+            for span in &mut para.spans {
+                span.style = span.style.clone().at_density(d);
+            }
+            if !self.native_units {
+                para.style.indent = d.scale(para.style.indent);
+            }
+            *cache = None;
+        }
+        if self.native_units {
+            return;
+        }
+        match &mut self.kind {
+            Kind::Column { gap, .. } | Kind::Row { gap, .. } | Kind::Pages { gap, .. } => {
+                *gap = d.px(*gap)
+            }
+            Kind::Padding(i) => {
+                *i = Insets::new(d.px(i.top), d.px(i.right), d.px(i.bottom), d.px(i.left))
+            }
+            Kind::Fixed { w, h } => {
+                *w = w.map(|v| d.px(v));
+                *h = h.map(|v| d.px(v));
+            }
+            Kind::MinSize(s) => *s = Size::new(d.px(s.w), d.px(s.h)),
+            Kind::Icon { size, .. } => *size = d.px(*size),
+            Kind::Rule { thickness, .. } => *thickness = d.px(*thickness),
+            Kind::Progress { height, .. } => *height = d.px(*height),
+            _ => {}
+        }
     }
 
     pub fn column(gap: i32) -> Self {
@@ -331,6 +375,7 @@ pub(crate) struct Change {
 }
 
 pub struct Tree {
+    density: Density,
     nodes: Vec<Node>,
     root: Option<NodeId>,
     pub(crate) changes: Vec<Change>,
@@ -348,6 +393,7 @@ impl Default for Tree {
 impl Tree {
     pub fn new() -> Self {
         Self {
+            density: Density::default(),
             nodes: Vec::new(),
             root: None,
             changes: Vec::new(),
@@ -358,9 +404,28 @@ impl Tree {
 
     pub fn add(&mut self, node: Node, children: impl IntoIterator<Item = NodeId>) -> NodeId {
         let mut node = node;
+        if self.density != Density::default() {
+            node.at_density(self.density);
+        }
         node.children = children.into_iter().collect();
         self.nodes.push(node);
         NodeId(self.nodes.len() as u32 - 1)
+    }
+
+    pub(crate) fn set_density(&mut self, density: Density) {
+        if self.density == density {
+            return;
+        }
+        assert_eq!(
+            self.density,
+            Density::default(),
+            "build a new tree when changing density"
+        );
+        for node in &mut self.nodes {
+            node.at_density(density);
+        }
+        self.density = density;
+        self.needs_layout = true;
     }
 
     pub fn set_root(&mut self, id: NodeId) {
@@ -443,6 +508,19 @@ impl Tree {
 
     pub fn fixed(&mut self, w: Option<i32>, h: Option<i32>, child: Option<NodeId>) -> NodeId {
         self.add(Node::new(Kind::Fixed { w, h }), child)
+    }
+
+    pub fn fixed_pixels(
+        &mut self,
+        w: Option<i32>,
+        h: Option<i32>,
+        child: Option<NodeId>,
+    ) -> NodeId {
+        self.add(Node::new(Kind::Fixed { w, h }).in_pixels(), child)
+    }
+
+    pub fn gap_pixels(&mut self, w: i32, h: i32) -> NodeId {
+        self.fixed_pixels(Some(w), Some(h), None)
     }
 
     pub fn custom(&mut self, w: impl Widget) -> NodeId {
@@ -928,7 +1006,12 @@ impl Tree {
             p.invert_round_rect(r, radius);
         }
         if n.pressed && n.feedback == Feedback::Outline {
-            p.stroke_round_rect(r, radius.max(8.0), 5.0, 0);
+            p.stroke_round_rect(
+                r,
+                radius.max(self.density.scale(8.0)),
+                self.density.scale(5.0),
+                0,
+            );
         }
     }
 
@@ -949,7 +1032,7 @@ impl Tree {
             return Hit::Nothing;
         }
         let area = if n.action.is_some() {
-            n.rect.expand_to(MIN_TARGET)
+            n.rect.expand_to(self.density.mm(9.0))
         } else {
             n.rect
         };

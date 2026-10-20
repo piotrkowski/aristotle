@@ -59,6 +59,7 @@ pub enum Intent {
 /// Turns raw touch events into [`Intent`]s while the page is showing.
 pub struct TurnGestures {
     screen: Rect,
+    density: aristotle_ui::geom::Density,
     recognizer: GestureRecognizer,
     /// Where a tap does not turn (links, the bookmark corner).
     quiet: Vec<Rect>,
@@ -67,17 +68,30 @@ pub struct TurnGestures {
 }
 
 /// The bookmark corner: the top right 10 mm square.
+#[cfg(test)]
 pub fn bookmark_corner(screen: Rect) -> Rect {
-    let s = 118;
+    bookmark_corner_at(screen, aristotle_ui::geom::Density::default())
+}
+
+pub fn bookmark_corner_at(screen: Rect, density: aristotle_ui::geom::Density) -> Rect {
+    let s = density.mm(10.0);
     Rect::new(screen.x + screen.w - s, screen.y, s, s)
 }
 
 impl TurnGestures {
+    #[cfg(test)]
     pub fn new(screen: Rect) -> Self {
+        Self::with_density(screen, aristotle_ui::geom::Density::default())
+    }
+
+    pub fn with_density(screen: Rect, density: aristotle_ui::geom::Density) -> Self {
         Self {
             screen,
-            recognizer: GestureRecognizer::default(),
-            quiet: vec![bookmark_corner(screen)],
+            density,
+            recognizer: GestureRecognizer::new(aristotle_ui::input::GestureConfig::for_density(
+                density,
+            )),
+            quiet: vec![bookmark_corner_at(screen, density)],
             holding: false,
         }
     }
@@ -92,7 +106,8 @@ impl TurnGestures {
     /// already enlarged to a touch target).
     pub fn set_quiet(&mut self, zones: Vec<Rect>) {
         self.quiet = zones;
-        self.quiet.push(bookmark_corner(self.screen));
+        self.quiet
+            .push(bookmark_corner_at(self.screen, self.density));
     }
 
     /// A hold is in progress (the reader must keep feeding raw events here

@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use aristotle_hal::input::{monotonic_us, Phase as HalPhase, TouchEvent as HalEvent};
 use aristotle_library::{Library, ScanOptions};
 use aristotle_render::plato_core::anyhow::{format_err, Context, Error};
-use aristotle_ui::geom::Point;
+use aristotle_ui::geom::{Point, Rect};
 use aristotle_ui::tree::{ActionId, NodeId};
 
 use crate::dict::{self, Dictionaries};
@@ -44,6 +44,37 @@ struct Driver {
 }
 
 impl Driver {
+    fn check_geometry(&mut self) -> Result<(), Error> {
+        let Panel::Memory(m) = &self.app.panel else {
+            return Err(format_err!("layout preview needs a memory panel"));
+        };
+        let bounds = Rect::new(0, 0, m.width as i32, m.height as i32);
+        if self.app.ui.bounds() != bounds {
+            return Err(format_err!("UI bounds differ from the panel"));
+        }
+        for u in &m.updates {
+            if u.rect.intersect(&bounds) != Some(u.rect) {
+                return Err(format_err!("update outside the panel: {:?}", u.rect));
+            }
+        }
+        let Screen::Reader(r) = &mut self.app.screen else {
+            return Err(format_err!("no book open"));
+        };
+        let geometry = (m.width, m.height, m.stride);
+        let s = &r.session.style;
+        if s.dpi != self.app.ui.profile().density.dpi() {
+            return Err(format_err!("reader density differs from the UI"));
+        }
+        if (s.width, s.height, s.stride) != geometry {
+            return Err(format_err!("reader style differs from the panel"));
+        }
+        let page = r.session.page(r.session.current)?;
+        if (page.width, page.height, page.stride) != geometry {
+            return Err(format_err!("rendered page differs from the panel"));
+        }
+        Ok(())
+    }
+
     fn event(&mut self, phase: HalPhase, p: Point) -> Result<(), Error> {
         let ev = HalEvent {
             phase,
@@ -353,7 +384,10 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
         ..args.clone()
     };
     a.dicts = dirs;
-    let panel = Panel::memory(1072, 1448, crate::prefs::STOCK_TURN);
+    let size = args
+        .preview_size
+        .unwrap_or(aristotle_ui::geom::Size::new(1072, 1448));
+    let panel = Panel::memory(size.w as u32, size.h as u32, crate::prefs::STOCK_TURN);
     let service = crate::start_dictionaries(&a);
     let prefs = Prefs {
         language: args
@@ -388,6 +422,10 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     d.wait_for_book()?;
     d.scenario.push("wait 3000".into());
     d.snap("00-open")?;
+
+    if args.preview_size.is_some() {
+        return layout_steps(d);
+    }
 
     // Contents: the first chapter, so the page is known.
     let menu = Point { x: 536, y: 70 };
@@ -543,4 +581,74 @@ pub fn run(args: &Args, out: &Path, book: &Path) -> Result<(), Error> {
     let Driver { app, .. } = d;
     app.leave()?;
     Ok(())
+}
+
+fn layout_steps(mut d: Driver) -> Result<(), Error> {
+    use aristotle_ui::screens::reader::action;
+
+    d.check_geometry()?;
+    let bounds = d.app.ui.bounds();
+    let density = d.app.ui.profile().density;
+    let next = Point {
+        x: bounds.w * 3 / 4,
+        y: bounds.h / 2,
+    };
+    let first = match &d.app.screen {
+        Screen::Reader(r) => r.session.current,
+        _ => return Err(format_err!("no book open")),
+    };
+    d.tap("next page", next)?;
+    if matches!(&d.app.screen, Screen::Reader(r) if r.session.current == first) {
+        return Err(format_err!("layout preview needs a book with another page"));
+    }
+    d.check_geometry()?;
+    d.snap("01-next-page")?;
+
+    d.tap(
+        "menu",
+        Point {
+            x: bounds.w / 2,
+            y: density.px(70),
+        },
+    )?;
+    d.snap("02-menu")?;
+    let p = d.button(action::SIZE_UP)?;
+    let before = d.app.prefs.size;
+    d.tap("larger text", p)?;
+    if d.app.prefs.size != before + 1 {
+        return Err(format_err!("text size did not change"));
+    }
+    d.check_geometry()?;
+    d.snap("03-larger-text")?;
+
+    let p = d.button(action::NIGHT)?;
+    d.tap("night on", p)?;
+    if !d.app.prefs.night {
+        return Err(format_err!("night mode did not turn on"));
+    }
+    d.check_geometry()?;
+    d.snap("04-night")?;
+
+    let title = match &d.app.screen {
+        Screen::Reader(r) => r.session.title.clone(),
+        _ => return Err(format_err!("no book open")),
+    };
+    let p = d.button(action::BACK)?;
+    d.tap("library", p)?;
+    if !matches!(d.app.screen, Screen::Library { .. }) {
+        return Err(format_err!("did not return to the library"));
+    }
+    d.snap("05-library")?;
+    d.app.open_by_title(&title)?;
+    d.wait_for_book()?;
+    d.check_geometry()?;
+    d.snap("06-reopened")?;
+    d.updates.flush()?;
+    println!(
+        "layout preview passed: {}x{} at {} DPI",
+        bounds.w,
+        bounds.h,
+        density.dpi()
+    );
+    d.app.leave()
 }

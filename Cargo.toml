@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/aristotle-screen",
     "crates/aristotle-hal",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",
@@ -14,6 +15,7 @@ members = [
 # `cargo build`, `cargo test` and `cargo clippy` work on any host. Build those
 # two with tools/build-render.sh after tools/build-plato.sh.
 default-members = [
+    "crates/aristotle-screen",
     "crates/aristotle-hal",
     "crates/aristotle-observe",
     "crates/aristotle-i18n",

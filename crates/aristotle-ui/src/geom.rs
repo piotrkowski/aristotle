@@ -7,21 +7,21 @@
 //! Text is the exception: glyph pen positions stay fractional inside a line
 //! and are snapped only when a glyph is drawn.
 
+pub use aristotle_screen::{Density, Screen};
+
 /// Panel width of the Kindle Paperwhite 4 in portrait, in pixels.
 pub const SCREEN_WIDTH: i32 = 1072;
 /// Panel height of the Kindle Paperwhite 4 in portrait, in pixels.
 pub const SCREEN_HEIGHT: i32 = 1448;
-/// Panel density. Physical sizes (touch targets, margins, type sizes) are
-/// specified in millimetres and points and converted with this.
+/// Reference density for authored UI dimensions, not the active screen density.
 pub const DPI: f32 = 300.0;
 
-/// Converts millimetres to whole device pixels.
+/// Converts millimetres to reference pixels; the tree applies the active density.
 pub fn mm(v: f32) -> i32 {
     (v * DPI / 25.4).round() as i32
 }
 
-/// Converts typographic points (1/72 inch) to fractional pixels. Font sizes
-/// stay fractional because the rasterizer accepts any pixel size.
+/// Converts points to reference pixels; native text uses the active density.
 pub fn pt(v: f32) -> f32 {
     v * DPI / 72.0
 }
