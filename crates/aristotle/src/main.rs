@@ -669,7 +669,9 @@ fn map_file(path: &Path) -> std::io::Result<&'static [u8]> {
 
 /// The quit target: the library title, hit-tested at least 9 mm high.
 fn quit_zone(ui: &Ui, title: NodeId) -> Rect {
-    ui.tree.rect(title).expand_to(ui.profile().density.mm(9.0))
+    ui.tree
+        .rect(title)
+        .expand_to(aristotle_ui::geom::min_target(ui.profile().density))
 }
 
 /// The index of `id` in `first..first + n`, if it is there.

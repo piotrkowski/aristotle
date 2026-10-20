@@ -13,23 +13,29 @@ pub use aristotle_screen::{Density, Screen};
 pub const SCREEN_WIDTH: i32 = 1072;
 /// Panel height of the Kindle Paperwhite 4 in portrait, in pixels.
 pub const SCREEN_HEIGHT: i32 = 1448;
-/// Reference density for authored UI dimensions, not the active screen density.
-pub const DPI: f32 = 300.0;
-
-/// Converts millimetres to reference pixels; the tree applies the active density.
+/// Converts millimetres to reference pixels, at
+/// [`aristotle_screen::REFERENCE_DPI`]; the tree applies the active density.
 pub fn mm(v: f32) -> i32 {
-    (v * DPI / 25.4).round() as i32
+    Density::default().mm(v)
 }
 
-/// Converts points to reference pixels; native text uses the active density.
+/// Converts points to reference pixels, at
+/// [`aristotle_screen::REFERENCE_DPI`]; native text uses the active density.
 pub fn pt(v: f32) -> f32 {
-    v * DPI / 72.0
+    Density::default().pt(v)
 }
 
-/// The smallest touch target, 9 mm (106 px at 300 DPI). Fingertip contact
-/// patches are 8 to 10 mm wide, and on e-ink a missed tap is expensive: the
-/// user waits a full refresh to see that nothing happened.
+/// The smallest touch target in reference pixels, 9 mm (106 px at 300 DPI).
+/// Fingertip contact patches are 8 to 10 mm wide, and on e-ink a missed tap
+/// is expensive: the user waits a full refresh to see that nothing happened.
+/// Use [`min_target`] for native pixels.
 pub const MIN_TARGET: i32 = 106;
+
+/// [`MIN_TARGET`] in native pixels at `density`: the size the tree gives a
+/// button and the area it hit-tests around a small target, so both agree.
+pub fn min_target(density: Density) -> i32 {
+    density.px(MIN_TARGET)
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -218,6 +224,14 @@ mod tests {
     #[test]
     fn units() {
         assert_eq!(mm(9.0), 106);
+        assert_eq!(MIN_TARGET, mm(9.0));
+        // At every density the native target stays about 9 mm: off by the
+        // reference rounding (106 px is 8.97 mm) and half a native pixel.
+        for dpi in 72..=1200 {
+            let d = Density::new(dpi).unwrap();
+            let size_mm = min_target(d) as f32 * 25.4 / dpi as f32;
+            assert!((size_mm - 9.0).abs() < 0.2, "{dpi}: {size_mm} mm");
+        }
         assert!((pt(72.0) - 300.0).abs() < 1e-3);
     }
 

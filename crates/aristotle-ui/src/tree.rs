@@ -1032,7 +1032,7 @@ impl Tree {
             return Hit::Nothing;
         }
         let area = if n.action.is_some() {
-            n.rect.expand_to(self.density.mm(9.0))
+            n.rect.expand_to(crate::geom::min_target(self.density))
         } else {
             n.rect
         };

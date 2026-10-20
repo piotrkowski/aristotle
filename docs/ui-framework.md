@@ -79,7 +79,7 @@ The app maps GC16 to a full-screen mode-8 flash. GLKW16 becomes mode 9 in full m
 
 A swipe axis must dominate the other by 1.5 times. A second finger cancels a press.
 
-A2 feedback starts on touch-down and stops if the finger moves. Hit tests expand small targets to `MIN_TARGET`, 9 mm or 106 px.
+A2 feedback starts on touch-down and stops if the finger moves. Hit tests expand small targets to `geom::min_target(density)`, which is `MIN_TARGET` (9 mm, 106 px at 300 DPI) at the screen density. Buttons get the same height, so the painted target and the hit area agree.
 
 The book page uses `crates/aristotle/src/turns.rs`. Taps turn on release. The top 12 % opens the menu, the left 30 % goes back, and the remaining area goes forward. A hold selects text without turning.
 
