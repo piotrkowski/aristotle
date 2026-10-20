@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use aristotle_ui::geom::{Density, Point, Screen};
+use aristotle_ui::geom::{min_target, Density, Point, Screen};
 use aristotle_ui::input::{Gesture, GestureConfig, GestureRecognizer, Phase, TouchEvent};
 use aristotle_ui::text::{FamilyId, Fonts, TextEngine};
 use aristotle_ui::theme::Styles;
@@ -14,7 +14,7 @@ fn native_text_measured_boxes_and_touch_targets_share_one_density() {
         (600, 800, 167),
         (758, 1024, 212),
         (1072, 1448, 300),
-        (600, 800, 167),
+        (1440, 1920, 400),
     ] {
         let screen = Screen::new(w, h, dpi).unwrap();
         let styles = Styles::new(FamilyId(0)).with_density(screen.density);
@@ -30,7 +30,7 @@ fn native_text_measured_boxes_and_touch_targets_share_one_density() {
         let mut ui = Ui::with_screen(tree, text, screen);
         ui.render();
         assert_eq!(ui.tree.rect(native).w, measured);
-        assert_eq!(ui.tree.rect(button).h, screen.density.mm(9.0));
+        assert_eq!(ui.tree.rect(button).h, min_target(screen.density));
         assert_eq!(ui.tree.rect(toggle).h, screen.density.px(58));
         assert_eq!(
             ui.tree.hit(ui.tree.rect(button).center()),
@@ -50,7 +50,7 @@ fn native_text_measured_boxes_and_touch_targets_share_one_density() {
         tree.set_root(root);
         ui.set_tree(tree);
         ui.render();
-        assert_eq!(ui.tree.rect(button).h, screen.density.mm(9.0));
+        assert_eq!(ui.tree.rect(button).h, min_target(screen.density));
     }
 }
 

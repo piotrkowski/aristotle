@@ -30,7 +30,7 @@ use aristotle_library::index::AnnotationKind;
 use aristotle_render::book::{Bounds, Engine, Link, Position, TocItem, Word};
 use aristotle_render::plato_core::anyhow::Error;
 use aristotle_render::richtext::{Block, RichText, Run};
-use aristotle_ui::geom::{Point, Rect};
+use aristotle_ui::geom::{min_target, Point, Rect};
 use aristotle_ui::input::Direction;
 use aristotle_ui::tree::{ActionId, NodeId, Refresh, Tree};
 use aristotle_ui::ui::UiEvent;
@@ -666,7 +666,7 @@ impl App {
     /// After the page on the panel changed: quiet zones for the gestures
     /// (links, the bookmark corner).
     pub(crate) fn page_changed(&mut self) {
-        let target = self.ui.profile().density.mm(9.0) * 2 / 3;
+        let target = min_target(self.ui.profile().density) * 2 / 3;
         let Some(r) = self.reading() else {
             return;
         };
@@ -892,7 +892,11 @@ impl App {
         let links = r.session.links(loc);
         let Some(link) = links
             .iter()
-            .filter(|l| rect(&l.rect).expand_to(density.mm(9.0) * 2 / 3).contains(p))
+            .filter(|l| {
+                rect(&l.rect)
+                    .expand_to(min_target(density) * 2 / 3)
+                    .contains(p)
+            })
             .min_by_key(|l| l.rect.dist2(p.x, p.y))
             .cloned()
         else {
