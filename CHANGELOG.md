@@ -8,6 +8,10 @@ are its section below.
 
 ## [Unreleased]
 
+### Security
+
+- Update `rustls-webpki` to 0.103.16 and `webpki-roots` to 1.0.10 to address RUSTSEC-2026-0382 and RUSTSEC-2026-0381.
+
 ### Fixed
 
 - Stop idle polling outside the library, use worker notifications, and honor relative hold deadlines.
