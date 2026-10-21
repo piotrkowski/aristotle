@@ -33,7 +33,7 @@ ssh -F tools/host/ssh_config kindle \
 	'sh /var/local/aristotle/aristotlectl mode storage 60'
 ```
 
-The agent applies the change within 15 seconds. SSH drops while the drive is exported. Connect the drive through the stock interface if it does not appear on the computer.
+The agent applies the change within 60 seconds. SSH drops while the drive is exported. Connect the drive through the stock interface if it does not appear on the computer.
 
 ## Update the app
 

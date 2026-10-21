@@ -493,6 +493,22 @@ check "unload precedes mount, mount precedes networking" "[ '$unload_line' -lt '
 : > "$r/calls"
 net_once "$r"
 check "an already mounted backing store is not mounted again" "[ $? = 0 ] && ! called $r 'mntus '"
+mkdir -p "$r/sys/class/net/usb0"
+echo 0x1003 > "$r/sys/class/net/usb0/flags"
+sed '/^log "agent: boot /,$d' "$DEVICE/extension/agent/boot.sh" > "$r.health.sh"
+printf 'net_healthy\n' >> "$r.health.sh"
+cp "$r/calls" "$r.health.calls"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh "$r.health.sh"
+check "steady-state health check makes no device command calls" "[ $? = 0 ] && cmp -s $r/calls $r.health.calls"
+echo 0x1002 > "$r/sys/class/net/usb0/flags"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh "$r.health.sh"
+check "a down interface requests repair" "[ $? != 0 ]"
+echo 0x1003 > "$r/sys/class/net/usb0/flags"
+health_pid=$(cat "$r/var/local/aristotle/dropbear.pid")
+echo 99999999 > "$r/var/local/aristotle/dropbear.pid"
+AGENT_TEST_ROOT=$r PATH="$WORK/bin:$PATH" sh "$r.health.sh"
+check "a stale SSH pid requests repair" "[ $? != 0 ]"
+echo "$health_pid" > "$r/var/local/aristotle/dropbear.pid"
 for fault in busy stuck active unknown policy returned-gadget module-state mount-table mount missing-mount; do
     r=$(unmounted_userstore "remount-$fault")
     case "$fault" in
@@ -524,15 +540,23 @@ persistent() {
 
 echo "takeover: the flag is runtime state only"
 r=$(booted takeover)
+cpu="$r/sys/devices/system/cpu/cpu0/cpufreq"
+mkdir -p "$cpu"
+echo performance > "$cpu/scaling_governor"
+echo 'performance ondemand interactive' > "$cpu/scaling_available_governors"
 persistent "$r" > "$r.before"
 run "$r" takeover.sh start
 check "exit status 0" "[ $? = 0 ]"
 check "stock GUI stopped" "called $r 'stop lab126_gui'"
 check "flag on the tmpfs" "[ -e $r/var/run/aristotle-takeover ]"
+check "CPU governor switched to ondemand" "[ \"\$(cat $cpu/scaling_governor)\" = ondemand ] && [ \"\$(cat $r/var/run/aristotle-governor)\" = performance ]"
+run "$r" takeover.sh start
+check "repeated takeover preserves the original governor" "[ \"\$(cat $r/var/run/aristotle-governor)\" = performance ]"
 check "nothing persistent written, so a reboot is stock" "persistent $r | cmp -s - $r.before"
 check "aristotlectl sees it" "AGENT_TEST_ROOT=$r sh $r/var/local/aristotle/aristotlectl status 2> /dev/null | grep -q 'takeover: on'"
 run "$r" takeover.sh stop
 check "stop clears it and restarts the stock GUI" "[ ! -e $r/var/run/aristotle-takeover ] && called $r 'start lab126_gui'"
+check "CPU governor restored on exit" "[ \"\$(cat $cpu/scaling_governor)\" = performance ] && [ ! -e $r/var/run/aristotle-governor ]"
 AGENT_TEST_ROOT=$r sh "$r/var/local/aristotle/aristotlectl" takeover on
 check "aristotlectl takeover on: on the tmpfs" "[ -e $r/var/run/aristotle-takeover ] && persistent $r | cmp -s - $r.before"
 AGENT_TEST_ROOT=$r sh "$r/var/local/aristotle/aristotlectl" takeover off

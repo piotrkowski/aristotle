@@ -313,6 +313,16 @@ impl TouchScreen {
         timeout: Duration,
         other: Option<RawFd>,
     ) -> io::Result<(Vec<TouchEvent>, bool)> {
+        self.poll_with_worker(timeout, other, None)
+    }
+
+    /// Poll touch, power events and worker completions in one wait.
+    pub fn poll_with_worker(
+        &mut self,
+        timeout: Duration,
+        other: Option<RawFd>,
+        worker: Option<RawFd>,
+    ) -> io::Result<(Vec<TouchEvent>, bool)> {
         let mut fds = [
             libc::pollfd {
                 fd: self.file.as_raw_fd(),
@@ -324,14 +334,23 @@ impl TouchScreen {
                 events: libc::POLLIN,
                 revents: 0,
             },
+            libc::pollfd {
+                fd: worker.unwrap_or(-1),
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
-        let count = if other.is_some() { 2 } else { 1 };
+        let count = fds.len() as libc::nfds_t;
         // SAFETY: `count` valid pollfds for the duration of the call.
         let n = unsafe {
             libc::poll(
                 fds.as_mut_ptr(),
                 count,
-                timeout.as_millis().min(i32::MAX as u128) as i32,
+                if timeout == Duration::MAX {
+                    -1
+                } else {
+                    timeout.as_millis().min(i32::MAX as u128) as i32
+                },
             )
         };
         if n < 0 {

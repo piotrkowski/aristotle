@@ -96,9 +96,9 @@ pub struct Debounce {
 
 impl Debounce {
     /// Write once reading has paused this long...
-    pub const QUIET: Duration = Duration::from_secs(3);
+    pub const QUIET: Duration = Duration::from_secs(30);
     /// ...or at the latest this long after the first unsaved change.
-    pub const MAX_DELAY: Duration = Duration::from_secs(20);
+    pub const MAX_DELAY: Duration = Duration::from_secs(120);
 
     pub fn changed(&mut self, now: Instant) {
         self.first.get_or_insert(now);
@@ -240,7 +240,7 @@ mod tests {
         assert!(d.due(t0 + Debounce::QUIET));
         // Steady turning every second keeps postponing, up to MAX_DELAY.
         let mut t = t0;
-        for _ in 0..30 {
+        for _ in 0..=Debounce::MAX_DELAY.as_secs() {
             t += Duration::from_secs(1);
             d.changed(t);
             if d.due(t) {

@@ -499,7 +499,7 @@ expected files and a model of `iptables`.
 `iptables` matches addresses, so `net.sh` resolves each host (glibc's
 `getent ahostsv4`[^1] or `busybox nslookup`) when the policy is applied,
 every 15 minutes after that, and whenever `wlan0`'s address, the resolvers or
-`net-allow` change. The agent checks for changes every 15 s, and allows DNS to
+`net-allow` change. The agent checks for changes every 60 s, and allows DNS to
 a new resolver before resolving through it. A host that fails to resolve
 keeps its previous addresses.
 

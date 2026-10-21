@@ -73,7 +73,7 @@ mode)
     storage) echo "storage $(($(date +%s) + ${3:-10} * 60))" > "$S/usb-mode" ;;
     *) echo "usage: aristotlectl mode net|storage [MINUTES]" >&2; exit 2 ;;
     esac
-    echo "requested; the agent applies it within 15 s"
+    echo "requested; the agent applies it within 60 s"
     ;;
 net)
     case "${2:-status}" in
@@ -89,7 +89,7 @@ net)
         esac
         sh "$S/net.sh" allow "$3" "${4:-}" "${5:-}" || exit $?
         # In off mode the list waits for scoped; the agent's tick would
-        # also pick the change up within 15 s.
+        # also pick the change up within 60 s.
         if [ "$(cat "$S/net-mode" 2> /dev/null)" = scoped ]; then
             sh "$S/net.sh" apply
         fi

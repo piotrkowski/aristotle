@@ -8,6 +8,18 @@ are its section below.
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop idle polling outside the library, use worker notifications, and honor relative hold deadlines.
+- Keep idle clocks from refreshing the panel and avoid forced flashes when waking Last screen.
+- Save fewer reading checkpoints and make release timing logs opt-in with `ARISTOTLE_PERF=1`.
+- Use a reversible `ondemand` governor during takeover and reduce the agent's USB maintenance work.
+- Ignore touch during managed sleep and fail startup if managed sleep cannot be acquired.
+
+### Changed
+
+- New preferences use a 10-minute sleep delay. Existing preferences stay unchanged.
+
 ## [0.1.0] - 2026-10-17
 
 The first release, for the Kindle Paperwhite 4 (2018) on firmware 5.13.x.

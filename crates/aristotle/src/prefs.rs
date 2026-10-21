@@ -132,7 +132,7 @@ impl Default for Prefs {
             night: false,
             night_method: NightMethod::Software,
             covers: Covers::None,
-            sleep_minutes: 15,
+            sleep_minutes: 10,
             sleep_screen: SleepScreen::LastScreen,
             library_view: 0,
             sort: 0,

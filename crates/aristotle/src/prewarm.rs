@@ -60,6 +60,7 @@ pub struct Prewarm {
 struct Job {
     cancel: Arc<AtomicBool>,
     handle: JoinHandle<()>,
+    done: std::sync::mpsc::Receiver<()>,
 }
 
 impl Default for Prewarm {
@@ -85,9 +86,7 @@ impl Prewarm {
 
     /// When [`Prewarm::tick`] next has something to do, for the poll timeout.
     pub fn deadline(&self) -> Option<Instant> {
-        if self.job.is_some() {
-            Some(Instant::now() + Duration::from_millis(200))
-        } else if self.exhausted {
+        if self.job.is_some() || self.exhausted {
             None
         } else {
             Some(self.quiet_since + QUIET)
@@ -100,7 +99,7 @@ impl Prewarm {
     /// a real open, or the footers would differ.
     pub fn tick(&mut self, lib: &Library, style: &Style, mobi_cache: &Path, secs_per_page: f32) {
         if let Some(j) = &self.job {
-            if !j.handle.is_finished() {
+            if matches!(j.done.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)) {
                 return;
             }
             if let Some(j) = self.job.take() {
@@ -174,6 +173,7 @@ fn start(mut src: Source, style: Style, key: Key) -> Option<Job> {
     let cancel = Arc::new(AtomicBool::new(false));
     let stop = cancel.clone();
     src.cancel = Some(cancel.clone());
+    let (finished, done) = crate::wake::channel();
     let spawned = thread::Builder::new()
         .name("prewarm".into())
         .spawn(move || {
@@ -193,9 +193,14 @@ fn start(mut src: Source, style: Style, key: Key) -> Option<Job> {
                 ),
                 Err(e) => eprintln!("aristotle: prewarm: {title}: {e:#}"),
             }
+            let _ = finished.send(());
         });
     match spawned {
-        Ok(handle) => Some(Job { cancel, handle }),
+        Ok(handle) => Some(Job {
+            cancel,
+            handle,
+            done,
+        }),
         Err(e) => {
             eprintln!("aristotle: can't start the prewarm thread: {e}");
             None

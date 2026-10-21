@@ -42,7 +42,7 @@ This verifies a suspend and physical wake using the temporary external helper. I
 
 Managed sleep is the default; `ARISTOTLE_POWERD=0` selects the non-suspending fallback. These checks remain outstanding:
 
-- Normal startup and physical sleep/wake using the app-owned helper.
+- Physical sleep/wake using the app-owned helper. Normal startup and a short LIPC-controlled sleep/wake cycle were measured below.
 - Device display-update counts and framebuffer preservation for Last screen mode, compared with Book cover under the same observer scenario.
 - Cover sleep and wake with the reader running.
 - Idle-timer sleep and wake, including the reader's sleep-delay settings.
@@ -52,3 +52,44 @@ Managed sleep is the default; `ARISTOTLE_POWERD=0` selects the non-suspending fa
   the same conditions.
 
 Neither probe establishes lower battery use or completes these checks. See [the reader's power policy](reader.md#the-app) for fallback behavior.
+
+## Idle and sleep checks, 2026-10-21
+
+Measured on the PW4 with firmware 5.13.6, on USB power. The comparison used
+`tools/host/make-latency-fixture.sh`, fresh library directories under
+`/var/tmp`, and `tools/scenarios/aristotle-latency.txt`. No personal books
+were used. The before binary was dated October 17; the after binary was
+the uncommitted power fixes on top of `f40dd78`. This compares whole builds,
+not the governor alone.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Main-thread voluntary context switches in 10 s on an idle reader | 8,626 | 0 |
+| Governor | `performance` | `ondemand` |
+| CPU residency in the after idle window | Not measured in this window | 99.7% at 396 MHz |
+| Scenario median settled latency | 609.2 ms | 612.4 ms |
+| Scenario display updates | 16, full-screen mode 9 | 16, full-screen mode 9 |
+
+The observer recorded no panel updates during 70 seconds on the idle
+library, across a clock-minute boundary. All three app-owned Lua helper
+threads had unchanged context-switch counters over a separate 10-second
+window. The suspected 1 Hz helper loop was not observed, so its timeout
+was left unchanged.
+
+A short Last screen cycle used LIPC `powerButton`, not the physical button.
+The app acquired its own KAF helper and released `preventScreenSaver` to 0.
+powerd entered `screenSaver`, touch left it there, and a second button
+request returned it to `active`. The frontlight changed from 20 to 0 and
+back to 20. The raw trace contained one partial GL16 update of the clock
+rectangle (63 by 22 pixels), with no full-screen update or flash.
+This cycle did not reach CPU suspend.
+
+The updated agent started successfully and retained USB SSH. Host tests
+cover the steady-state health check, recovery requests for a down interface
+or stale SSH PID, and governor selection and restoration across repeated
+takeovers.
+
+These measurements do not establish battery savings, suspend with the
+updated app, or suspend-to-hibernate recovery. Keep the remaining checks
+above. In particular, hibernation needs a separate unplugged test lasting
+more than an hour; no hibernation partitions or stock policy were modified.
