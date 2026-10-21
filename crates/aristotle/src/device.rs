@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use aristotle_hal::power::{Battery, BatteryStatus, ChargeState};
+use aristotle_hal::power::{Battery, BatteryLevel, BatteryStatus, ChargeState};
 use aristotle_hal::system::{self, UsbMode};
 use aristotle_i18n::{fmt_date, fmt_time, tr, Msg};
 use aristotle_ui::screens::library::StatusLine;
@@ -13,7 +13,8 @@ use aristotle_ui::screens::settings::{free_of, BatteryInfo, Usb};
 pub struct Facts {
     pub clock: String,
     pub date: String,
-    pub battery: Option<BatteryStatus>,
+    pub battery: Option<BatteryLevel>,
+    battery_details: Option<BatteryStatus>,
     /// Free and total bytes of the filesystem holding the books.
     pub storage: Option<(u64, u64)>,
     pub usb: Option<Usb>,
@@ -57,7 +58,8 @@ impl Facts {
         Facts {
             clock,
             date,
-            battery: battery.as_ref().and_then(|b| b.status().ok()),
+            battery: battery.as_ref().and_then(|b| b.level().ok()),
+            battery_details: None,
             storage: None,
             usb: None,
             about: Vec::new(),
@@ -67,6 +69,7 @@ impl Facts {
     /// Everything the settings screen shows.
     pub fn read(battery: &Option<Battery>, books: &Path) -> Facts {
         let mut f = Facts::status(battery);
+        f.battery_details = battery.as_ref().and_then(|b| b.status().ok());
         f.storage = system::storage(books).ok().map(|s| (s.free, s.total));
         let now = aristotle_library::library::now();
         f.usb = system::usb_mode().map(|m| match m {
@@ -100,7 +103,7 @@ impl Facts {
     }
 
     pub fn battery_info(&self) -> Option<BatteryInfo<'static>> {
-        self.battery.map(|b| BatteryInfo {
+        self.battery_details.map(|b| BatteryInfo {
             level: b.capacity as f32 / 100.0,
             charging: b.on_charger(),
             state: state_label(b.state),

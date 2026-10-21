@@ -149,7 +149,6 @@ impl App {
     /// Build the network screen shown, as a switch (`Full`) or in place.
     pub(crate) fn show_network(&mut self, refresh: Refresh) -> Result<(), Error> {
         let facts = Facts::status(&self.battery);
-        self.clock = facts.clock.clone();
         let status = facts.status_line();
         let Screen::Network(ns) = &self.screen else {
             return Ok(());

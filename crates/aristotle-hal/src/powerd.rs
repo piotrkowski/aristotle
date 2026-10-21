@@ -16,7 +16,7 @@
 //! of the power button (or `powerButton 1`, or the idle timer T1, 600 s)
 //! moves powerd from `active` to `screenSaver` and emits
 //! `goingToScreenSaver`; the app draws its screensaver. About 60 s later
-//! (T2) it emits `readyToSuspend` and suspends a few seconds after that;
+//! (T2) it emits `readyToSuspend` levels before suspend;
 //! the e-ink picture stays. The next press emits `outOfScreenSaver` and the
 //! app redraws. `touchScreenSaverTimeout 1` restarts T1. powerd ignores the
 //! button while `preventScreenSaver` is 1 or its drive-mode enum is 3 [firmware].
@@ -40,8 +40,9 @@ const EVENTS: &str = "goingToScreenSaver,outOfScreenSaver,exitingScreenSaver,rea
                       suspending,wakeupFromSuspend,charging,notCharging";
 
 /// A powerd event. The number is the event's first argument: for the
-/// screensaver events the source (1 button wake, 2 button, 4 cover close,
-/// 6 cover open [ko]), for `readyToSuspend` the delay in seconds.
+/// screensaver events the source (1 button wake, 2 button, 3 idle timeout,
+/// 4 cover close, 6 cover open [device logs]); source 9 is unidentified.
+/// `readyToSuspend` carries a level, not seconds (10, 8, 7, 6, 2, 1 at about 5 s intervals [device logs]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PowerEvent {
     GoingToScreenSaver(i32),

@@ -73,7 +73,7 @@ impl Service {
                 });
         }
         let (tx, requests) = mpsc::channel::<Request>();
-        let (answers, rx) = mpsc::channel();
+        let (answers, rx) = crate::wake::channel();
         let _ = thread::Builder::new().name("dict".into()).spawn(move || {
             for r in requests {
                 let reply = match r {

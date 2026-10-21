@@ -17,9 +17,10 @@
 //!   the allowlist through `aristotlectl net allow`, and deleting it removes
 //!   that line ([`Net::update_allowlist`]).
 
+use crate::wake::Sender;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::Receiver;
 
 use aristotle_hal::system;
 use aristotle_i18n::{fmt_bytes, tf, tr, Msg};
@@ -94,7 +95,7 @@ pub struct Net {
 impl Net {
     /// The settings, with any changed import file read in.
     pub fn new(paths: Paths) -> Net {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::wake::channel();
         // A folder that could leak passwords is not read either: settings
         // then last for this run only, and saving reports why.
         let accounts = match aristotle_net::store::private_dir(&paths.state) {

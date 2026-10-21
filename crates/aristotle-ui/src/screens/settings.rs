@@ -36,7 +36,7 @@ pub mod action {
     pub const COVERS: ActionId = 40;
     /// `SLEEP + i` picks `SLEEP_MINUTES[i]`.
     pub const SLEEP: ActionId = 50;
-    pub const SLEEP_SCREEN: ActionId = 54;
+    pub const SLEEP_SCREEN: ActionId = 56;
     /// `USB + 0` is the network, `USB + 1` drive mode.
     pub const USB: ActionId = 60;
     /// `LANGUAGE + i` picks `aristotle_i18n::locales()[i]`.
@@ -62,7 +62,7 @@ pub const LIGHT_PRESETS: [(Msg, u32); 4] = [
 ];
 
 /// Screensaver delays offered, in minutes; `None` is never.
-pub const SLEEP_MINUTES: [Option<u32>; 4] = [Some(5), Some(15), Some(30), None];
+pub const SLEEP_MINUTES: [Option<u32>; 5] = [Some(5), Some(10), Some(15), Some(30), None];
 
 /// The USB port, as the device agent reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

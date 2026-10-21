@@ -21,7 +21,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -97,7 +97,7 @@ impl Paginator {
     /// `cache`. The data directory must already be the current directory
     /// (Plato's fonts are found relative to it).
     pub fn start(book: PathBuf, style: Style, mobi_cache: PathBuf, cache: PathBuf) -> Paginator {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::wake::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let stop = Arc::clone(&cancel);
         let spawned = thread::Builder::new()

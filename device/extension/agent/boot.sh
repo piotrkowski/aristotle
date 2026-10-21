@@ -54,7 +54,7 @@ DEV_IP=192.168.15.244
 # and setup-host-net.sh repeat them; change all three together.
 DEV_MAC=02:61:72:69:73:01
 HOST_MAC=02:61:72:69:73:02
-TICK=15
+TICK=60
 GUI_GRACE=300
 
 log() {
@@ -66,11 +66,12 @@ log() {
 }
 
 usb_mode() {
-    set -- $(cat "$S/usb-mode" 2> /dev/null)
-    case "${1:-net}" in
+    requested=net until_epoch=0
+    [ ! -r "$S/usb-mode" ] || read -r requested until_epoch < "$S/usb-mode"
+    case "$requested" in
     storage)
         # "storage UNTIL_EPOCH": fall back to net once the time is up.
-        if [ "$(date +%s)" -lt "${2:-0}" ]; then echo storage; else echo net; fi
+        if [ "$(date +%s)" -lt "${until_epoch:-0}" ]; then echo storage; else echo net; fi
         ;;
     *) echo net ;;
     esac
@@ -79,8 +80,16 @@ usb_mode() {
 # The pid file is on persistent storage: after a reboot its pid may belong to
 # another process, so check the name too.
 dropbear_alive() {
-    p=$(cat "$PIDFILE" 2> /dev/null)
+    p=
+    [ ! -r "$PIDFILE" ] || read -r p < "$PIDFILE"
     [ -n "$p" ] && kill -0 "$p" 2> /dev/null && grep -q dropbear "/proc/$p/cmdline" 2> /dev/null
+}
+
+net_healthy() {
+    flags=0
+    [ -r "$R/sys/class/net/usb0/flags" ] || return 1
+    read -r flags < "$R/sys/class/net/usb0/flags" || return 1
+    [ $((flags & 1)) -ne 0 ] && dropbear_alive
 }
 
 net_up() {
@@ -283,18 +292,31 @@ fi
 # Wi-Fi policy again.
 rm -f "$S/net-sig"
 mode_was=""
+net_ready=0
 while true; do
     mode=$(usb_mode)
     if [ "$mode" != "$mode_was" ]; then
         log "mode: $mode"
         mode_was=$mode
+        net_ready=0
     fi
     case "$mode" in
-    net) net_up ;;
-    storage) storage_up ;;
+    net)
+        if [ "$net_ready" = 0 ] || ! net_healthy; then
+            net_ready=0
+            net_up && net_ready=1
+        fi
+        ;;
+    storage)
+        if [ "$net_ready" = 0 ]; then
+            storage_up && net_ready=1
+        fi
+        ;;
     esac
     gui_check
-    [ -f "$S/net.sh" ] && sh "$S/net.sh" tick 2>> "$LOG"
+    policy=off
+    [ ! -r "$S/net-mode" ] || read -r policy < "$S/net-mode"
+    [ "$policy" != scoped ] || sh "$S/net.sh" tick 2>> "$LOG"
     if [ "$gui_good" -gt 600 ]; then
         rm -f "$S/gui-restarted"
         gui_good=0

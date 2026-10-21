@@ -7,7 +7,7 @@
 //! our own timer pressing the button through `powerButton`) makes the app
 //! save and draw its screensaver card; powerd then suspends the CPU a minute
 //! later with the card on the panel. `outOfScreenSaver` (the button again)
-//! brings the screen back. A touch on the card asks powerd to wake as well.
+//! brings the screen back. Touch does not wake managed sleep.
 //!
 //! The app's "sleep after" setting can exceed powerd's own idle timer (T1,
 //! 600 s on our unit [dev]), so the app restarts T1 after touches (at most
@@ -29,9 +29,6 @@ use crate::perf;
 /// How long to wait for `goingToScreenSaver` after pressing the button for
 /// our own timer.
 const SLEEP_WAIT: Duration = Duration::from_secs(5);
-/// How long a touch on powerd's screensaver waits for `outOfScreenSaver`.
-/// powerd drops presses closer than 2 s to the previous one [dev].
-const WAKE_WAIT: Duration = Duration::from_secs(3);
 /// T1 restarts: after a touch at most this often...
 const PING_TOUCHED: Duration = Duration::from_secs(60);
 /// ... and at least this often while awake (T1 is 600 s on our unit).
@@ -43,8 +40,6 @@ pub enum Action {
     None,
     /// Show the screensaver without powerd (it did not react).
     Sleep,
-    /// Leave the screensaver without powerd (it did not react).
-    Wake,
 }
 
 pub struct Sleep {
@@ -58,40 +53,26 @@ pub struct Sleep {
     asked_at: Option<Instant>,
     /// The screensaver on the panel is powerd's (it will suspend).
     powerd_asleep: bool,
-    /// A touch asked powerd to leave its screensaver.
-    wake_asked_at: Option<Instant>,
     /// After a wake powerd did not confirm: check its state then.
     check_at: Option<Instant>,
+    resync_sent: bool,
 }
 
 impl Sleep {
-    /// Follow powerd unless explicitly disabled or its takeover cannot be acquired.
+    /// Follow powerd unless explicitly disabled; a failed takeover aborts startup.
     /// ARISTOTLE_POWERD=0 retains the non-suspending screensaver fallback.
     pub fn start() -> std::io::Result<Sleep> {
         let wanted = enabled(std::env::var_os("ARISTOTLE_POWERD").as_deref());
-        let listen = if wanted {
-            PowerEvents::listen()
+        let (events, screensaver) = if wanted {
+            let events = PowerEvents::listen()?;
+            let screensaver = Screensaver::acquire(true)?;
+            perf!("sleep: following powerd's events");
+            (Some(events), screensaver)
         } else {
-            Err(std::io::Error::other(
-                "ARISTOTLE_POWERD=0 disables managed sleep",
-            ))
-        };
-        let (events, screensaver) = match listen {
-            Ok(ev) => match Screensaver::acquire(true) {
-                Ok(state) => {
-                    perf!("sleep: following powerd's events");
-                    (Some(ev), state)
-                }
-                Err(error) => {
-                    eprintln!("aristotle: can't take over powerd's screensaver: {error}");
-                    drop(ev);
-                    (None, Screensaver::acquire(false)?)
-                }
-            },
-            Err(e) => {
-                eprintln!("aristotle: no powerd events ({e}); holding off its screensaver");
-                (None, Screensaver::acquire(false)?)
-            }
+            eprintln!(
+                "aristotle: ARISTOTLE_POWERD=0 disables CPU suspend; touch wakes the fallback"
+            );
+            (None, Screensaver::acquire(false)?)
         };
         Ok(Sleep {
             events,
@@ -105,8 +86,8 @@ impl Sleep {
             touched: false,
             asked_at: None,
             powerd_asleep: false,
-            wake_asked_at: None,
             check_at: None,
+            resync_sent: false,
         })
     }
 
@@ -120,8 +101,8 @@ impl Sleep {
             touched: false,
             asked_at: None,
             powerd_asleep: false,
-            wake_asked_at: None,
             check_at: None,
+            resync_sent: false,
         }
     }
 
@@ -167,9 +148,9 @@ impl Sleep {
     /// The screensaver is on the panel; `by_powerd` when powerd put it
     /// there.
     pub fn asleep(&mut self, by_powerd: bool) {
+        self.resync_sent = false;
         self.powerd_asleep = by_powerd;
         self.asked_at = None;
-        self.wake_asked_at = None;
     }
 
     /// powerd went to its screensaver over one of ours: it may suspend now.
@@ -177,17 +158,9 @@ impl Sleep {
         self.powerd_asleep = true;
     }
 
-    /// A touch on the screensaver. True: wake now (the screensaver is our
-    /// own); false: powerd was asked, wait for `outOfScreenSaver`.
-    pub fn touch_asleep(&mut self, now: Instant) -> bool {
-        if !self.powerd_asleep {
-            return true;
-        }
-        if self.wake_asked_at.is_none() {
-            self.lipc.power_button();
-            self.wake_asked_at = Some(now);
-        }
-        false
+    /// Touch wakes only the non-suspending fallback.
+    pub fn touch_asleep(&mut self, _now: Instant) -> bool {
+        !self.powerd_asleep
     }
 
     /// The screen is back; `by_powerd` after `outOfScreenSaver`.
@@ -197,13 +170,16 @@ impl Sleep {
             self.check_at = Some(now + Duration::from_millis(2500));
         }
         self.powerd_asleep = false;
-        self.wake_asked_at = None;
         self.asked_at = None;
         self.touched = true;
     }
 
     /// powerd is about to suspend while the app is awake: it missed a wake.
     pub fn resync(&mut self) {
+        if self.resync_sent {
+            return;
+        }
+        self.resync_sent = true;
         perf!("sleep: powerd wants to suspend while awake; pressing its button");
         self.lipc.power_button();
     }
@@ -215,13 +191,6 @@ impl Sleep {
             return Action::None;
         }
         if asleep {
-            if self
-                .wake_asked_at
-                .is_some_and(|t| now.duration_since(t) >= WAKE_WAIT)
-            {
-                perf!("sleep: powerd did not wake; waking without it");
-                return Action::Wake;
-            }
             return Action::None;
         }
         if self
@@ -257,7 +226,7 @@ impl Sleep {
             return None;
         }
         if asleep {
-            return self.wake_asked_at.map(|t| t + WAKE_WAIT);
+            return None;
         }
         let ping = self.last_ping
             + if self.touched {

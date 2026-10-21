@@ -51,6 +51,29 @@ EXTRA_LAB126="todo tmd rcm archive otav3 otaupd perfd"
 EXTRA_FRAMEWORK="stored scanner dmld fastmetrics clickstream_logging"
 EXTRA="$EXTRA_LAB126 $EXTRA_FRAMEWORK"
 TAKEOVER=$R/var/run/aristotle-takeover
+GOVERNOR=$R/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+SAVED_GOVERNOR=$R/var/run/aristotle-governor
+
+governor_start() {
+    [ -r "$GOVERNOR" ] && [ -w "$GOVERNOR" ] || return 0
+    available=${GOVERNOR%/*}/scaling_available_governors
+    [ -r "$available" ] || return 0
+    read -r governors < "$available" || return 0
+    case " $governors " in *' ondemand '*) ;; *) return 0 ;; esac
+    if [ ! -e "$SAVED_GOVERNOR" ]; then
+        read -r previous < "$GOVERNOR" || return 1
+        printf '%s\n' "$previous" > "$SAVED_GOVERNOR" || return 1
+    fi
+    # Measured on PW4: early takeover can bypass stock's switch to ondemand.
+    printf 'ondemand\n' > "$GOVERNOR"
+}
+
+governor_stop() {
+    [ -r "$SAVED_GOVERNOR" ] || return 0
+    read -r previous < "$SAVED_GOVERNOR" || return 1
+    printf '%s\n' "$previous" > "$GOVERNOR" || return 1
+    rm -f "$SAVED_GOVERNOR"
+}
 # The device guard: beside this script in the app bundle and the KUAL
 # extension, in ../extension/ in the repository (device/app/), or in the
 # installed extension when the script comes on stdin (sh -s).
@@ -93,6 +116,7 @@ start)
     for job in $EXTRA; do
         stop "$job" > /dev/null 2>&1
     done
+    governor_start || echo "warning: could not select ondemand governor" >&2
     # Let the framework finish tearing down before we draw.
     i=0
     while pgrep -x cvm > /dev/null && [ $i -lt 30 ]; do
@@ -106,6 +130,7 @@ start)
     mem
     ;;
 stop)
+    governor_stop || echo "warning: could not restore CPU governor" >&2
     # Earlier versions kept the flag in the agent's persistent state.
     rm -f "$TAKEOVER" "$R/var/local/aristotle/takeover"
     for job in $EXTRA_LAB126; do

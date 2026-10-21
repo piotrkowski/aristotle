@@ -61,6 +61,18 @@ pub struct BatteryStatus {
     pub temperature_c: i32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct BatteryLevel {
+    pub capacity: u8,
+    pub state: ChargeState,
+}
+
+impl BatteryLevel {
+    pub fn on_charger(&self) -> bool {
+        matches!(self.state, ChargeState::Charging | ChargeState::Full)
+    }
+}
+
 pub struct Battery {
     dir: PathBuf,
 }
@@ -72,7 +84,8 @@ impl Battery {
         })
     }
 
-    pub fn status(&self) -> io::Result<BatteryStatus> {
+    /// Read cached charge data without the live voltage measurement.
+    pub fn level(&self) -> io::Result<BatteryLevel> {
         let state = match read_trimmed(&self.dir.join("status"))?.as_str() {
             "Charging" => ChargeState::Charging,
             "Discharging" => ChargeState::Discharging,
@@ -80,9 +93,17 @@ impl Battery {
             "Not charging" => ChargeState::NotCharging,
             _ => ChargeState::Unknown,
         };
-        Ok(BatteryStatus {
+        Ok(BatteryLevel {
             capacity: read_num(&self.dir.join("capacity"))?.clamp(0, 100) as u8,
             state,
+        })
+    }
+
+    pub fn status(&self) -> io::Result<BatteryStatus> {
+        let level = self.level()?;
+        Ok(BatteryStatus {
+            capacity: level.capacity,
+            state: level.state,
             voltage_mv: (read_num(&self.dir.join("voltage_now"))? / 1000) as u32,
             temperature_c: read_num(&self.dir.join("temp")).unwrap_or(0) as i32,
         })

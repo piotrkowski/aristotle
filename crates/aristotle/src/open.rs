@@ -31,7 +31,7 @@
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -82,7 +82,7 @@ pub fn spawn(src: Source, style: Style) -> Worker {
 
 /// [`spawn`], rendering the pages on either side only with `neighbours`.
 pub fn spawn_with(mut src: Source, style: Style, neighbours: bool) -> Worker {
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = crate::wake::channel();
     let tid = Arc::new(AtomicI32::new(0));
     let abandoned = Arc::new(AtomicBool::new(false));
     let done = Arc::new(AtomicBool::new(false));

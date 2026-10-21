@@ -73,6 +73,7 @@ mod snapshot;
 mod speed;
 mod sync;
 mod turns;
+mod wake;
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -134,8 +135,17 @@ pub fn ms(d: Duration) -> f64 {
 #[macro_export]
 macro_rules! perf {
     ($($arg:tt)*) => {
-        eprintln!("[perf {:>9.1}] {}", $crate::uptime_ms(), format!($($arg)*))
+        if $crate::perf_enabled() {
+            eprintln!("[perf {:>9.1}] {}", $crate::uptime_ms(), format!($($arg)*))
+        }
     };
+}
+
+fn perf_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("ARISTOTLE_PERF").map_or(cfg!(debug_assertions), |v| v == "1")
+    })
 }
 
 /// Set by SIGTERM and SIGINT so the loop saves progress and leaves cleanly.
@@ -143,6 +153,7 @@ static STOP: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::Relaxed);
+    wake::signal();
 }
 
 #[derive(Clone)]
@@ -452,7 +463,6 @@ fn build_app(
         nav,
         asleep: None,
         last_touch: Instant::now(),
-        clock: String::new(),
         sleep_ctl,
         swallow: false,
         dict: Some(dict),
@@ -567,7 +577,6 @@ struct App {
     asleep: Option<u32>,
     last_touch: Instant,
     /// The time the status line shows, to refresh it each minute.
-    clock: String,
     /// powerd: its screensaver and suspend events, the idle timer.
     sleep_ctl: powerd::Sleep,
     /// The touch that woke the screensaver: ignored until it lifts.
@@ -768,7 +777,6 @@ impl App {
         let mode = self.prefs.covers.mode();
         let model = ShelfModel::build(&self.lib, &self.nav, mode, &mut self.covers);
         let facts = Facts::status(&self.battery);
-        self.clock = facts.clock.clone();
         let width = self.ui.bounds().w;
         let (tree, view) = ui_lib::Library::build_shelf_for_width(
             &mut self.ui.text,
@@ -856,7 +864,6 @@ impl App {
                     server = s.server
                 )
             });
-        self.clock = facts.clock.clone();
         let light = self
             .light
             .as_ref()
@@ -1049,6 +1056,7 @@ impl App {
         self.sync_push(false, false);
         self.save_snapshot();
         self.saver.save(&self.lib);
+        self.speed.save();
         self.debounce.saved();
         self.asleep = Some(self.light_step());
         self.set_light_step(0);
@@ -1087,52 +1095,49 @@ impl App {
             "sleep: woken ({})",
             if by_powerd { "powerd" } else { "touch" }
         );
+        let refresh = if self.prefs.sleep_screen == prefs::SleepScreen::LastScreen {
+            Refresh::Auto
+        } else {
+            Refresh::Full
+        };
         match &self.screen {
-            Screen::Library { .. } => self.show_library(Refresh::Full),
+            Screen::Library { .. } => self.show_library(refresh),
             Screen::Settings { page, .. } => {
                 let page = *page;
-                self.show_settings(Refresh::Full, page)
+                self.show_settings(refresh, page)
             }
-            Screen::Network(_) => self.show_network(Refresh::Full),
+            Screen::Network(_) => self.show_network(refresh),
             // (A book still opening was finished before the screensaver.)
-            Screen::Reader(_) | Screen::Opening => self.reader_after_sleep(),
+            Screen::Reader(_) | Screen::Opening => self.reader_after_sleep(refresh),
         }
     }
 
     // --- Event loop -------------------------------------------------------
 
     fn poll_timeout(&self, now_us: u64, now: Instant) -> Duration {
-        let mut timeout = Duration::from_secs(1);
-        if let Some(t) = self.ui.next_deadline(now_us) {
-            timeout = timeout.min(Duration::from_micros(t.saturating_sub(now_us).max(1000)));
-        }
-        if let Some(d) = self.debounce.deadline() {
-            timeout = timeout.min(d.saturating_duration_since(now));
+        let mut timeout = Duration::MAX;
+        if self.asleep.is_none() {
+            if let Some(t) = self.ui.next_deadline(now_us) {
+                timeout = timeout.min(Duration::from_micros(t.max(1000)));
+            }
+            if let Some(d) = self.debounce.deadline() {
+                timeout = timeout.min(d.saturating_duration_since(now));
+            }
         }
         if let Some(d) = self.sleep_deadline() {
             timeout = timeout.min(d.saturating_duration_since(now));
         }
         if self.asleep.is_none() {
             if let Screen::Reader(r) = &self.screen {
-                if r.session.paginating() {
-                    timeout = timeout.min(Duration::from_millis(250));
-                }
                 if let Some(t) = r.gestures.next_deadline(now_us) {
                     timeout = timeout.min(Duration::from_micros(t.max(1000)));
                 }
-                if matches!(r.overlay, Overlay::Waiting { .. }) {
-                    timeout = timeout.min(Duration::from_millis(20));
-                }
             }
         }
-        if self.opening.is_some() || self.pending.is_some() {
-            timeout = timeout.min(Duration::from_millis(10));
-        }
-        if self.net.busy() {
-            timeout = timeout.min(Duration::from_millis(100));
-        }
-        if let Some(d) = self.prewarm.deadline().filter(|_| self.asleep.is_none()) {
-            timeout = timeout.min(d.saturating_duration_since(now));
+        if self.prewarm_allowed() {
+            if let Some(d) = self.prewarm.deadline() {
+                timeout = timeout.min(d.saturating_duration_since(now));
+            }
         }
         if let Some(d) = self.sleep_ctl.deadline(self.asleep.is_some()) {
             timeout = timeout.min(d.saturating_duration_since(now));
@@ -1141,17 +1146,19 @@ impl App {
     }
 
     fn run(&mut self, touch: &mut TouchScreen) -> Result<(), Error> {
+        let worker = wake::fd()?;
         loop {
             if STOP.load(Ordering::Relaxed) {
                 return Ok(());
             }
             let timeout = self.poll_timeout(monotonic_us(), Instant::now());
             let (events, _) =
-                match touch.poll_with(timeout.max(Duration::from_millis(1)), self.sleep_ctl.fd()) {
+                match touch.poll_with_worker(timeout, self.sleep_ctl.fd(), Some(worker)) {
                     Ok(e) => e,
                     Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                     Err(e) => return Err(e.into()),
                 };
+            wake::drain();
             for ev in &events {
                 if self.on_touch(ev)? == Flow::Quit {
                     return Ok(());
@@ -1179,7 +1186,6 @@ impl App {
             }
             match self.sleep_ctl.tick(Instant::now(), self.asleep.is_some()) {
                 powerd::Action::Sleep if self.asleep.is_none() => self.fall_asleep(false)?,
-                powerd::Action::Wake if self.asleep.is_some() => self.wake(false)?,
                 _ => {}
             }
         }
@@ -1208,8 +1214,8 @@ impl App {
                         }
                     }
                 }
-                P::ReadyToSuspend(delay) => {
-                    perf!("power: readyToSuspend {delay}");
+                P::ReadyToSuspend(level) => {
+                    perf!("power: readyToSuspend level {level}");
                     if self.asleep.is_none() {
                         self.sleep_ctl.resync();
                     }
@@ -1229,6 +1235,12 @@ impl App {
         }
     }
 
+    fn prewarm_allowed(&self) -> bool {
+        matches!(self.screen, Screen::Library { .. })
+            && self.pending.is_none()
+            && self.asleep.is_none()
+    }
+
     /// Work done between events: adopting page numbers, saving progress,
     /// the clock in the status line.
     fn background(&mut self) -> Result<(), Error> {
@@ -1246,10 +1258,7 @@ impl App {
         self.poll_net()?;
         // Snapshots ahead of time: only on the library screen (not the
         // settings), with no book opening and no screensaver.
-        if matches!(self.screen, Screen::Library { .. })
-            && self.pending.is_none()
-            && self.asleep.is_none()
-        {
+        if self.prewarm_allowed() {
             let style = self.page_style();
             self.prewarm.tick(
                 &self.lib,
@@ -1269,30 +1278,15 @@ impl App {
             }
         }
         if self.debounce.due(Instant::now()) {
-            self.save_snapshot();
             self.saver.save(&self.lib);
-            self.speed.save();
             self.debounce.saved();
-        }
-        if self.asleep.is_none() {
-            let (clock, _) = device::clock_and_date();
-            if clock != self.clock {
-                let page = self.list_page();
-                match &self.screen {
-                    Screen::Library { .. } => self.show_library_at(Refresh::Auto, page)?,
-                    Screen::Settings { .. } => self.show_settings(Refresh::Auto, page)?,
-                    Screen::Network(_) => self.show_network(Refresh::Auto)?,
-                    Screen::Reader(_) | Screen::Opening => self.clock = clock,
-                }
-            }
         }
         Ok(())
     }
 
     fn on_touch(&mut self, ev: &aristotle_hal::input::TouchEvent) -> Result<Flow, Error> {
         if self.asleep.is_some() {
-            // Any touch wakes (through powerd when it is powerd's
-            // screensaver); the rest of that touch does nothing.
+            // Only the non-suspending fallback wakes on touch.
             if ev.phase == HalPhase::Down {
                 if self.sleep_ctl.touch_asleep(Instant::now()) {
                     self.wake(false)?;
@@ -2047,8 +2041,8 @@ impl App {
     }
 
     /// The reader screen built again around the current page, menu and
-    /// overlays closed (after the screensaver): one flash.
-    fn reader_after_sleep(&mut self) -> Result<(), Error> {
+    /// overlays closed after the screensaver.
+    fn reader_after_sleep(&mut self, refresh: Refresh) -> Result<(), Error> {
         let settings = self.prefs.menu_settings(self.light_level());
         let Screen::Reader(r) = &mut self.screen else {
             return Ok(());
@@ -2057,7 +2051,7 @@ impl App {
         r.menu_open = false;
         r.overlay = Overlay::None;
         r.gestures.reset();
-        self.rebuild_reader(Refresh::Full)?;
+        self.rebuild_reader(refresh)?;
         self.render_ui()
     }
 
@@ -2386,6 +2380,7 @@ impl App {
         // The closed book's page needn't stay in memory for the skip test.
         self.snapshots.forget();
         self.saver.save(&self.lib);
+        self.speed.save();
         self.debounce.saved();
         Ok(())
     }
@@ -2552,6 +2547,48 @@ pub(crate) fn testdir(name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idle_screens_have_no_clock_or_inapplicable_prewarm_timer() {
+        let dir = testdir("idle-deadlines");
+        let mut app = memory_app(&dir.join("library"), &dir.join("books"));
+        app.prefs.set_sleep(None);
+        let now = Instant::now() + prewarm::QUIET + Duration::from_secs(1);
+        let now_us = monotonic_us();
+        app.show_library(Refresh::Full).unwrap();
+        assert_eq!(app.poll_timeout(now_us, now), Duration::ZERO);
+        app.show_settings(Refresh::Full, 0).unwrap();
+        assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
+        let before = updates(&app).len();
+        app.background().unwrap();
+        assert_eq!(updates(&app).len(), before);
+        app.open_network(catalogs::NetView::Sync, 0).unwrap();
+        assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
+        app.fall_asleep(true).unwrap();
+        assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
+        touch(&mut app, HalPhase::Down, 100, 100, now_us);
+        assert!(app.asleep.is_some(), "touch must not cancel managed sleep");
+    }
+
+    #[test]
+    fn held_controls_use_a_relative_gesture_deadline() {
+        let dir = testdir("hold-deadline");
+        let mut app = memory_app(&dir.join("library"), &dir.join("books"));
+        app.show_settings(Refresh::Full, 0).unwrap();
+        let night = (0..app.ui.tree.len())
+            .map(|n| NodeId(n as u32))
+            .find(|&n| app.ui.tree.node(n).action == Some(set_ui::action::NIGHT))
+            .unwrap();
+        let at = app.ui.tree.rect(night).center();
+        let now_us = monotonic_us();
+        touch(&mut app, HalPhase::Down, at.x as u32, at.y as u32, now_us);
+        let remaining = app.ui.next_deadline(now_us).unwrap();
+        assert!(remaining > 1000);
+        assert_eq!(
+            app.poll_timeout(now_us, Instant::now()),
+            Duration::from_micros(remaining)
+        );
+    }
 
     #[test]
     fn ui_fonts_map_literata() {
@@ -2736,7 +2773,11 @@ mod tests {
                     assert!(!app.prefs.night, "a pre-sleep press must not fire on wake");
                 }
                 assert!(app.asleep.is_none());
-                assert!(updates(&app).len() > asleep);
+                if mode == prefs::SleepScreen::BookCover {
+                    assert!(updates(&app).len() > asleep);
+                } else {
+                    assert!(!updates(&app)[asleep..].iter().any(|u| u == "flash"));
+                }
                 assert_eq!(matches!(app.screen, Screen::Settings { .. }), settings);
             }
         }
@@ -2833,7 +2874,7 @@ mod tests {
     }
 
     #[test]
-    fn asleep_reader_workers_do_not_shorten_polling_but_network_completions_do() {
+    fn workers_do_not_arm_polling_timers_awake_or_asleep() {
         let Some((library, root, id)) = reopen_fixture(true) else {
             return;
         };
@@ -2872,11 +2913,11 @@ mod tests {
                 app.prewarm.input();
                 app.debounce.saved();
                 app.last_touch = now;
-                let awake = if waiting { 20 } else { 250 };
-                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(awake));
+                app.prefs.set_sleep(None);
+                assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
 
                 app.fall_asleep(by_powerd).unwrap();
-                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
                 let (release, blocked) = std::sync::mpsc::channel();
                 app.net.spawn("sleep-timeout", move |_| {
                     blocked.recv().unwrap();
@@ -2885,10 +2926,10 @@ mod tests {
                         result: Ok(()),
                     }
                 });
-                assert_eq!(app.poll_timeout(now_us, now), Duration::from_millis(100));
+                assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
                 release.send(()).unwrap();
                 wait(&mut app, |app| !app.net.busy());
-                assert_eq!(app.poll_timeout(now_us, now), Duration::from_secs(1));
+                assert_eq!(app.poll_timeout(now_us, now), Duration::MAX);
                 let Screen::Reader(reader) = &app.screen else {
                     panic!("reader retained");
                 };
