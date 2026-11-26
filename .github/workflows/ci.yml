@@ -38,8 +38,13 @@ jobs:
       - run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features --locked -- -D warnings
-      - run: cargo test --all-features --locked
+      - name: Clippy and tests (one compile)
+        env:
+          CLIPPY_ARGS: -D__CLIPPY_HACKERY__warnings__CLIPPY_HACKERY__
+        run: |
+          export RUSTC_WORKSPACE_WRAPPER="$(rustup which clippy-driver)"
+          cargo test --all-targets --all-features --locked --no-run
+          cargo test --all-features --locked
       - name: Shell scripts parse
         run: |
           git ls-files -z '*.sh' | xargs -0 -n1 sh -n
